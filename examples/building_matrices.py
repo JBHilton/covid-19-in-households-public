@@ -8,16 +8,7 @@ from model.preprocessing import (
     aggregate_vector_quantities, build_household_population)
 from model.common import get_FOI_by_class, build_external_import_matrix
 from model.common import sparse
-
-k_home = read_excel(
-    'inputs/MUestimates_home_2.xlsx',
-    sheet_name='United Kingdom of Great Britain',
-    header=None).to_numpy()
-
-k_all = read_excel(
-    'inputs/MUestimates_all_locations_2.xlsx',
-    sheet_name='United Kingdom of Great Britain',
-    header=None).to_numpy()
+from model.defineparameters import params
 
 fine_bds = arange(0, 81, 5)  # Because we want 80 to be included as well.
 
@@ -28,10 +19,6 @@ pop_pyramid = read_csv(
 
 pop_pyramid = (pop_pyramid['F'] + pop_pyramid['M']).to_numpy()
 
-k_home = aggregate_contact_matrix(k_home, fine_bds, coarse_bds, pop_pyramid)
-k_all= aggregate_contact_matrix(k_all, fine_bds, coarse_bds, pop_pyramid)
-k_ext = k_all - k_home
-
 # This is in ten year blocks
 rho = read_csv(
     'inputs/rho_estimate_cdc.csv', header=None).to_numpy().flatten()
@@ -41,16 +28,14 @@ aggregator = make_aggregator(cdc_bds, fine_bds)
 
 # This is in five year blocks
 rho = sparse(
-    (rho[aggregator], (arange(len(aggregator)), [0]*len(aggregator)))) 
+    (rho[aggregator], (arange(len(aggregator)), [0]*len(aggregator))))
 
 rho = aggregate_vector_quantities(
     rho, fine_bds, coarse_bds, pop_pyramid).toarray().squeeze()
 
-det = 0.2 * ones(rho.shape)
-tau = 0.5 * ones(rho.shape)
-sigma = rho / det
-alpha =1.0 / 5.0
-gamma = 1.0 / 2.0
+params['det'] = 0.2 * ones(rho.shape)
+params['tau'] = 0.5 * ones(rho.shape)
+params['sigma'] = rho / params['det']
 
 # List of observed household compositions
 composition_list = read_csv(
@@ -67,18 +52,18 @@ Q_int, states, which_composition, \
         inf_event_row, inf_event_col \
         = build_household_population(
     composition_list,
-    sigma,
-    det,
-    tau,
-    k_home,
-    alpha,
-    gamma)
+    params['sigma'],
+    params['det'],
+    params['tau'],
+    params['k_home'],
+    params['alpha'],
+    params['gamma'])
 
 # To define external mixing we need to set up the transmission matrices:
-det_trans_matrix = diag(sigma) * k_ext # Scale rows of contact matrix by
+det_trans_matrix = diag(params['sigma']) * params['k_ext'] # Scale rows of contact matrix by
                                        # age-specific susceptibilities
 # Scale columns by asymptomatic reduction in transmission
-undet_trans_matrix = diag(sigma).dot(k_ext.dot(diag(tau)))
+undet_trans_matrix = diag(params['sigma']).dot(params['k_ext'].dot(diag(params['tau'])))
 # This stores number in each age class by household
 composition_by_state = composition_list[which_composition,:]
 states_sus_only = states[:,::5] # ::5 gives columns corresponding to
