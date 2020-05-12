@@ -1,7 +1,7 @@
 '''Module for additional computations required by the model'''
-from numpy import (arange, array, atleast_2d, concatenate, copy, cumprod, diag,
-        int64, ix_, ones, prod, where, zeros)
-from numpy import sum as nsum
+from numpy import (
+    arange, array, atleast_2d, concatenate, copy, cumprod, diag,
+    int64, ix_, ones, prod, where, zeros)
 from scipy.sparse import csc_matrix as sparse
 from scipy.special import binom
 
@@ -9,7 +9,6 @@ def within_household_spread(
         composition, sus, det, tau, K_home, alpha, gamma):
     '''Assuming frequency-dependent homogeneous within-household mixing
     composition(i) isnumber of age class i individuals in the household'''
-    hh_size = nsum(composition)
 
     # Set of individuals actually present here
     classes_present = where(composition.ravel() > 0)[0]
@@ -22,8 +21,7 @@ def within_household_spread(
 
     system_sizes = array([
         binom(composition[classes_present[i]] + 5 - 1, 5 - 1)
-        for i, _ in enumerate(classes_present)],
-        dtype=int64)
+        for i, _ in enumerate(classes_present)], dtype=int64)
 
     total_size = prod(system_sizes)
 
@@ -36,7 +34,7 @@ def within_household_spread(
 
     for i in range(len(classes_present)):
         k = 0
-        c = composition[classes_present[i]] 
+        c = composition[classes_present[i]]
         for s in arange(c + 1):
             for e in arange(c - s + 1):
                 for d in arange(c - s - e + 1):
@@ -53,7 +51,7 @@ def within_household_spread(
                                     [s, e, d, u, c - s - e - d - u],
                                     ndmin=2, dtype=int64)
                         k += 1
-    # Q_int=sparse(total_size,total_size)
+    # Q_int=sparse(total_size, total_size)
 
     d_pos = 2 + 5 * arange(len(classes_present))
     u_pos = 3 + 5 * arange(len(classes_present))
@@ -83,7 +81,7 @@ def within_household_spread(
         arange(total_size),
         (rows, [0]*total_size)))
 
-    Q_int = sparse((total_size,total_size))
+    Q_int = sparse((total_size, total_size))
     inf_event_row = array([], dtype=int64)
     inf_event_col = array([], dtype=int64)
 
@@ -138,10 +136,10 @@ def within_household_spread(
 
         Q_int += sparse(
             (det_rate, (e_present, det_to)),
-            shape=(total_size,total_size))
+            shape=(total_size, total_size))
         Q_int += sparse(
             (undet_rate, (e_present, undet_to)),
-            shape=(total_size,total_size))
+            shape=(total_size, total_size))
         # # disp('Incubaion events done')
 
         # Now do recovery of detected cases
@@ -157,7 +155,7 @@ def within_household_spread(
                 new_state.dot(reverse_prod) + new_state[-1], 0]
         Q_int += sparse(
             (rec_rate, (d_present, rec_to)),
-            shape=(total_size,total_size))
+            shape=(total_size, total_size))
         # disp('Recovery events from detecteds done')
         # Now do recovery of undetected cases
         rec_to = zeros(len(u_present), dtype=int64)
@@ -172,7 +170,7 @@ def within_household_spread(
                 new_state.dot(reverse_prod) +new_state[-1], 0]
         Q_int = Q_int + sparse(
             (rec_rate, (u_present, rec_to)),
-            shape=(total_size,total_size))
+            shape=(total_size, total_size))
         # disp('Recovery events from undetecteds done')
 
     S = Q_int.sum(axis=1).getA().squeeze()
@@ -184,25 +182,7 @@ def within_household_spread(
         array(inf_event_col, dtype=int64, ndmin=1)
 
 
-def get_FOI_by_class(
-        H, composition_by_state, states_sus_only, states_det_only,
-        states_undet_only, det_trans_matrix, undet_trans_matrix):
-    '''H is distribution of states by household
-    '''
-    # Average detected infected by household in each class
-    det_by_class = (H.T.dot(states_det_only) / H.T.dot(composition_by_state)).squeeze()
-    # Average undetected infected by household in each class
-    undet_by_class = (H.T.dot(states_undet_only) / H.T.dot(composition_by_state)).squeeze()
-    # This stores the rates of generating an infected of each class in each state
-    FOI_det = states_sus_only.dot(
-        diag(det_trans_matrix.dot(det_by_class.T)))
-    # This stores the rates of generating an infected of each class in each state
-    FOI_undet = states_sus_only.dot(
-        diag(undet_trans_matrix.dot(undet_by_class.T)))
-    
-    return FOI_det, FOI_undet 
-
-def build_external_import_matrix(states, row,col, FOI_det, FOI_undet, total_size):
+def build_external_import_matrix(states, row, col, FOI_det, FOI_undet, total_size):
     '''Gets sparse matrices containing rates of external infection in a household
     of a given type'''
 
@@ -210,8 +190,8 @@ def build_external_import_matrix(states, row,col, FOI_det, FOI_undet, total_size
     u_vals = zeros(len(row))
 
     for i in range(len(row)):
-        old_state = states[row[i],:]
-        new_state = states[col[i],:]
+        old_state = states[row[i], :]
+        new_state = states[col[i], :]
         # Figure out which class gets infected in this transition
         class_infected = where(new_state[::5] < old_state[::5])[0][0]
         d_vals[i] = FOI_det[row[i], class_infected]
@@ -234,38 +214,84 @@ def build_external_import_matrix(states, row,col, FOI_det, FOI_undet, total_size
 
     return Q_ext_d, Q_ext_u
 
-def hh_ODE_rates(
-        t,
-        H,
-        Q_int,
-        states,
-        composition_by_state,
-        states_sus_only,
-        states_det_only,
-        states_undet_only,
-        det_trans_matrix,
-        undet_trans_matrix,
-        row,
-        col,
-        total_size):
-    '''hh_ODE_rates calculates the rates of the ODE system describing the
-    household ODE model'''
 
-    FOI_det, FOI_undet = get_FOI_by_class(
-        H,
-        composition_by_state,
-        states_sus_only,
-        states_det_only,
-        states_undet_only,
-        det_trans_matrix,
-        undet_trans_matrix)
-    Q_ext_det, Q_ext_undet = build_external_import_matrix(
-        states,
-        row,
-        col,
-        FOI_det,
-        FOI_undet,
-        total_size)
+class RateEquations:
+    '''This class represents a functor for evaluating the rate equations. The state
+    of the class contains all essential variables'''
+    # pylint: disable=invalid-name
+    def __init__(self,
+                 model_input,
+                 Q_int,
+                 composition_list,
+                 which_composition,
+                 states,
+                 inf_event_row,
+                 inf_event_col):
 
-    dH = (H.T * (Q_int + Q_ext_det + Q_ext_undet)).T
-    return dH
+        self.Q_int = Q_int
+        self.states = states
+        self.inf_event_row = inf_event_row
+        self.inf_event_col = inf_event_col
+        self.total_size = len(which_composition)
+        # To define external mixing we need to set up the transmission matrices:
+        # Scale rows of contact matrix by
+        self.det_trans_matrix = diag(model_input.sigma).dot(model_input.k_ext)
+        # age-specific susceptibilities
+        # Scale columns by asymptomatic reduction in transmission
+        self.undet_trans_matrix = diag(model_input.sigma).dot(
+            model_input.k_ext.dot(diag(model_input.tau)))
+        # This stores number in each age class by household
+        self.composition_by_state = composition_list[which_composition, :]
+        self.states_sus_only = states[:, ::5] # ::5 gives columns corresponding to
+                                         # susceptible cases in each age class in
+                                         # each state
+        self.s_present = where(self.states_sus_only.sum(axis=1) > 0)[0]
+
+        # Our starting state H is the composition distribution with a small amount of
+        # infection present:
+
+        # 2::5 gives columns corresponding to detected cases in each age class
+        # in each state
+        self.states_det_only = states[:, 2::5]
+        # 4:5:end gives columns corresponding to undetected cases in each age
+        # class in each state
+        self.states_undet_only = states[:, 3::5]
+
+    def get_FOI_by_class(self, H):
+        '''TODO: improve docstring
+        What is FOI?
+        H is distribution of states by household'''
+        # Average detected infected by household in each class
+        det_by_class = (
+            H.T.dot(self.states_det_only)
+            / H.T.dot(self.composition_by_state)).squeeze()
+        # Average undetected infected by household in each class
+        undet_by_class = (
+            H.T.dot(self.states_undet_only)
+            / H.T.dot(self.composition_by_state)).squeeze()
+        # This stores the rates of generating an infected of each class in each state
+        FOI_det = self.states_sus_only.dot(
+            diag(self.det_trans_matrix.dot(det_by_class.T)))
+        # This stores the rates of generating an infected of each class in each state
+        FOI_undet = self.states_sus_only.dot(
+            diag(self.undet_trans_matrix.dot(undet_by_class.T)))
+
+        return FOI_det, FOI_undet 
+
+    def external_matrices(self, H):
+        FOI_det, FOI_undet = self.get_FOI_by_class(H)
+        return build_external_import_matrix(
+            self.states,
+            self.inf_event_row,
+            self.inf_event_col,
+            FOI_det,
+            FOI_undet,
+            self.total_size)
+
+
+    def __call__(self, t, H):
+        '''hh_ODE_rates calculates the rates of the ODE system describing the
+        household ODE model'''
+        Q_ext_det, Q_ext_undet = self.external_matrices(H)
+        dH = (H.T * (self.Q_int + Q_ext_det + Q_ext_undet)).T
+        return dH
