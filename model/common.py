@@ -1,7 +1,7 @@
 '''Module for additional computations required by the model'''
 from numpy import (
     arange, array, atleast_2d, concatenate, copy, cumprod, diag,
-    int64, ix_, ones, prod, where, zeros)
+    int64, ix_, ones, prod, where, zeros, ones)
 from scipy.sparse import csc_matrix as sparse
 from scipy.special import binom
 
@@ -84,6 +84,7 @@ def within_household_spread(
     Q_int = sparse((total_size, total_size))
     inf_event_row = array([], dtype=int64)
     inf_event_col = array([], dtype=int64)
+    inf_event_class = array([], dtype=int64)
 
     # Add events for each age class
     for i in range(len(classes_present)):
@@ -111,6 +112,7 @@ def within_household_spread(
             shape=(total_size, total_size))
         inf_event_row = concatenate((inf_event_row, s_present))
         inf_event_col = concatenate((inf_event_col, inf_to))
+        inf_event_class = concatenate((inf_event_class,i*ones((len(s_present)))))
         # # disp('Infection events done')
         # # Now do exposure to detected or undetected
         det_to = zeros(len(e_present), dtype=int64)
@@ -179,10 +181,11 @@ def within_household_spread(
     return \
         Q_int, states, \
         array(inf_event_row, dtype=int64, ndmin=1), \
-        array(inf_event_col, dtype=int64, ndmin=1)
+        array(inf_event_col, dtype=int64, ndmin=1), \
+        array(inf_event_class, dtype=int64, ndmin=1)
 
 
-def build_external_import_matrix(states, row, col, FOI_det, FOI_undet, total_size):
+def build_external_import_matrix(states, row, col, inf_class, FOI_det, FOI_undet, total_size):
     '''Gets sparse matrices containing rates of external infection in a household
     of a given type'''
 
@@ -193,9 +196,8 @@ def build_external_import_matrix(states, row, col, FOI_det, FOI_undet, total_siz
         old_state = states[row[i], :]
         new_state = states[col[i], :]
         # Figure out which class gets infected in this transition
-        class_infected = where(new_state[::5] < old_state[::5])[0][0]
-        d_vals[i] = FOI_det[row[i], class_infected]
-        u_vals[i] = FOI_undet[row[i], class_infected]
+        d_vals[i] = FOI_det[row[i], inf_class[i]-1]
+        u_vals[i] = FOI_undet[row[i], inf_class[i]-1]
 
     matrix_shape = (total_size, total_size)
     Q_ext_d = sparse(
@@ -226,12 +228,14 @@ class RateEquations:
                  which_composition,
                  states,
                  inf_event_row,
-                 inf_event_col):
+                 inf_event_col,
+                 inf_event_class):
 
         self.Q_int = Q_int
         self.states = states
         self.inf_event_row = inf_event_row
         self.inf_event_col = inf_event_col
+        self.inf_event_class = inf_event_class
         self.total_size = len(which_composition)
         # To define external mixing we need to set up the transmission matrices:
         # Scale rows of contact matrix by
@@ -276,7 +280,7 @@ class RateEquations:
         FOI_undet = self.states_sus_only.dot(
             diag(self.undet_trans_matrix.dot(undet_by_class.T)))
 
-        return FOI_det, FOI_undet 
+        return FOI_det, FOI_undet
 
     def external_matrices(self, H):
         FOI_det, FOI_undet = self.get_FOI_by_class(H)
@@ -284,6 +288,7 @@ class RateEquations:
             self.states,
             self.inf_event_row,
             self.inf_event_col,
+            self.inf_event_class,
             FOI_det,
             FOI_undet,
             self.total_size)

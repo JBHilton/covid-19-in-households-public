@@ -98,7 +98,7 @@ def build_household_population(composition_list, model_input):
 
     # This is an array of logicals telling you which classes are present in
     # each composition
-    classes_present = composition_list > 0 
+    classes_present = composition_list > 0
 
     system_sizes = ones(no_types, dtype=int64)
     for i, _ in enumerate(system_sizes):
@@ -108,7 +108,7 @@ def build_household_population(composition_list, model_input):
                 5 - 1)
 
     # This is useful for placing blocks of system states
-    cum_sizes = cumsum(system_sizes) 
+    cum_sizes = cumsum(system_sizes)
     # Total size is sum of the sizes of each composition-system, because we are
     # considering a single household which can be in any one composition
     total_size = cum_sizes[-1]
@@ -118,7 +118,7 @@ def build_household_population(composition_list, model_input):
 
     # Initialise matrix of internal process by doing the first block
     which_composition[:system_sizes[0]] = zeros(system_sizes[0], dtype=int64)
-    Q_temp, states_temp, inf_event_row, inf_event_col = within_household_spread(
+    Q_temp, states_temp, inf_event_row, inf_event_col, inf_event_class = within_household_spread(
         composition_list[0,:], sus, det, tau, k_home, alpha, gamma)
     print(inf_event_row)
     Q_int = sparse(Q_temp)
@@ -138,7 +138,7 @@ def build_household_population(composition_list, model_input):
         print('Processing {}/{}'.format(i, no_types))
         which_composition[cum_sizes[i-1]:cum_sizes[i]] = i * ones(
             system_sizes[i], dtype=int64)
-        Q_temp, states_temp, inf_temp_row, inf_temp_col = within_household_spread(
+        Q_temp, states_temp, inf_temp_row, inf_temp_col, inf_temp_class = within_household_spread(
             composition_list[i,:], sus, det, tau, k_home, alpha, gamma)
         Q_int = block_diag((Q_int, Q_temp), format='csc')
         Q_int.eliminate_zeros()
@@ -161,6 +161,7 @@ def build_household_population(composition_list, model_input):
 
         inf_event_row = concatenate((inf_event_row, cum_sizes[i-1] + inf_temp_row))
         inf_event_col = concatenate((inf_event_col, cum_sizes[i-1] + inf_temp_col))
+        inf_event_class = concatenate((inf_event_class, inf_temp_class))
         #print(i, type(Q_int), Q_int.shape, type(states), states.shape, len(inf_event))
         # disp([num2str(i) ' blocks calculated. ' num2str(cputime-start_time) ' seconds elapsed, approximately ' num2str(((cputime-start_time)/sum(system_sizes(1:i)))*sum(system_sizes(i+1:end))) ' seconds remaining.'])
     return \
@@ -170,7 +171,8 @@ def build_household_population(composition_list, model_input):
         system_sizes, \
         cum_sizes, \
         inf_event_row, \
-        inf_event_col 
+        inf_event_col, \
+        inf_event_class
 
 class ConstantDetModel:
     '''TODO: add docstring'''
