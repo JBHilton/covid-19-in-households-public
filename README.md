@@ -6,3 +6,8 @@ Python module, run the following from the main directory of the repo e.g.
 export PYTHONPATH=$(pwd):$PYTHONPATH
 python examples/building_matrices.py
 ```
+
+## Prerequisites
+
+ * pandas - for readind and manipulating data from spreadsheets
+ * tqdm - simple progress bar

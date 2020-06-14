@@ -1,7 +1,10 @@
 '''Module for additional computations required by the model'''
+from time import time
+from sys import getsizeof
 from numpy import (
     arange, array, atleast_2d, concatenate, copy, cumprod, diag,
-    int64, ix_, ones, prod, where, zeros, ones)
+    ix_, ones, prod, where, zeros)
+from numpy import int32 as my_int
 from scipy.sparse import csc_matrix as sparse
 from scipy.special import binom
 
@@ -21,14 +24,14 @@ def within_household_spread(
 
     system_sizes = array([
         binom(composition[classes_present[i]] + 5 - 1, 5 - 1)
-        for i, _ in enumerate(classes_present)], dtype=int64)
+        for i, _ in enumerate(classes_present)], dtype=my_int)
 
     total_size = prod(system_sizes)
 
-    states = zeros((total_size, 5*len(classes_present)), dtype=int64)
+    states = zeros((total_size, 5*len(classes_present)), dtype=my_int)
     # Number of times you repeat states for each configuration
     consecutive_repeats = concatenate((
-        ones(1, dtype=int64), cumprod(system_sizes[:-1])))
+        ones(1, dtype=my_int), cumprod(system_sizes[:-1])))
     block_size = consecutive_repeats * system_sizes
     num_blocks = total_size // block_size
 
@@ -46,10 +49,12 @@ def within_household_spread(
                                 block * block_size[i] +
                                 (k + 1) * consecutive_repeats[i])
                             states[repeat_range, 5*i:5*(i+1)] = \
-                                ones((consecutive_repeats[i], 1), dtype=int64) \
+                                ones(
+                                    (consecutive_repeats[i], 1),
+                                    dtype=my_int) \
                                 * array(
                                     [s, e, d, u, c - s - e - d - u],
-                                    ndmin=2, dtype=int64)
+                                    ndmin=2, dtype=my_int)
                         k += 1
     # Q_int=sparse(total_size, total_size)
 
@@ -62,7 +67,7 @@ def within_household_spread(
     # This loop tells us how many values each column of the state array can
     # take
     state_sizes = concatenate([
-        (composition[i] + 1) * ones(5, dtype=int64) for i in classes_present])
+        (composition[i] + 1) * ones(5, dtype=my_int) for i in classes_present])
 
     # This vector stores the number of combinations you can get of all
     # subsequent elements in the state array, i.e. reverse_prod(i) tells you
@@ -82,9 +87,9 @@ def within_household_spread(
         (rows, [0]*total_size)))
 
     Q_int = sparse((total_size, total_size))
-    inf_event_row = array([], dtype=int64)
-    inf_event_col = array([], dtype=int64)
-    inf_event_class = array([], dtype=int64)
+    inf_event_row = array([], dtype=my_int)
+    inf_event_col = array([], dtype=my_int)
+    inf_event_class = array([], dtype=my_int)
 
     # Add events for each age class
     for i in range(len(classes_present)):
@@ -94,7 +99,7 @@ def within_household_spread(
         u_present = where(states[:, 5*i+3] > 0)[0]
 
         # First do infection events
-        inf_to = zeros(len(s_present), dtype=int64)
+        inf_to = zeros(len(s_present), dtype=my_int)
         inf_rate = zeros(len(s_present))
         for k in range(len(s_present)):
             old_state = copy(states[s_present[k], :])
@@ -116,9 +121,9 @@ def within_household_spread(
         # input('Press enter to continue')
         # # disp('Infection events done')
         # # Now do exposure to detected or undetected
-        det_to = zeros(len(e_present), dtype=int64)
+        det_to = zeros(len(e_present), dtype=my_int)
         det_rate = zeros(len(e_present))
-        undet_to = zeros(len(e_present), dtype=int64)
+        undet_to = zeros(len(e_present), dtype=my_int)
         undet_rate = zeros(len(e_present))
         for k in range(len(e_present)):
             # First do detected
@@ -146,7 +151,7 @@ def within_household_spread(
         # # disp('Incubaion events done')
 
         # Now do recovery of detected cases
-        rec_to = zeros(len(d_present), dtype=int64)
+        rec_to = zeros(len(d_present), dtype=my_int)
         rec_rate = zeros(len(d_present))
         for k in range(len(d_present)):
             old_state = copy(states[d_present[k], :])
@@ -161,7 +166,7 @@ def within_household_spread(
             shape=(total_size, total_size))
         # disp('Recovery events from detecteds done')
         # Now do recovery of undetected cases
-        rec_to = zeros(len(u_present), dtype=int64)
+        rec_to = zeros(len(u_present), dtype=my_int)
         rec_rate = zeros(len(u_present))
         for k in range(len(u_present)):
             old_state = copy(states[u_present[k], :])
@@ -181,14 +186,14 @@ def within_household_spread(
         -S, (arange(total_size), arange(total_size))))
     return \
         Q_int, states, \
-        array(inf_event_row, dtype=int64, ndmin=1), \
-        array(inf_event_col, dtype=int64, ndmin=1), \
-        array(inf_event_class, dtype=int64, ndmin=1)
+        array(inf_event_row, dtype=my_int, ndmin=1), \
+        array(inf_event_col, dtype=my_int, ndmin=1), \
+        array(inf_event_class, dtype=my_int, ndmin=1)
 
-
-def build_external_import_matrix(states, row, col, inf_class, FOI_det, FOI_undet, total_size):
-    '''Gets sparse matrices containing rates of external infection in a household
-    of a given type'''
+def build_external_import_matrix(
+        states, row, col, inf_class, FOI_det, FOI_undet, total_size):
+    '''Gets sparse matrices containing rates of external infection in a
+    household of a given type'''
     d_vals = zeros(len(row))
     u_vals = zeros(len(row))
 
@@ -206,7 +211,6 @@ def build_external_import_matrix(states, row, col, inf_class, FOI_det, FOI_undet
     Q_ext_u = sparse(
         (u_vals, (row, col)),
         shape=matrix_shape)
-
 
     diagonal_idexes = (arange(total_size), arange(total_size))
     S = Q_ext_d.sum(axis=1).getA().squeeze()
@@ -284,6 +288,7 @@ class RateEquations:
 
     def external_matrices(self, H):
         FOI_det, FOI_undet = self.get_FOI_by_class(H)
+
         return build_external_import_matrix(
             self.states,
             self.inf_event_row,
