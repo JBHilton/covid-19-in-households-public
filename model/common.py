@@ -196,8 +196,8 @@ def build_external_import_matrix(states, row, col, inf_class, FOI_det, FOI_undet
         old_state = states[row[i], :]
         new_state = states[col[i], :]
         # Figure out which class gets infected in this transition
-        d_vals[i] = FOI_det[row[i], inf_class[i]-1]
-        u_vals[i] = FOI_undet[row[i], inf_class[i]-1]
+        d_vals[i] = FOI_det[row[i], inf_class[i]]
+        u_vals[i] = FOI_undet[row[i], inf_class[i]]
 
     matrix_shape = (total_size, total_size)
     Q_ext_d = sparse(
