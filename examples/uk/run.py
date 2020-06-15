@@ -25,18 +25,18 @@ if isfile('vars.pkl') is True:
     with open('vars.pkl', 'rb') as f:
         Q_int, states, which_composition, \
                 system_sizes, cum_sizes, \
-                inf_event_row, inf_event_col \
+                inf_event_row, inf_event_col, inf_event_class \
             = load(f)
 else:
     # With the parameters chosen, we calculate Q_int:
     Q_int, states, which_composition, \
             system_sizes, cum_sizes, \
-            inf_event_row, inf_event_col \
+            inf_event_row, inf_event_col, inf_event_class \
         = build_household_population(composition_list, model_input)
     with open('vars.pkl', 'wb') as f:
         dump((
             Q_int, states, which_composition, system_sizes, cum_sizes,
-            inf_event_row, inf_event_col), f)
+            inf_event_row, inf_event_col, inf_event_class), f)
 
 rhs = RateEquations(
     model_input,
@@ -45,7 +45,8 @@ rhs = RateEquations(
     which_composition,
     states,
     inf_event_row,
-    inf_event_col)
+    inf_event_col,
+    inf_event_class)
 
 # Initialisation
 fully_sus = where(rhs.states_sus_only.sum(axis=1) == states.sum(axis=1))[0]

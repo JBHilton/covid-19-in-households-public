@@ -22,7 +22,7 @@ comp_dist = array([0.1, 0.1, 0.2, 0.2, 0.2, 0.2]);
 
 Q_int, states, which_composition, \
         system_sizes, cum_sizes, \
-        inf_event_row, inf_event_col \
+        inf_event_row, inf_event_col, inf_event_class \
     = build_household_population(composition_list, model_input)
 
 rhs = RateEquations(
@@ -32,7 +32,8 @@ rhs = RateEquations(
     which_composition,
     states,
     inf_event_row,
-    inf_event_col)
+    inf_event_col,
+    inf_event_class)
 
 # Initialisation
 fully_sus = where(rhs.states_sus_only.sum(axis=1) == states.sum(axis=1))[0]
