@@ -112,7 +112,8 @@ def within_household_spread(
             shape=(total_size, total_size))
         inf_event_row = concatenate((inf_event_row, s_present))
         inf_event_col = concatenate((inf_event_col, inf_to))
-        inf_event_class = concatenate((inf_event_class,i*ones((len(s_present)))))
+        inf_event_class = concatenate((inf_event_class,classes_present[i]*ones((len(s_present)))))
+        # input('Press enter to continue')
         # # disp('Infection events done')
         # # Now do exposure to detected or undetected
         det_to = zeros(len(e_present), dtype=int64)
@@ -188,7 +189,6 @@ def within_household_spread(
 def build_external_import_matrix(states, row, col, inf_class, FOI_det, FOI_undet, total_size):
     '''Gets sparse matrices containing rates of external infection in a household
     of a given type'''
-
     d_vals = zeros(len(row))
     u_vals = zeros(len(row))
 
