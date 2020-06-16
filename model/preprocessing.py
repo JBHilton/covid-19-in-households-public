@@ -125,7 +125,7 @@ def build_household_population(composition_list, model_input):
     class_list = where(classes_present[0, :])[0]
     for j in range(len(class_list)):
         this_class = class_list[j]
-        states[:system_sizes[1], 5*this_class:5*(this_class+1)] = \
+        states[:system_sizes[0], 5*this_class:5*(this_class+1)] = \
             states_temp[:, 5*j:5*(j+1)]
 
     # NOTE: The way I do this loop is very wasteful, I'm making lots of arrays
