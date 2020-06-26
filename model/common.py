@@ -194,15 +194,10 @@ def build_external_import_matrix(
         states, row, col, inf_class, FOI_det, FOI_undet, total_size):
     '''Gets sparse matrices containing rates of external infection in a
     household of a given type'''
-    d_vals = zeros(len(row))
-    u_vals = zeros(len(row))
 
-    for i in range(len(row)):
-        old_state = states[row[i], :]
-        new_state = states[col[i], :]
-        # Figure out which class gets infected in this transition
-        d_vals[i] = FOI_det[row[i], inf_class[i]]
-        u_vals[i] = FOI_undet[row[i], inf_class[i]]
+    # Figure out which class gets infected in this transition
+    d_vals = FOI_det[row, inf_class]
+    u_vals = FOI_undet[row, inf_class]
 
     matrix_shape = (total_size, total_size)
     Q_ext_d = sparse(
