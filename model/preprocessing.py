@@ -204,39 +204,39 @@ class ModelInput:
     '''TODO: add docstring'''
     def __init__(self, spec):
         self.spec = deepcopy(spec)
-        # k_home = read_excel(
-        #     'inputs/MUestimates_home_2.xlsx',
-        #     sheet_name='United Kingdom of Great Britain',
-        #     header=None).to_numpy()
-        # k_all = read_excel(
-        #     'inputs/MUestimates_all_locations_2.xlsx',
-        #     sheet_name='United Kingdom of Great Britain',
-        #     header=None).to_numpy()
+        k_home = read_excel(
+            spec['k_home']['file_name'],
+            sheet_name=spec['k_home']['sheet_name'],
+            header=None).to_numpy()
+        k_all = read_excel(
+            spec['k_all']['file_name'],
+            sheet_name=spec['k_all']['sheet_name'],
+            header=None).to_numpy()
 
         # Because we want 80 to be included as well.
         fine_bds = arange(0, 81, 5)
         self.coarse_bds = concatenate((fine_bds[:6], fine_bds[12:]))
 
-        # pop_pyramid = read_csv(
-        #     'inputs/United Kingdom-2019.csv', index_col=0)
-        pop_pyramid = (spec['pop_pyramid']['F'] + spec['pop_pyramid']['M']).to_numpy()
+        pop_pyramid = read_csv(
+            spec['pop_pyramid_file_name'], index_col=0)
+        pop_pyramid = (pop_pyramid['F'] + pop_pyramid['M']).to_numpy()
 
         self.k_home = aggregate_contact_matrix(
-            spec['k_home'], fine_bds, self.coarse_bds, pop_pyramid)
+            k_home, fine_bds, self.coarse_bds, pop_pyramid)
         self.k_all = aggregate_contact_matrix(
-            spec['k_all'], fine_bds, self.coarse_bds, pop_pyramid)
+            k_all, fine_bds, self.coarse_bds, pop_pyramid)
         self.k_ext = self.k_all - self.k_home
 
         # This is in ten year blocks
-        # rho = read_csv(
-        #     'inputs/rho_estimate_cdc.csv', header=None).to_numpy().flatten()
+        rho = read_csv(
+            spec['rho_file_name'], header=None).to_numpy().flatten()
 
         cdc_bds = arange(0, 81, 10)
         aggregator = make_aggregator(cdc_bds, fine_bds)
 
         # This is in five year blocks
         rho = sparse((
-            spec['rho'][aggregator],
+            rho[aggregator],
             (arange(len(aggregator)),[0]*len(aggregator))))
 
         rho = spec['gamma'] * spec['R0'] * aggregate_vector_quantities(
