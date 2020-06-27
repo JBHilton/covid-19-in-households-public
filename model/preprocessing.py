@@ -1,12 +1,13 @@
 '''Various functions and classes that help build the model'''
 from copy import deepcopy
-from numpy import (arange, array, cumsum, int64, ones, ones_like, power,
+from numpy import (arange, array, cumsum, ones, ones_like, power,
     where, zeros, concatenate)
 from numpy import sum as nsum
 from scipy.sparse import block_diag
 from scipy.special import binom
 from pandas import read_excel, read_csv
-from model.common import within_household_spread, sparse
+from tqdm import tqdm
+from model.common import within_household_spread, sparse, my_int
 
 def make_aggregator(coarse_bounds, fine_bounds):
     '''Construct a matrix that stores where each class in finer structure is
@@ -100,7 +101,7 @@ def build_household_population(composition_list, model_input):
     # each composition
     classes_present = composition_list > 0
 
-    system_sizes = ones(no_types, dtype=int64)
+    system_sizes = ones(no_types, dtype=my_int)
     for i, _ in enumerate(system_sizes):
         for j in where(classes_present[i, :])[0]:
             system_sizes[i] *= binom(
@@ -113,14 +114,20 @@ def build_household_population(composition_list, model_input):
     # considering a single household which can be in any one composition
     total_size = cum_sizes[-1]
     # Stores list of (S,E,D,U,R)_a states for each composition
-    states = zeros((total_size, 5 * no_classes), dtype=int64)
-    which_composition = zeros(total_size, dtype=int64)
+    states = zeros((total_size, 5 * no_classes), dtype=my_int)
+    which_composition = zeros(total_size, dtype=my_int)
 
     # Initialise matrix of internal process by doing the first block
-    which_composition[:system_sizes[0]] = zeros(system_sizes[0], dtype=int64)
-    Q_temp, states_temp, inf_event_row, inf_event_col, inf_event_class = within_household_spread(
-        composition_list[0,:], sus, det, tau, k_home, alpha, gamma)
-    print(inf_event_row)
+    which_composition[:system_sizes[0]] = zeros(system_sizes[0], dtype=my_int)
+    Q_temp, states_temp, inf_event_row, inf_event_col, inf_event_class \
+        = within_household_spread(
+            composition_list[0, :],
+            sus,
+            det,
+            tau,
+            k_home,
+            alpha,
+            gamma)
     Q_int = sparse(Q_temp)
     class_list = where(classes_present[0, :])[0]
     for j in range(len(class_list)):
@@ -134,25 +141,22 @@ def build_household_population(composition_list, model_input):
     # Just store this so we can estimate remaining time
     matrix_sizes = power(system_sizes, 2)
     # for i in range(1, no_types):
-    for i in range(1, no_types):
-        print('Processing {}/{}'.format(i, no_types))
+    for i in tqdm(range(1, no_types), desc='Building within-household transmission matrix'):
+        # print('Processing {}/{}'.format(i, no_types))
         which_composition[cum_sizes[i-1]:cum_sizes[i]] = i * ones(
-            system_sizes[i], dtype=int64)
-        Q_temp, states_temp, inf_temp_row, inf_temp_col, inf_temp_class = within_household_spread(
-            composition_list[i,:], sus, det, tau, k_home, alpha, gamma)
+            system_sizes[i], dtype=my_int)
+        Q_temp, states_temp, inf_temp_row, inf_temp_col, inf_temp_class \
+            = within_household_spread(
+                composition_list[i, :],
+                sus,
+                det,
+                tau,
+                k_home,
+                alpha,
+                gamma)
         Q_int = block_diag((Q_int, Q_temp), format='csc')
         Q_int.eliminate_zeros()
         class_list = where(classes_present[i,:])[0]
-        print('Q_int shape={0} nnz={1} ({2:0.04f}%)'.format(
-            Q_int.shape,
-            Q_int.getnnz(),
-            Q_int.getnnz()
-            / (Q_int.shape[0] * Q_int.shape[1])*100))
-        print('Q_temp shape={0} nnz={1} ({2:0.04f}%)'.format(
-            Q_temp.shape,
-            Q_temp.getnnz(),
-            Q_temp.getnnz()
-            / (Q_temp.shape[0]*Q_temp.shape[1])*100))
         for j in range(len(class_list)):
             this_class = class_list[j]
             states[
@@ -163,7 +167,6 @@ def build_household_population(composition_list, model_input):
         inf_event_col = concatenate((inf_event_col, cum_sizes[i-1] + inf_temp_col))
         inf_event_class = concatenate((inf_event_class, inf_temp_class))
         #print(i, type(Q_int), Q_int.shape, type(states), states.shape, len(inf_event))
-        # disp([num2str(i) ' blocks calculated. ' num2str(cputime-start_time) ' seconds elapsed, approximately ' num2str(((cputime-start_time)/sum(system_sizes(1:i)))*sum(system_sizes(i+1:end))) ' seconds remaining.'])
     return \
         Q_int, \
         states, \
@@ -202,12 +205,12 @@ class ModelInput:
     def __init__(self, spec):
         self.spec = deepcopy(spec)
         k_home = read_excel(
-            'inputs/MUestimates_home_2.xlsx',
-            sheet_name='United Kingdom of Great Britain',
+            spec['k_home']['file_name'],
+            sheet_name=spec['k_home']['sheet_name'],
             header=None).to_numpy()
         k_all = read_excel(
-            'inputs/MUestimates_all_locations_2.xlsx',
-            sheet_name='United Kingdom of Great Britain',
+            spec['k_all']['file_name'],
+            sheet_name=spec['k_all']['sheet_name'],
             header=None).to_numpy()
 
         # Because we want 80 to be included as well.
@@ -215,7 +218,7 @@ class ModelInput:
         self.coarse_bds = concatenate((fine_bds[:6], fine_bds[12:]))
 
         pop_pyramid = read_csv(
-            'inputs/United Kingdom-2019.csv', index_col=0)
+            spec['pop_pyramid_file_name'], index_col=0)
         pop_pyramid = (pop_pyramid['F'] + pop_pyramid['M']).to_numpy()
 
         self.k_home = aggregate_contact_matrix(
@@ -226,7 +229,7 @@ class ModelInput:
 
         # This is in ten year blocks
         rho = read_csv(
-            'inputs/rho_estimate_cdc.csv', header=None).to_numpy().flatten()
+            spec['rho_file_name'], header=None).to_numpy().flatten()
 
         cdc_bds = arange(0, 81, 10)
         aggregator = make_aggregator(cdc_bds, fine_bds)
