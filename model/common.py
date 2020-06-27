@@ -300,3 +300,195 @@ class RateEquations:
         Q_ext_det, Q_ext_undet = self.external_matrices(H)
         dH = (H.T * (self.Q_int + Q_ext_det + Q_ext_undet)).T
         return dH
+
+class RateEquationsWithImports:
+    '''This class represents a functor for evaluating the rate equations. The state
+    of the class contains all essential variables'''
+    # pylint: disable=invalid-name
+    def __init__(self,
+                 model_input,
+                 Q_int,
+                 composition_list,
+                 which_composition,
+                 states,
+                 inf_event_row,
+                 inf_event_col,
+                 inf_event_class,
+                 det_imports,
+                 undet_imports):
+
+        self.Q_int = Q_int
+        self.states = states
+        self.inf_event_row = inf_event_row
+        self.inf_event_col = inf_event_col
+        self.inf_event_class = inf_event_class
+        self.total_size = len(which_composition)
+        # To define external mixing we need to set up the transmission matrices:
+        # Scale rows of contact matrix by
+        self.det_trans_matrix = diag(model_input.sigma).dot(model_input.k_ext)
+        # age-specific susceptibilities
+        # Scale columns by asymptomatic reduction in transmission
+        self.undet_trans_matrix = diag(model_input.sigma).dot(
+            model_input.k_ext.dot(diag(model_input.tau)))
+        # This stores number in each age class by household
+        self.composition_by_state = composition_list[which_composition, :]
+        self.states_sus_only = states[:, ::5] # ::5 gives columns corresponding to
+                                         # susceptible cases in each age class in
+                                         # each state
+        self.s_present = where(self.states_sus_only.sum(axis=1) > 0)[0]
+
+        # Our starting state H is the composition distribution with a small amount of
+        # infection present:
+
+        # 2::5 gives columns corresponding to detected cases in each age class
+        # in each state
+        self.states_det_only = states[:, 2::5]
+        # 4:5:end gives columns corresponding to undetected cases in each age
+        # class in each state
+        self.states_undet_only = states[:, 3::5]
+
+        self.det_imports = det_imports
+        self.undet_imports = undet_imports
+
+    def get_FOI_by_class(self, H):
+        '''TODO: improve docstring
+        What is FOI?
+        H is distribution of states by household'''
+        # Average detected infected by household in each class
+        det_by_class = (
+            H.T.dot(self.states_det_only)
+            / H.T.dot(self.composition_by_state)).squeeze()
+        # Average undetected infected by household in each class
+        undet_by_class = (
+            H.T.dot(self.states_undet_only)
+            / H.T.dot(self.composition_by_state)).squeeze()
+        # This stores the rates of generating an infected of each class in each state
+        FOI_det = self.states_sus_only.dot(
+            diag(self.det_trans_matrix.dot(det_by_class.T + self.det_imports)))
+        # This stores the rates of generating an infected of each class in each state
+        FOI_undet = self.states_sus_only.dot(
+            diag(self.undet_trans_matrix.dot(undet_by_class.T + self.undet_imports)))
+
+        return FOI_det, FOI_undet
+
+    def external_matrices(self, H):
+        FOI_det, FOI_undet = self.get_FOI_by_class(H)
+        return build_external_import_matrix(
+            self.states,
+            self.inf_event_row,
+            self.inf_event_col,
+            self.inf_event_class,
+            FOI_det,
+            FOI_undet,
+            self.total_size)
+
+
+    def __call__(self, t, H):
+        '''hh_ODE_rates calculates the rates of the ODE system describing the
+        household ODE model'''
+        Q_ext_det, Q_ext_undet = self.external_matrices(H)
+        dH = (H.T * (self.Q_int + Q_ext_det + Q_ext_undet)).T
+        return dH
+
+class RateEquationsWithTimeImports:
+    '''This class represents a functor for evaluating the rate equations. The state
+    of the class contains all essential variables'''
+    # pylint: disable=invalid-name
+    def __init__(self,
+                 t,
+                 model_input,
+                 Q_int,
+                 composition_list,
+                 which_composition,
+                 states,
+                 inf_event_row,
+                 inf_event_col,
+                 inf_event_class,
+                 det_imports,
+                 undet_imports,
+                 import_times):
+
+        self.t = t
+        self.Q_int = Q_int
+        self.states = states
+        self.inf_event_row = inf_event_row
+        self.inf_event_col = inf_event_col
+        self.inf_event_class = inf_event_class
+        self.total_size = len(which_composition)
+        # To define external mixing we need to set up the transmission matrices:
+        # Scale rows of contact matrix by
+        self.det_trans_matrix = diag(model_input.sigma).dot(model_input.k_ext)
+        # age-specific susceptibilities
+        # Scale columns by asymptomatic reduction in transmission
+        self.undet_trans_matrix = diag(model_input.sigma).dot(
+            model_input.k_ext.dot(diag(model_input.tau)))
+        # This stores number in each age class by household
+        self.composition_by_state = composition_list[which_composition, :]
+        self.states_sus_only = states[:, ::5] # ::5 gives columns corresponding to
+                                         # susceptible cases in each age class in
+                                         # each state
+        self.s_present = where(self.states_sus_only.sum(axis=1) > 0)[0]
+
+        # Our starting state H is the composition distribution with a small amount of
+        # infection present:
+
+        # 2::5 gives columns corresponding to detected cases in each age class
+        # in each state
+        self.states_det_only = states[:, 2::5]
+        # 4:5:end gives columns corresponding to undetected cases in each age
+        # class in each state
+        self.states_undet_only = states[:, 3::5]
+
+        self.det_imports = det_imports
+        self.undet_imports = undet_imports
+        self.import_times = import_times
+
+    def get_FOI_by_class(self, H):
+        '''TODO: improve docstring
+        What is FOI?
+        H is distribution of states by household'''
+        # Average detected infected by household in each class
+        time_step = -1
+        time_located = False
+        while not time_located:
+            time_step+=1
+            if (self.t>=self.import_times[time_step]) and (self.t<self.import_times[time_step+1]):
+                time_located = True
+            elif (self.t>=self.import_times[-1]):
+                time_step = len(self.import_times)-1
+                time_located = True
+                
+        det_by_class = (
+            H.T.dot(self.states_det_only)
+            / H.T.dot(self.composition_by_state)).squeeze()
+        # Average undetected infected by household in each class
+        undet_by_class = (
+            H.T.dot(self.states_undet_only)
+            / H.T.dot(self.composition_by_state)).squeeze()
+        # This stores the rates of generating an infected of each class in each state
+        FOI_det = self.states_sus_only.dot(
+            diag(self.det_trans_matrix.dot(det_by_class.T + self.det_imports[:,time_step])))
+        # This stores the rates of generating an infected of each class in each state
+        FOI_undet = self.states_sus_only.dot(
+            diag(self.undet_trans_matrix.dot(undet_by_class.T + self.undet_imports[:,time_step])))
+
+        return FOI_det, FOI_undet
+
+    def external_matrices(self, H):
+        FOI_det, FOI_undet = self.get_FOI_by_class(H)
+        return build_external_import_matrix(
+            self.states,
+            self.inf_event_row,
+            self.inf_event_col,
+            self.inf_event_class,
+            FOI_det,
+            FOI_undet,
+            self.total_size)
+
+
+    def __call__(self, t, H):
+        '''hh_ODE_rates calculates the rates of the ODE system describing the
+        household ODE model'''
+        Q_ext_det, Q_ext_undet = self.external_matrices(H)
+        dH = (H.T * (self.Q_int + Q_ext_det + Q_ext_undet)).T
+        return dH
