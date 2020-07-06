@@ -9,7 +9,7 @@ from time import time as get_time
 from scipy.integrate import solve_ivp
 from model.preprocessing import TwoAgeModelInput, build_household_population
 from model.specs import DEFAULT_SPEC
-from model.common import RateEquations
+from model.common import NoImportRateEquations
 # pylint: disable=invalid-name
 
 model_input = TwoAgeModelInput(DEFAULT_SPEC)
@@ -37,7 +37,7 @@ else:
             inf_event_row, inf_event_col, inf_event_class), f)
 
 
-rhs = RateEquations(
+rhs = NoImportRateEquations(
     model_input,
     Q_int,
     composition_list,

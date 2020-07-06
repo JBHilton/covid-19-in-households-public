@@ -82,6 +82,8 @@ def within_household_spread(
     rows = [
         states[k, :].dot(reverse_prod) + states[k, -1]
         for k in range(total_size)]
+    if min(rows)<0:
+        print('Negative row indices found, proportional total',sum(array(rows)<0),'/',len(rows),'=',sum(array(rows)<0)/len(rows))
     index_vector = sparse((
         arange(total_size),
         (rows, [0]*total_size)))
@@ -216,9 +218,10 @@ def build_external_import_matrix(
     return Q_ext_d, Q_ext_u
 
 
-class RateEquations:
-    '''This class represents a functor for evaluating the rate equations. The state
-    of the class contains all essential variables'''
+class NoImportRateEquations:
+    '''This class represents a functor for evaluating the rate equations for the
+    model with no imports of infection from outside the population. The state of
+    the class contains all essential variables'''
     # pylint: disable=invalid-name
     def __init__(self,
                  model_input,
@@ -261,9 +264,8 @@ class RateEquations:
         self.states_undet_only = states[:, 3::5]
 
     def get_FOI_by_class(self, H):
-        '''TODO: improve docstring
-        What is FOI?
-        H is distribution of states by household'''
+        '''This calculates the age-stratified force of infection (FOI) on each
+        household composition'''
         # Average detected infected by household in each class
         det_by_class = (
             H.T.dot(self.states_det_only)
@@ -301,9 +303,9 @@ class RateEquations:
         dH = (H.T * (self.Q_int + Q_ext_det + Q_ext_undet)).T
         return dH
 
-class RateEquationsWithImports:
-    '''This class represents a functor for evaluating the rate equations. The state
-    of the class contains all essential variables'''
+class FixedImportNoImportRateEquations:
+    '''This class represents a functor for evaluating the rate equations with a
+    fixed rate of importation of infection from beyond the population.'''
     # pylint: disable=invalid-name
     def __init__(self,
                  model_input,
@@ -351,9 +353,8 @@ class RateEquationsWithImports:
         self.undet_imports = undet_imports
 
     def get_FOI_by_class(self, H):
-        '''TODO: improve docstring
-        What is FOI?
-        H is distribution of states by household'''
+        '''This calculates the age-stratified force of infection (FOI) on each
+        household composition'''
         # Average detected infected by household in each class
         det_by_class = (
             H.T.dot(self.states_det_only)
@@ -390,9 +391,10 @@ class RateEquationsWithImports:
         dH = (H.T * (self.Q_int + Q_ext_det + Q_ext_undet)).T
         return dH
 
-class RateEquationsWithStepFunctionImports:
-    '''This class represents a functor for evaluating the rate equations. The state
-    of the class contains all essential variables'''
+class StepImportRateEquations:
+    '''This class represents a functor for evaluating the rate equations with
+    step function importations, which arise if imports are proportional to
+    daily, weekly, or monthly reported cases.'''
     # pylint: disable=invalid-name
     def __init__(self,
                  t,
@@ -446,9 +448,8 @@ class RateEquationsWithStepFunctionImports:
         self.import_times = import_times
 
     def get_FOI_by_class(self, H):
-        '''TODO: improve docstring
-        What is FOI?
-        H is distribution of states by household'''
+        '''This calculates the age-stratified force of infection (FOI) on each
+        household composition'''
         # Average detected infected by household in each class
         time_step = -1
         time_located = False
@@ -495,9 +496,9 @@ class RateEquationsWithStepFunctionImports:
         dH = (H.T * (self.Q_int + Q_ext_det + Q_ext_undet)).T
         return dH
 
-class RateEquationsWithExponentialImports:
-    '''This class represents a functor for evaluating the rate equations. The state
-    of the class contains all essential variables'''
+class ExpImportRateEquations:
+    '''This class represents a functor for evaluating the rate equations with
+    exponentially increasing imports of infection'''
     # pylint: disable=invalid-name
     def __init__(self,
                  t,
@@ -551,9 +552,8 @@ class RateEquationsWithExponentialImports:
         self.r = r # This is the early growth eigenvalue
 
     def get_FOI_by_class(self, H):
-        '''TODO: improve docstring
-        What is FOI?
-        H is distribution of states by household'''
+        '''This calculates the age-stratified force of infection (FOI) on each
+        household composition'''
         # Average detected infected by household in each class
         det_imports = exp(self.r)*self.det_profile
         undet_imports = exp(self.r)*self.undet_profile
