@@ -303,7 +303,7 @@ class NoImportRateEquations:
         dH = (H.T * (self.Q_int + Q_ext_det + Q_ext_undet)).T
         return dH
 
-class FixedImportNoImportRateEquations:
+class FixedImportRateEquations:
     '''This class represents a functor for evaluating the rate equations with a
     fixed rate of importation of infection from beyond the population.'''
     # pylint: disable=invalid-name

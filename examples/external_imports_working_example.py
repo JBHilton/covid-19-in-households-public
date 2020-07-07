@@ -1,4 +1,4 @@
- NoImportRateEquations''' This runs a simple example with external importation to explore the
+''' This runs a simple example with external importation to explore the
 impact of different import functions on execution time'''
 
 from os.path import isfile
@@ -63,7 +63,7 @@ def time_import_model(t,H):
     import_times)
     return rhs(t,H)
 
-rhs = RateEquations(
+rhs = NoImportRateEquations(
     model_input,
     Q_int,
     composition_list,
@@ -92,7 +92,7 @@ H = solution.y
 D = H.T.dot(states[:, 2::5])
 U = H.T.dot(states[:, 3::5])
 
-with open('simple.pkl', 'wb') as f:
+with open('simple-results.pkl', 'wb') as f:
     dump((time, H, D, U, model_input.coarse_bds), f)
 
 rhs = FixedImportRateEquations(
