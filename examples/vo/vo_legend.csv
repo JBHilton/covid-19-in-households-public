@@ -1,0 +1,11 @@
+﻿Column,Information,Content
+From D to L,Symptoms,"1 for presence, NA otherwise, with the exception of fever column which indicates body temperature in Celsius degrees"
+M,Symptomatic,"Yes if fever or cough are = 1, or if patient was hospitalized"
+From N to CZ,Contacts,"Each column represents a positive subjetc. Numbers in cells identify the type of contact occurred with the corresponding subjects in rows: 1=direct contact, as reported by the subject, 2=indirect contact (i.e. contact with a subject who had direct contact), 3=inferred contact (i.e. inferred from household)"
+From DA to DS,Sampling dates and results,Each column represents one day of sampling. The value can be either Pos  (one positive sampling on the specified date) or Neg (one negative sampling on the specified date) or NA (no sampling)
+DT,Patient outcome from the first screening,"Can be either positive (one or more positive results in the first sampling period, February 21-29), negative (one or more negative results in the first sampling period), NA (no sampling in the period), positivized (two or more discordant results in the period, the last one being positive), negativized (two or more discordant results in the period, the last one being negative)"
+DU,Patient outcome from the second screening*,"Can be either positive (one or more positive results in the second sampling period, March 7), negative (one or more negative results in the second sampling period), NA (no sampling in the period), positivized (two or more discordant results in the period, the last one being positive), negativized (two or more discordant results in the period, the last one being negative)"
+DV,Positivity to SARS-CoV-2,"TRUE if at least one positive swab is present for the subject, FALSE otherwise"
+,,
+,,
+"*Patients with sampling results from March 1 to March 6, and from March 8 to 10 are hospitalized patients and are considered within the second sampling period.",,
