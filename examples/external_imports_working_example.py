@@ -8,12 +8,12 @@ from numpy.random import rand
 from pandas import read_csv
 from time import time as get_time
 from scipy.integrate import solve_ivp
-from model.preprocessing import TwoAgeModelInput, build_household_population
+from model.preprocessing import SimpleModelInput, build_household_population
 from model.specs import DEFAULT_SPEC
 from model.common import NoImportRateEquations, FixedImportRateEquations, StepImportRateEquations, ExpImportRateEquations
 # pylint: disable=invalid-name
 
-model_input = TwoAgeModelInput(DEFAULT_SPEC)
+model_input = SimpleModelInput(DEFAULT_SPEC)
 
 # List of observed household compositions
 composition_list = array([[0,1],[0,2],[1,1],[1,2],[2,1],[2,2]])

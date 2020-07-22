@@ -3,10 +3,21 @@ from time import time
 from sys import getsizeof
 from numpy import (
     arange, array, atleast_2d, concatenate, copy, cumprod, diag, exp,
-    ix_, ones, prod, where, zeros)
-from numpy import int32 as my_int
+    ix_, ones, prod, shape, where, zeros)
+from numpy import int64 as my_int
 from scipy.sparse import csc_matrix as sparse
 from scipy.special import binom
+
+def get_symptoms_by_test(tests,symptoms):
+    symp_locs = []
+    asym_locs = []
+    for i in range(len(tests)):
+        if tests[i]==1:
+            if symptoms[i]=='yes':
+                symp_locs.append(i)
+            elif symptoms[i]=='no':
+                asym_locs.append(i)
+    return symp_locs, asym_locs
 
 def within_household_spread(
         composition, sus, det, tau, K_home, alpha, gamma):
@@ -557,6 +568,7 @@ class ExpImportRateEquations:
         # Average detected infected by household in each class
         det_imports = exp(self.r)*self.det_profile
         undet_imports = exp(self.r)*self.undet_profile
+        # print(shape(self.states_det_only),shape(self.composition_by_state),shape(H))
 
         det_by_class = (
             H.T.dot(self.states_det_only)

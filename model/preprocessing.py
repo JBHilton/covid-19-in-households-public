@@ -1,7 +1,7 @@
 '''Various functions and classes that help build the model'''
 from copy import deepcopy
 from numpy import (append, arange, array, cumsum, hstack, identity, ones,
-    ones_like, power, shape, vstack, where, zeros, concatenate)
+    ones_like, power, shape, tile, vstack, where, zeros, concatenate)
 from numpy import sum as nsum
 from scipy.sparse import block_diag
 from scipy.special import binom
@@ -87,16 +87,15 @@ def build_household_population(composition_list, model_input):
     # away here. While we would expect to see some households with equal
     # numbers in age class 1 and all others combined, we should not see it
     # everywhere and so this is a safe way to check.
-    condition = max(abs(
-        composition_list[:, 0] - composition_list[:, 1:].sum(axis=1)))
-    if condition == 0:
-        size_list = composition_list[:,0]
-        composition_list = composition_list[:,1:]
-    else:
-        size_list = composition_list.sum(axis=1)
+    # condition = max(abs(
+    #     composition_list[:, 0] - composition_list[:, 1:].sum(axis=1)))
+    # if condition == 0:
+    #     size_list = composition_list[:,0]
+    #     composition_list = composition_list[:,1:]
+    # else:
+    #     size_list = composition_list.sum(axis=1)
 
     no_types, no_classes = composition_list.shape
-
     # This is an array of logicals telling you which classes are present in
     # each composition
     classes_present = composition_list > 0
@@ -328,8 +327,8 @@ class VoInput:
             spec['k_all']['file_name'],
             sheet_name=spec['k_all']['sheet_name']).to_numpy()
 
-        fine_bds = append(arange(0, 81, 5),90)
-        self.coarse_bds = arange(0,91,10)
+        fine_bds = arange(0, 96, 5)
+        self.coarse_bds = arange(0,96,10)
 
         pop_pyramid = read_csv(
             spec['pop_pyramid_file_name'], index_col=0)
@@ -338,13 +337,12 @@ class VoInput:
         '''We need to add an extra row to contact matrix to split 75+ class
         into 75-90 and 90+'''
 
-        total_75_plus = sum(pop_pyramid[15:])
-        total_90_plus = sum(pop_pyramid[18:])
-        ninety_plus_prop = total_90_plus/total_75_plus
+        proportions_75_plus = append(pop_pyramid[15:18],sum(pop_pyramid[18:]))
+        proportions_75_plus = proportions_75_plus/sum(proportions_75_plus)
 
-        premultiplier = vstack((identity(16),identity(16)[15,:]))
-        postmultiplier = hstack((identity(16),ninety_plus_prop*identity(16)[15,:][:,None]))
-        postmultiplier[15,15] = 1-ninety_plus_prop
+        premultiplier = vstack((identity(16),tile(identity(16)[15,:],(3,1))))
+        postmultiplier = hstack((identity(16),zeros((16,3))))
+        postmultiplier[15,15:] = proportions_75_plus
 
         k_home = (premultiplier.dot(k_home)).dot(postmultiplier)
         k_all = (premultiplier.dot(k_all)).dot(postmultiplier)
@@ -363,18 +361,10 @@ class VoInput:
         # rho = read_csv(
         #     'inputs/rho_estimate_cdc.csv', header=None).to_numpy().flatten()
 
-        while len(rho)<len(fine_bds):
+        while len(rho)<10:
             rho = append(rho,rho[-1]) # this just adds extra classes to row, identitcal to the 75+ class
-        cdc_bds = arange(0, 91, 10)
-        aggregator = make_aggregator(cdc_bds, fine_bds)
 
-        # This is in five year blocks
-        rho = sparse((
-            rho[aggregator],
-            (arange(len(aggregator)),[0]*len(aggregator))))
-
-        rho = spec['gamma'] * spec['R0'] * aggregate_vector_quantities(
-            rho, fine_bds, self.coarse_bds, pop_pyramid).toarray().squeeze()
+        rho = spec['gamma'] * spec['R0'] * rho # In this example we are already dealing with 10 year classes so we don't need to aggregate
 
         det_model = det_from_spec(self.spec)
         # self.det = (0.9/max(rho)) * rho
