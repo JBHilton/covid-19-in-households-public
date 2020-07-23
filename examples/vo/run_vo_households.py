@@ -3,7 +3,7 @@ each household as an independent example with exponential imports'''
 
 from os.path import isfile
 from pickle import load, dump
-from numpy import arange, array, histogram, ones, prod, shape, sum, where, zeros
+from numpy import arange, array, exp, histogram, log, ones, prod, shape, sum, where, zeros
 from pandas import read_csv
 from scipy.integrate import solve_ivp
 from scipy.special import binom
@@ -28,14 +28,20 @@ def get_test_probability(rhs,tests,symptoms,ages,states,composition,H0,t0,start_
         solution = solve_ivp(rhs, (t_start,t), H_start,first_step=0.001)
         H = solution.y
         H_end = H[:,-1] # Get end state
+        # print('H=',H_end)
+        # print('After initial run sum(H_end)=',sum(H_end))
 
         ''' Now calculate total positives and negatives by age class on this
         date'''
 
         symp_locs, asymp_locs = get_symptoms_by_test(tests[:,t-(start_date-t0)],symptoms)
         symp_ages = ages[symp_locs]
+        # print('symp_ages=',symp_ages)
         asymp_ages = ages[asymp_locs]
+        # print('asym_ages=',asymp_ages)
         neg_ages = ages[tests[:,t-(start_date-t0)]==0]
+        # print('neg_ages=',neg_ages)
+        # print('ages=',ages)
 
         min_symps_by_age = zeros((10,))
         for i in symp_ages:
@@ -43,18 +49,27 @@ def get_test_probability(rhs,tests,symptoms,ages,states,composition,H0,t0,start_
         min_asymps_by_age = zeros((10,))
         for i in asymp_ages:
             min_asymps_by_age[i] +=1
-        max_inf_by_age = composition[0] # Index is needed because composition is inside an array
+        max_inf_by_age = list(composition[0]) # Index is needed because composition is inside an array
+        # print(composition)
         for i in neg_ages:
             max_inf_by_age[i] -=1
+        # print('min_symps=',min_symps_by_age)
+        # print('min_asymps_by_age=',min_asymps_by_age)
+        # print('max_inf_by_age=',max_inf_by_age)
 
         # The next line finds all the lines consistent with the min/max number of infecteds by multiplying truth values for each comparision along the rows
-        valid_locs = where(prod(states[:,2::5]>=min_symps_by_age,axis=1).dot(prod(states[:,3::5]>=min_asymps_by_age,axis=1).dot(prod(states[:,2::5]+states[:,3::5]<=max_inf_by_age,axis=1))))[0]
+        valid_locs = where(prod(states[:,2::5]>=min_symps_by_age,axis=1)*(prod(states[:,3::5]>=min_asymps_by_age,axis=1)*prod(states[:,2::5]+states[:,3::5]<=max_inf_by_age,axis=1)))[0]
+        # print('Number of valid locations is ',len(valid_locs))
+        # print('Numbre of invalid locations is ',len(H_end)-len(valid_locs))
+        # print('Valid probability is ',sum(H_end[valid_locs]))
+        # print('Invalid probability is ',sum(H_end[where(1-prod(states[:,2::5]>=min_symps_by_age,axis=1)*(prod(states[:,3::5]>=min_asymps_by_age,axis=1)*prod(states[:,2::5]+states[:,3::5]<=max_inf_by_age,axis=1)))[0]]))
         result_prob.append(sum(H_end[valid_locs]))
         H_start = 0*H_end
         H_start[valid_locs] = (1/result_prob[-1])*H_end[valid_locs]
+        # print('New starting probability is ',sum(H_start))
         t_start = t
 
-    return prod(result_prob)
+    return sum(log((result_prob)))
 
 model_input = VoInput(VO_SPEC)
 
@@ -89,11 +104,10 @@ alpha = model_input.alpha
 gamma = model_input.gamma
 
 
-for i in range(len(composition_list)):
+for i in range(10):
     if sum(composition_list[i])<10: # There are a few huge households which we skip
         print('Now doing household ',i+1,' of ',len(composition_list))
         composition = composition_list[i]
-        print(composition)
         tests = hh_tests[i]
         symptoms  = hh_symptoms[i]
         ages = hh_ages[i]
@@ -139,4 +153,5 @@ for i in range(len(composition_list)):
 
 with open('testing-probabilities.pkl','wb') as f:
     dump((test_prob),f)
-print('Likelihood of input parameters given data is ',prod(test_prob),'.')
+print('Likelihood of input parameters given data is ',exp(sum(test_prob)),'.')
+print('test_prob=',test_prob)

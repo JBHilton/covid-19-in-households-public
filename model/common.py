@@ -543,6 +543,7 @@ class ExpImportRateEquations:
             model_input.k_ext.dot(diag(model_input.tau)))
         # This stores number in each age class by household
         self.composition_by_state = composition_list[which_composition, :]
+
         self.states_sus_only = states[:, ::5] # ::5 gives columns corresponding to
                                          # susceptible cases in each age class in
                                          # each state
@@ -565,18 +566,20 @@ class ExpImportRateEquations:
     def get_FOI_by_class(self, H):
         '''This calculates the age-stratified force of infection (FOI) on each
         household composition'''
-        # Average detected infected by household in each class
         det_imports = exp(self.r)*self.det_profile
         undet_imports = exp(self.r)*self.undet_profile
-        # print(shape(self.states_det_only),shape(self.composition_by_state),shape(H))
 
-        det_by_class = (
-            H.T.dot(self.states_det_only)
-            / H.T.dot(self.composition_by_state)).squeeze()
+        # Average detected infected by household in each class
+        denom = H.T.dot(self.composition_by_state)
+        det_by_class = zeros(shape(denom))
+        det_by_class[denom>0] = (
+            H.T.dot(self.states_det_only)[denom>0]
+            / denom[denom>0]).squeeze()
         # Average undetected infected by household in each class
-        undet_by_class = (
-            H.T.dot(self.states_undet_only)
-            / H.T.dot(self.composition_by_state)).squeeze()
+        undet_by_class = zeros(shape(denom))
+        undet_by_class[denom>0] = (
+            H.T.dot(self.states_undet_only)[denom>0]
+            / denom[denom>0]).squeeze()
         # This stores the rates of generating an infected of each class in each state
         FOI_det = self.states_sus_only.dot(
             diag(self.det_trans_matrix.dot(self.epsilon*det_by_class.T + det_imports)))
