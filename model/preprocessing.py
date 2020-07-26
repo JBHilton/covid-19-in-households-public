@@ -1,13 +1,25 @@
 '''Various functions and classes that help build the model'''
 from copy import deepcopy
-from numpy import (arange, array, cumsum, ones, ones_like, power,
-    where, zeros, concatenate)
-from numpy import sum as nsum
+from numpy import (
+        arange, array, cumsum, ones, ones_like, power, where, zeros,
+        concatenate)
 from scipy.sparse import block_diag
 from scipy.special import binom
 from pandas import read_excel, read_csv
 from tqdm import tqdm
 from model.common import within_household_spread, sparse, my_int
+
+
+def initial_condition(composition_distribution, states, rhs, which_composition, alpha=1.0e-5):
+    fully_sus = where(
+        rhs.states_sus_only.sum(axis=1) == states.sum(axis=1))[0]
+    i_is_one = where(
+        (rhs.states_det_only + rhs.states_undet_only).sum(axis=1) == 1)[0]
+    H0 = zeros(len(which_composition))
+    H0[i_is_one] = alpha * composition_distribution[which_composition[i_is_one]]
+    H0[fully_sus] = (1.0 - alpha * sum(
+        composition_distribution[which_composition[i_is_one]])) * composition_distribution
+    return H0
 
 def make_aggregator(coarse_bounds, fine_bounds):
     '''Construct a matrix that stores where each class in finer structure is
@@ -15,6 +27,7 @@ def make_aggregator(coarse_bounds, fine_bounds):
     return array([
         where(coarse_bounds <= fine_bounds[i])[0][-1]
         for i in range(len(fine_bounds) - 1)])
+
 
 def aggregate_contact_matrix(k_fine, fine_bds, coarse_bds, pyramid):
     '''Aggregates an age-structured contact matrice to return the corresponding
@@ -24,46 +37,46 @@ def aggregate_contact_matrix(k_fine, fine_bds, coarse_bds, pyramid):
 
     # Prem et al. estimates cut off at 80, so we bundle all >75 year olds into
     # one class for consistency with these estimates:
-    pyramid[len(fine_bds) - 1] = nsum(pyramid[len(fine_bds) - 1:])
+    pyramid[len(fine_bds) - 1] = pyramid[len(fine_bds) - 1:].sum()
     pyramid = pyramid[:len(fine_bds) - 1]
     # Normalise to give proportions
-    pyramid = pyramid / nsum(pyramid)
-
+    pyramid = pyramid / pyramid.sum()
 
     # sparse matrix defined here just splits pyramid into rows corresponding to
     # coarse boundaries, then summing each row gives aggregated pyramid
     row_cols = (aggregator, arange(len(aggregator)))
-    agg_pop_pyramid=nsum(
-        sparse((pyramid, row_cols)),
-        axis=1).getA().squeeze()
+    # getA is necessary to convert numpy.matrix to numpy.array. The former is
+    # deprecated and should disappear soon but scipy still returns.
+    agg_pop_pyramid = sparse(
+        (pyramid, row_cols)).sum(axis=1).getA().squeeze()
 
     rel_weights = pyramid / agg_pop_pyramid[aggregator]
 
     # Now define contact matrix with age classes from Li et al data
     pop_weight_matrix = sparse((rel_weights, row_cols))
-    pop_no_weight=sparse((ones_like(aggregator), row_cols))
+    pop_no_weight = sparse((ones_like(aggregator), row_cols))
 
     return pop_weight_matrix * k_fine * pop_no_weight.T
 
-def aggregate_vector_quantities(v_fine, fine_bds, coarse_bds, pyramid ):
+
+def aggregate_vector_quantities(v_fine, fine_bds, coarse_bds, pyramid):
     '''Aggregates an age-structured contact matrice to return the corresponding
     transmission matrix under a finer age structure.'''
 
-    aggregator=make_aggregator(coarse_bds, fine_bds)
+    aggregator = make_aggregator(coarse_bds, fine_bds)
 
     # The Prem et al. estimates cut off at 80, so we all >75 year olds into one
     # class for consistency with these estimates:
     pyramid[len(fine_bds) - 1] = sum(pyramid[len(fine_bds)-1:])
     pyramid = pyramid[:len(fine_bds) - 1]
     # Normalise to give proportions
-    pyramid = pyramid/nsum(pyramid)
+    pyramid = pyramid / pyramid.sum()
 
     # sparse matrix defines here just splits pyramid into rows corresponding to
     # coarse boundaries, then summing each row gives aggregated pyramid
     row_cols = (aggregator, arange(len(aggregator)))
-    agg_pop_pyramid=nsum(
-        sparse((pyramid, row_cols)),
-        axis=1).getA().squeeze()
+    agg_pop_pyramid = sparse(
+        (pyramid, row_cols)).sum(axis=1).getA().squeeze()
 
     rel_weights = pyramid / agg_pop_pyramid[aggregator]
 
@@ -71,6 +84,7 @@ def aggregate_vector_quantities(v_fine, fine_bds, coarse_bds, pyramid ):
     pop_weight_matrix = sparse((rel_weights, row_cols))
 
     return pop_weight_matrix * v_fine
+
 
 def build_household_population(composition_list, model_input):
     '''This builds internal mixing matrix for entire system of age-structured
@@ -90,10 +104,7 @@ def build_household_population(composition_list, model_input):
     condition = max(abs(
         composition_list[:, 0] - composition_list[:, 1:].sum(axis=1)))
     if condition == 0:
-        size_list = composition_list[:,0]
-        composition_list = composition_list[:,1:]
-    else:
-        size_list = composition_list.sum(axis=1)
+        composition_list = composition_list[:, 1:]
 
     no_types, no_classes = composition_list.shape
 
@@ -141,7 +152,10 @@ def build_household_population(composition_list, model_input):
     # Just store this so we can estimate remaining time
     matrix_sizes = power(system_sizes, 2)
     # for i in range(1, no_types):
-    for i in tqdm(range(1, no_types), desc='Building within-household transmission matrix'):
+    progress_bar = tqdm(
+        range(1, no_types),
+        desc='Building within-household transmission matrix')
+    for i in progress_bar:
         # print('Processing {}/{}'.format(i, no_types))
         which_composition[cum_sizes[i-1]:cum_sizes[i]] = i * ones(
             system_sizes[i], dtype=my_int)
@@ -177,6 +191,7 @@ def build_household_population(composition_list, model_input):
         inf_event_col, \
         inf_event_class
 
+
 class ConstantDetModel:
     '''TODO: add docstring'''
     def __init__(self, spec):
@@ -184,6 +199,7 @@ class ConstantDetModel:
 
     def __call__(self, rho):
         return self.constant * ones(rho.shape)
+
 
 class ScaledDetModel:
     '''TODO: add docstring'''
@@ -193,12 +209,14 @@ class ScaledDetModel:
     def __call__(self, rho):
         return (self.max_det / rho.max()) * rho
 
+
 def det_from_spec(spec):
     type_to_constructor = {
         'constant': ConstantDetModel,
         'scaled': ScaledDetModel,
     }
     return type_to_constructor[spec['det_model']['type']](spec['det_model'])
+
 
 class ModelInput:
     '''TODO: add docstring'''
@@ -237,7 +255,7 @@ class ModelInput:
         # This is in five year blocks
         rho = sparse((
             rho[aggregator],
-            (arange(len(aggregator)),[0]*len(aggregator))))
+            (arange(len(aggregator)), [0]*len(aggregator))))
 
         rho = spec['gamma'] * spec['R0'] * aggregate_vector_quantities(
             rho, fine_bds, self.coarse_bds, pop_pyramid).toarray().squeeze()
@@ -268,9 +286,9 @@ class TwoAgeModelInput:
             spec['k_all']['file_name'],
             sheet_name=spec['k_all']['sheet_name'],
             header=None).to_numpy()
-            
+
         fine_bds = arange(0, 81, 5)
-        self.coarse_bds = array([0,20])
+        self.coarse_bds = array([0, 20])
 
         # pop_pyramid = read_csv(
         #     'inputs/United Kingdom-2019.csv', index_col=0)
@@ -298,7 +316,7 @@ class TwoAgeModelInput:
         # This is in five year blocks
         rho = sparse((
             rho[aggregator],
-            (arange(len(aggregator)),[0]*len(aggregator))))
+            (arange(len(aggregator)), [0]*len(aggregator))))
 
         rho = spec['gamma'] * spec['R0'] * aggregate_vector_quantities(
             rho, fine_bds, self.coarse_bds, pop_pyramid).toarray().squeeze()
