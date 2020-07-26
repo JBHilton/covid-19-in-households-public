@@ -16,9 +16,10 @@ from model.common import NoImportRateEquations, FixedImportRateEquations, StepIm
 model_input = TwoAgeModelInput(DEFAULT_SPEC)
 
 # List of observed household compositions
-composition_list = array([[0,1],[0,2],[1,1],[1,2],[2,1],[2,2]])
+composition_list = array([
+    [0, 1], [0, 2], [1, 1], [1, 2], [2, 1], [2, 2]])
 # Proportion of households which are in each composition
-comp_dist = array([0.2,0.2,0.1,0.1,0.1,0.1])
+comp_dist = array([0.2, 0.2, 0.1, 0.1, 0.1, 0.1])
 
 if isfile('import-vars.pkl') is True:
     with open('import-vars.pkl', 'rb') as f:
@@ -96,16 +97,16 @@ with open('simple-results.pkl', 'wb') as f:
     dump((time, H, D, U, model_input.coarse_bds), f)
 
 rhs = FixedImportRateEquations(
-model_input,
-Q_int,
-composition_list,
-which_composition,
-states,
-inf_event_row,
-inf_event_col,
-inf_event_class,
-det_imports[:,0],
-undet_imports[:,0])
+    model_input,
+    Q_int,
+    composition_list,
+    which_composition,
+    states,
+    inf_event_row,
+    inf_event_col,
+    inf_event_class,
+    det_imports[:, 0],
+    undet_imports[:, 0])
 
 
 tspan = (0.0, 1)
@@ -115,7 +116,7 @@ solution = solve_ivp(rhs, tspan, H0, first_step=0.001)
 time = solution.t
 H = solution.y
 
-for t in range(1,no_days):
+for t in range(1, no_days):
     rhs = FixedImportRateEquations(
         model_input,
         Q_int,
@@ -159,8 +160,7 @@ det_profile = model_input.det
 undet_profile = [1,1] - det_profile
 r = model_input.gamma*DEFAULT_SPEC['R0'] - model_input.gamma
 
-def exponential_import_model(t,H):
-    rhs = ExpImportRateEquations(
+rhs = ExpImportRateEquations(
     t,
     model_input,
     Q_int,
@@ -174,10 +174,9 @@ def exponential_import_model(t,H):
     det_profile,
     undet_profile,
     r)
-    return rhs(t,H)
 
 exponential_start = get_time()
-solution = solve_ivp(exponential_import_model, tspan, H0, first_step=0.001)
+solution = solve_ivp(rhs, tspan, H0, first_step=0.001)
 exponential_end = get_time()
 time = solution.t
 H = solution.y
@@ -188,7 +187,7 @@ U = H.T.dot(states[:, 3::5])
 with open('exponential-import-results.pkl', 'wb') as f:
     dump((time, H, D, U, model_input.coarse_bds), f)
 
-print('No imports model took ',simple_model_end-simple_model_start,' seconds.')
+print('No imports model took ', simple_model_end-simple_model_start,' seconds.')
 print('"Stop-start" step function model took ',stop_start_end-stop_start_start,' seconds.')
 print('"True" step function model took ',true_step_end-true_step_start,' seconds.')
 print('Exponential model took ',exponential_end-exponential_start,' seconds.')

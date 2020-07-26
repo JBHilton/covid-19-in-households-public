@@ -69,4 +69,7 @@ U = H.T.dot(states[:, 3::5])
 with open('simple.pkl', 'wb') as f:
     dump((time, H, D, U, model_input.coarse_bds), f)
 
-print('Simple model took ',simple_model_end-simple_model_start,' seconds.')
+print(
+    'Simple model took ',
+    simple_model_end-simple_model_start,
+    ' seconds.')

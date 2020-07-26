@@ -1,12 +1,12 @@
 '''Module for additional computations required by the model'''
-from time import time
-from sys import getsizeof
+from abc import ABC
 from numpy import (
     arange, array, atleast_2d, concatenate, copy, cumprod, diag, exp,
     ix_, ones, prod, where, zeros)
 from numpy import int32 as my_int
 from scipy.sparse import csc_matrix as sparse
 from scipy.special import binom
+
 
 def within_household_spread(
         composition, sus, det, tau, K_home, alpha, gamma):
@@ -82,7 +82,7 @@ def within_household_spread(
     rows = [
         states[k, :].dot(reverse_prod) + states[k, -1]
         for k in range(total_size)]
-    if min(rows)<0:
+    if min(rows) < 0:
         print('Negative row indices found, proportional total',sum(array(rows)<0),'/',len(rows),'=',sum(array(rows)<0)/len(rows))
     index_vector = sparse((
         arange(total_size),
@@ -192,6 +192,7 @@ def within_household_spread(
         array(inf_event_col, dtype=my_int, ndmin=1), \
         array(inf_event_class, dtype=my_int, ndmin=1)
 
+
 def build_external_import_matrix(
         states, row, col, inf_class, FOI_det, FOI_undet, total_size):
     '''Gets sparse matrices containing rates of external infection in a
@@ -218,10 +219,30 @@ def build_external_import_matrix(
     return Q_ext_d, Q_ext_u
 
 
-class NoImportRateEquations:
-    '''This class represents a functor for evaluating the rate equations for the
-    model with no imports of infection from outside the population. The state of
-    the class contains all essential variables'''
+class RateEquations(ABC):
+    def __call__(self, t, H):
+        '''hh_ODE_rates calculates the rates of the ODE system describing the
+        household ODE model'''
+        Q_ext_det, Q_ext_undet = self.external_matrices(H)
+        dH = (H.T * (self.Q_int + Q_ext_det + Q_ext_undet)).T
+        return dH
+
+    def external_matrices(self, H):
+        FOI_det, FOI_undet = self.get_FOI_by_class(H)
+        return build_external_import_matrix(
+            self.states,
+            self.inf_event_row,
+            self.inf_event_col,
+            self.inf_event_class,
+            FOI_det,
+            FOI_undet,
+            self.total_size)
+
+
+class NoImportRateEquations(RateEquations):
+    '''This class represents a functor for evaluating the rate equations for
+    the model with no imports of infection from outside the population. The
+    state of the class contains all essential variables'''
     # pylint: disable=invalid-name
     def __init__(self,
                  model_input,
@@ -276,34 +297,18 @@ class NoImportRateEquations:
             / H.T.dot(self.composition_by_state)).squeeze()
         # This stores the rates of generating an infected of each class in each state
         FOI_det = self.states_sus_only.dot(
-            diag(self.det_trans_matrix.dot(det_by_class.T)))
+            diag(self.det_trans_matrix.dot(
+                det_by_class.T)))
         # This stores the rates of generating an infected of each class in each state
         FOI_undet = self.states_sus_only.dot(
-            diag(self.undet_trans_matrix.dot(undet_by_class.T)))
+            diag(self.undet_trans_matrix.dot(
+                undet_by_class.T)))
 
         return FOI_det, FOI_undet
 
-    def external_matrices(self, H):
-        FOI_det, FOI_undet = self.get_FOI_by_class(H)
-
-        return build_external_import_matrix(
-            self.states,
-            self.inf_event_row,
-            self.inf_event_col,
-            self.inf_event_class,
-            FOI_det,
-            FOI_undet,
-            self.total_size)
 
 
-    def __call__(self, t, H):
-        '''hh_ODE_rates calculates the rates of the ODE system describing the
-        household ODE model'''
-        Q_ext_det, Q_ext_undet = self.external_matrices(H)
-        dH = (H.T * (self.Q_int + Q_ext_det + Q_ext_undet)).T
-        return dH
-
-class FixedImportRateEquations:
+class FixedImportRateEquations(RateEquations):
     '''This class represents a functor for evaluating the rate equations with a
     fixed rate of importation of infection from beyond the population.'''
     # pylint: disable=invalid-name
@@ -365,33 +370,17 @@ class FixedImportRateEquations:
             / H.T.dot(self.composition_by_state)).squeeze()
         # This stores the rates of generating an infected of each class in each state
         FOI_det = self.states_sus_only.dot(
-            diag(self.det_trans_matrix.dot(det_by_class.T + self.det_imports)))
+            diag(self.det_trans_matrix.dot(
+                det_by_class.T + self.det_imports)))
         # This stores the rates of generating an infected of each class in each state
         FOI_undet = self.states_sus_only.dot(
-            diag(self.undet_trans_matrix.dot(undet_by_class.T + self.undet_imports)))
+            diag(self.undet_trans_matrix.dot(
+                undet_by_class.T + self.undet_imports)))
 
         return FOI_det, FOI_undet
 
-    def external_matrices(self, H):
-        FOI_det, FOI_undet = self.get_FOI_by_class(H)
-        return build_external_import_matrix(
-            self.states,
-            self.inf_event_row,
-            self.inf_event_col,
-            self.inf_event_class,
-            FOI_det,
-            FOI_undet,
-            self.total_size)
 
-
-    def __call__(self, t, H):
-        '''hh_ODE_rates calculates the rates of the ODE system describing the
-        household ODE model'''
-        Q_ext_det, Q_ext_undet = self.external_matrices(H)
-        dH = (H.T * (self.Q_int + Q_ext_det + Q_ext_undet)).T
-        return dH
-
-class StepImportRateEquations:
+class StepImportRateEquations(RateEquations):
     '''This class represents a functor for evaluating the rate equations with
     step function importations, which arise if imports are proportional to
     daily, weekly, or monthly reported cases.'''
@@ -454,10 +443,13 @@ class StepImportRateEquations:
         time_step = -1
         time_located = False
         while not time_located:
-            time_step+=1
-            if (self.t>=self.import_times[time_step]) and (self.t<self.import_times[time_step+1]):
+            time_step += 1
+            if (
+                (self.t >= self.import_times[time_step])
+                and
+                (self.t < self.import_times[time_step+1])):
                 time_located = True
-            elif (self.t>=self.import_times[-1]):
+            elif (self.t >= self.import_times[-1]):
                 time_step = len(self.import_times)-1
                 time_located = True
 
@@ -470,33 +462,17 @@ class StepImportRateEquations:
             / H.T.dot(self.composition_by_state)).squeeze()
         # This stores the rates of generating an infected of each class in each state
         FOI_det = self.states_sus_only.dot(
-            diag(self.det_trans_matrix.dot(self.epsilon*det_by_class.T + self.det_imports[:,time_step])))
+            diag(self.det_trans_matrix.dot(
+                self.epsilon * det_by_class.T + self.det_imports[:,time_step])))
         # This stores the rates of generating an infected of each class in each state
         FOI_undet = self.states_sus_only.dot(
-            diag(self.undet_trans_matrix.dot(self.epsilon*undet_by_class.T + self.undet_imports[:,time_step])))
+            diag(self.undet_trans_matrix.dot(
+                self.epsilon * undet_by_class.T + self.undet_imports[:,time_step])))
 
         return FOI_det, FOI_undet
 
-    def external_matrices(self, H):
-        FOI_det, FOI_undet = self.get_FOI_by_class(H)
-        return build_external_import_matrix(
-            self.states,
-            self.inf_event_row,
-            self.inf_event_col,
-            self.inf_event_class,
-            FOI_det,
-            FOI_undet,
-            self.total_size)
 
-
-    def __call__(self, t, H):
-        '''hh_ODE_rates calculates the rates of the ODE system describing the
-        household ODE model'''
-        Q_ext_det, Q_ext_undet = self.external_matrices(H)
-        dH = (H.T * (self.Q_int + Q_ext_det + Q_ext_undet)).T
-        return dH
-
-class ExpImportRateEquations:
+class ExpImportRateEquations(RateEquations):
     '''This class represents a functor for evaluating the rate equations with
     exponentially increasing imports of infection'''
     # pylint: disable=invalid-name
@@ -555,8 +531,8 @@ class ExpImportRateEquations:
         '''This calculates the age-stratified force of infection (FOI) on each
         household composition'''
         # Average detected infected by household in each class
-        det_imports = exp(self.r)*self.det_profile
-        undet_imports = exp(self.r)*self.undet_profile
+        det_imports = exp(self.r) * self.det_profile
+        undet_imports = exp(self.r) * self.undet_profile
 
         det_by_class = (
             H.T.dot(self.states_det_only)
@@ -567,28 +543,45 @@ class ExpImportRateEquations:
             / H.T.dot(self.composition_by_state)).squeeze()
         # This stores the rates of generating an infected of each class in each state
         FOI_det = self.states_sus_only.dot(
-            diag(self.det_trans_matrix.dot(self.epsilon*det_by_class.T + det_imports)))
+            diag(self.det_trans_matrix.dot(
+                self.epsilon * det_by_class.T + det_imports)))
         # This stores the rates of generating an infected of each class in each state
         FOI_undet = self.states_sus_only.dot(
-            diag(self.undet_trans_matrix.dot(self.epsilon*undet_by_class.T + undet_imports)))
+            diag(self.undet_trans_matrix.dot(
+                self.epsilon * undet_by_class.T + undet_imports)))
 
         return FOI_det, FOI_undet
 
-    def external_matrices(self, H):
-        FOI_det, FOI_undet = self.get_FOI_by_class(H)
-        return build_external_import_matrix(
-            self.states,
-            self.inf_event_row,
-            self.inf_event_col,
-            self.inf_event_class,
-            FOI_det,
-            FOI_undet,
-            self.total_size)
+
+class ImportModel(ABC):
+    '''Abstract class for importation models'''
+    def detected(self):
+        pass
+
+    def undetected(self):
+        pass
 
 
-    def __call__(self, t, H):
-        '''hh_ODE_rates calculates the rates of the ODE system describing the
-        household ODE model'''
-        Q_ext_det, Q_ext_undet = self.external_matrices(H)
-        dH = (H.T * (self.Q_int + Q_ext_det + Q_ext_undet)).T
-        return dH
+class NoImportModel(ImportModel):
+    def detected(self):
+        return 0.0
+
+    def undetected(self):
+        return 0.0
+
+
+class StepImportModel(ImportModel):
+    def __init__(
+            self,
+            epsilon,
+            detected_imports,
+            undetected_imports,
+            import_times):
+        self.detected_imports = detected_imports
+        self.undetected_imports = undetected_imports
+
+    def detected(self):
+        return self.detected_imports
+
+    def undetected(self):
+        return self.undetected_imports
