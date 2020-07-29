@@ -83,7 +83,13 @@ def within_household_spread(
         states[k, :].dot(reverse_prod) + states[k, -1]
         for k in range(total_size)]
     if min(rows) < 0:
-        print('Negative row indices found, proportional total',sum(array(rows)<0),'/',len(rows),'=',sum(array(rows)<0)/len(rows))
+        print(
+            'Negative row indices found, proportional total',
+            sum(array(rows) < 0),
+            '/',
+            len(rows),
+            '=',
+            sum(array(rows) < 0) / len(rows))
     index_vector = sparse((
         arange(total_size),
         (rows, [0]*total_size)))
@@ -119,7 +125,8 @@ def within_household_spread(
             shape=(total_size, total_size))
         inf_event_row = concatenate((inf_event_row, s_present))
         inf_event_col = concatenate((inf_event_col, inf_to))
-        inf_event_class = concatenate((inf_event_class,classes_present[i]*ones((len(s_present)))))
+        inf_event_class = concatenate(
+            (inf_event_class, classes_present[i]*ones((len(s_present)))))
         # input('Press enter to continue')
         # # disp('Infection events done')
         # # Now do exposure to detected or undetected
@@ -220,26 +227,6 @@ def build_external_import_matrix(
 
 
 class RateEquations(ABC):
-    def __call__(self, t, H):
-        '''hh_ODE_rates calculates the rates of the ODE system describing the
-        household ODE model'''
-        Q_ext_det, Q_ext_undet = self.external_matrices(H)
-        dH = (H.T * (self.Q_int + Q_ext_det + Q_ext_undet)).T
-        return dH
-
-    def external_matrices(self, H):
-        FOI_det, FOI_undet = self.get_FOI_by_class(H)
-        return build_external_import_matrix(
-            self.states,
-            self.inf_event_row,
-            self.inf_event_col,
-            self.inf_event_class,
-            FOI_det,
-            FOI_undet,
-            self.total_size)
-
-
-class NoImportRateEquations(RateEquations):
     '''This class represents a functor for evaluating the rate equations for
     the model with no imports of infection from outside the population. The
     state of the class contains all essential variables'''
@@ -252,155 +239,11 @@ class NoImportRateEquations(RateEquations):
                  states,
                  inf_event_row,
                  inf_event_col,
-                 inf_event_class):
-
-        self.Q_int = Q_int
-        self.states = states
-        self.inf_event_row = inf_event_row
-        self.inf_event_col = inf_event_col
-        self.inf_event_class = inf_event_class
-        self.total_size = len(which_composition)
-        # To define external mixing we need to set up the transmission matrices:
-        # Scale rows of contact matrix by
-        self.det_trans_matrix = diag(model_input.sigma).dot(model_input.k_ext)
-        # age-specific susceptibilities
-        # Scale columns by asymptomatic reduction in transmission
-        self.undet_trans_matrix = diag(model_input.sigma).dot(
-            model_input.k_ext.dot(diag(model_input.tau)))
-        # This stores number in each age class by household
-        self.composition_by_state = composition_list[which_composition, :]
-        self.states_sus_only = states[:, ::5] # ::5 gives columns corresponding to
-                                         # susceptible cases in each age class in
-                                         # each state
-        self.s_present = where(self.states_sus_only.sum(axis=1) > 0)[0]
-
-        # Our starting state H is the composition distribution with a small amount of
-        # infection present:
-
-        # 2::5 gives columns corresponding to detected cases in each age class
-        # in each state
-        self.states_det_only = states[:, 2::5]
-        # 4:5:end gives columns corresponding to undetected cases in each age
-        # class in each state
-        self.states_undet_only = states[:, 3::5]
-
-    def get_FOI_by_class(self, H):
-        '''This calculates the age-stratified force of infection (FOI) on each
-        household composition'''
-        # Average detected infected by household in each class
-        det_by_class = (
-            H.T.dot(self.states_det_only)
-            / H.T.dot(self.composition_by_state)).squeeze()
-        # Average undetected infected by household in each class
-        undet_by_class = (
-            H.T.dot(self.states_undet_only)
-            / H.T.dot(self.composition_by_state)).squeeze()
-        # This stores the rates of generating an infected of each class in each state
-        FOI_det = self.states_sus_only.dot(
-            diag(self.det_trans_matrix.dot(
-                det_by_class.T)))
-        # This stores the rates of generating an infected of each class in each state
-        FOI_undet = self.states_sus_only.dot(
-            diag(self.undet_trans_matrix.dot(
-                undet_by_class.T)))
-
-        return FOI_det, FOI_undet
-
-
-
-class FixedImportRateEquations(RateEquations):
-    '''This class represents a functor for evaluating the rate equations with a
-    fixed rate of importation of infection from beyond the population.'''
-    # pylint: disable=invalid-name
-    def __init__(self,
-                 model_input,
-                 Q_int,
-                 composition_list,
-                 which_composition,
-                 states,
-                 inf_event_row,
-                 inf_event_col,
                  inf_event_class,
-                 det_imports,
-                 undet_imports):
+                 importation_model,
+                 epsilon=1.0        # TODO: this needs a better name
+                 ):
 
-        self.Q_int = Q_int
-        self.states = states
-        self.inf_event_row = inf_event_row
-        self.inf_event_col = inf_event_col
-        self.inf_event_class = inf_event_class
-        self.total_size = len(which_composition)
-        # To define external mixing we need to set up the transmission matrices:
-        # Scale rows of contact matrix by
-        self.det_trans_matrix = diag(model_input.sigma).dot(model_input.k_ext)
-        # age-specific susceptibilities
-        # Scale columns by asymptomatic reduction in transmission
-        self.undet_trans_matrix = diag(model_input.sigma).dot(
-            model_input.k_ext.dot(diag(model_input.tau)))
-        # This stores number in each age class by household
-        self.composition_by_state = composition_list[which_composition, :]
-        self.states_sus_only = states[:, ::5] # ::5 gives columns corresponding to
-                                         # susceptible cases in each age class in
-                                         # each state
-        self.s_present = where(self.states_sus_only.sum(axis=1) > 0)[0]
-
-        # Our starting state H is the composition distribution with a small amount of
-        # infection present:
-
-        # 2::5 gives columns corresponding to detected cases in each age class
-        # in each state
-        self.states_det_only = states[:, 2::5]
-        # 4:5:end gives columns corresponding to undetected cases in each age
-        # class in each state
-        self.states_undet_only = states[:, 3::5]
-
-        self.det_imports = det_imports
-        self.undet_imports = undet_imports
-
-    def get_FOI_by_class(self, H):
-        '''This calculates the age-stratified force of infection (FOI) on each
-        household composition'''
-        # Average detected infected by household in each class
-        det_by_class = (
-            H.T.dot(self.states_det_only)
-            / H.T.dot(self.composition_by_state)).squeeze()
-        # Average undetected infected by household in each class
-        undet_by_class = (
-            H.T.dot(self.states_undet_only)
-            / H.T.dot(self.composition_by_state)).squeeze()
-        # This stores the rates of generating an infected of each class in each state
-        FOI_det = self.states_sus_only.dot(
-            diag(self.det_trans_matrix.dot(
-                det_by_class.T + self.det_imports)))
-        # This stores the rates of generating an infected of each class in each state
-        FOI_undet = self.states_sus_only.dot(
-            diag(self.undet_trans_matrix.dot(
-                undet_by_class.T + self.undet_imports)))
-
-        return FOI_det, FOI_undet
-
-
-class StepImportRateEquations(RateEquations):
-    '''This class represents a functor for evaluating the rate equations with
-    step function importations, which arise if imports are proportional to
-    daily, weekly, or monthly reported cases.'''
-    # pylint: disable=invalid-name
-    def __init__(self,
-                 t,
-                 model_input,
-                 Q_int,
-                 composition_list,
-                 which_composition,
-                 states,
-                 inf_event_row,
-                 inf_event_col,
-                 inf_event_class,
-                 epsilon,
-                 det_imports,
-                 undet_imports,
-                 import_times):
-
-        self.t = t
         self.Q_int = Q_int
         self.states = states
         self.inf_event_row = inf_event_row
@@ -408,7 +251,8 @@ class StepImportRateEquations(RateEquations):
         self.inf_event_class = inf_event_class
         self.epsilon = epsilon
         self.total_size = len(which_composition)
-        # To define external mixing we need to set up the transmission matrices:
+        # To define external mixing we need to set up the transmission
+        # matrices.
         # Scale rows of contact matrix by
         self.det_trans_matrix = diag(model_input.sigma).dot(model_input.k_ext)
         # age-specific susceptibilities
@@ -417,123 +261,42 @@ class StepImportRateEquations(RateEquations):
             model_input.k_ext.dot(diag(model_input.tau)))
         # This stores number in each age class by household
         self.composition_by_state = composition_list[which_composition, :]
-        self.states_sus_only = states[:, ::5] # ::5 gives columns corresponding to
-                                         # susceptible cases in each age class in
-                                         # each state
+        # ::5 gives columns corresponding to susceptible cases in each age
+        # class in each state
+        self.states_sus_only = states[:, ::5]
+
         self.s_present = where(self.states_sus_only.sum(axis=1) > 0)[0]
-
-        # Our starting state H is the composition distribution with a small amount of
-        # infection present:
-
         # 2::5 gives columns corresponding to detected cases in each age class
         # in each state
         self.states_det_only = states[:, 2::5]
         # 4:5:end gives columns corresponding to undetected cases in each age
         # class in each state
         self.states_undet_only = states[:, 3::5]
-
-        self.det_imports = det_imports
-        self.undet_imports = undet_imports
-        self.import_times = import_times
-
-    def get_FOI_by_class(self, H):
-        '''This calculates the age-stratified force of infection (FOI) on each
-        household composition'''
-        # Average detected infected by household in each class
-        time_step = -1
-        time_located = False
-        while not time_located:
-            time_step += 1
-            if (
-                (self.t >= self.import_times[time_step])
-                and
-                (self.t < self.import_times[time_step+1])):
-                time_located = True
-            elif (self.t >= self.import_times[-1]):
-                time_step = len(self.import_times)-1
-                time_located = True
-
-        det_by_class = (
-            H.T.dot(self.states_det_only)
-            / H.T.dot(self.composition_by_state)).squeeze()
-        # Average undetected infected by household in each class
-        undet_by_class = (
-            H.T.dot(self.states_undet_only)
-            / H.T.dot(self.composition_by_state)).squeeze()
-        # This stores the rates of generating an infected of each class in each state
-        FOI_det = self.states_sus_only.dot(
-            diag(self.det_trans_matrix.dot(
-                self.epsilon * det_by_class.T + self.det_imports[:,time_step])))
-        # This stores the rates of generating an infected of each class in each state
-        FOI_undet = self.states_sus_only.dot(
-            diag(self.undet_trans_matrix.dot(
-                self.epsilon * undet_by_class.T + self.undet_imports[:,time_step])))
-
-        return FOI_det, FOI_undet
-
-
-class ExpImportRateEquations(RateEquations):
-    '''This class represents a functor for evaluating the rate equations with
-    exponentially increasing imports of infection'''
-    # pylint: disable=invalid-name
-    def __init__(self,
-                 t,
-                 model_input,
-                 Q_int,
-                 composition_list,
-                 which_composition,
-                 states,
-                 inf_event_row,
-                 inf_event_col,
-                 inf_event_class,
-                 epsilon,
-                 det_profile,
-                 undet_profile,
-                 r):
-
-        self.t = t
-        self.Q_int = Q_int
-        self.states = states
-        self.inf_event_row = inf_event_row
-        self.inf_event_col = inf_event_col
-        self.inf_event_class = inf_event_class
         self.epsilon = epsilon
-        self.total_size = len(which_composition)
-        # To define external mixing we need to set up the transmission matrices:
-        # Scale rows of contact matrix by
-        self.det_trans_matrix = diag(model_input.sigma).dot(model_input.k_ext)
-        # age-specific susceptibilities
-        # Scale columns by asymptomatic reduction in transmission
-        self.undet_trans_matrix = diag(model_input.sigma).dot(
-            model_input.k_ext.dot(diag(model_input.tau)))
-        # This stores number in each age class by household
-        self.composition_by_state = composition_list[which_composition, :]
-        self.states_sus_only = states[:, ::5] # ::5 gives columns corresponding to
-                                         # susceptible cases in each age class in
-                                         # each state
-        self.s_present = where(self.states_sus_only.sum(axis=1) > 0)[0]
+        self.importation_model = importation_model
 
-        # Our starting state H is the composition distribution with a small amount of
-        # infection present:
+    def __call__(self, t, H):
+        '''hh_ODE_rates calculates the rates of the ODE system describing the
+        household ODE model'''
+        Q_ext_det, Q_ext_undet = self.external_matrices(t, H)
+        dH = (H.T * (self.Q_int + Q_ext_det + Q_ext_undet)).T
+        return dH
 
-        # 2::5 gives columns corresponding to detected cases in each age class
-        # in each state
-        self.states_det_only = states[:, 2::5]
-        # 4:5:end gives columns corresponding to undetected cases in each age
-        # class in each state
-        self.states_undet_only = states[:, 3::5]
+    def external_matrices(self, t, H):
+        FOI_det, FOI_undet = self.get_FOI_by_class(t, H)
+        return build_external_import_matrix(
+            self.states,
+            self.inf_event_row,
+            self.inf_event_col,
+            self.inf_event_class,
+            FOI_det,
+            FOI_undet,
+            self.total_size)
 
-        self.det_profile = det_profile # This is the early growth eigenvector of detected cases
-        self.undet_profile = undet_profile # Eigenvector of undetected cases
-        self.r = r # This is the early growth eigenvalue
-
-    def get_FOI_by_class(self, H):
-        '''This calculates the age-stratified force of infection (FOI) on each
+    def get_FOI_by_class(self, t, H):
+        '''This calculates the age-stratified force-of-infection (FOI) on each
         household composition'''
         # Average detected infected by household in each class
-        det_imports = exp(self.r) * self.det_profile
-        undet_imports = exp(self.r) * self.undet_profile
-
         det_by_class = (
             H.T.dot(self.states_det_only)
             / H.T.dot(self.composition_by_state)).squeeze()
@@ -544,44 +307,12 @@ class ExpImportRateEquations(RateEquations):
         # This stores the rates of generating an infected of each class in each state
         FOI_det = self.states_sus_only.dot(
             diag(self.det_trans_matrix.dot(
-                self.epsilon * det_by_class.T + det_imports)))
+                self.epsilon * det_by_class.T
+                + self.importation_model.detected(t))))
         # This stores the rates of generating an infected of each class in each state
         FOI_undet = self.states_sus_only.dot(
             diag(self.undet_trans_matrix.dot(
-                self.epsilon * undet_by_class.T + undet_imports)))
+                self.epsilon * undet_by_class.T
+                + self.importation_model.undetected(t))))
 
         return FOI_det, FOI_undet
-
-
-class ImportModel(ABC):
-    '''Abstract class for importation models'''
-    def detected(self):
-        pass
-
-    def undetected(self):
-        pass
-
-
-class NoImportModel(ImportModel):
-    def detected(self):
-        return 0.0
-
-    def undetected(self):
-        return 0.0
-
-
-class StepImportModel(ImportModel):
-    def __init__(
-            self,
-            epsilon,
-            detected_imports,
-            undetected_imports,
-            import_times):
-        self.detected_imports = detected_imports
-        self.undetected_imports = undetected_imports
-
-    def detected(self):
-        return self.detected_imports
-
-    def undetected(self):
-        return self.undetected_imports
