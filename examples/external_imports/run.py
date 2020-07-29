@@ -3,14 +3,16 @@ impact of different import functions on execution time'''
 
 from os.path import isfile
 from pickle import load, dump
-from numpy import arange, array, where, zeros, diag, dot, concatenate
+from numpy import arange, array, diag, concatenate, vstack
 from numpy.random import rand
-from pandas import read_csv
 from time import time as get_time
 from scipy.integrate import solve_ivp
 from model.preprocessing import TwoAgeModelInput, build_household_population
+from model.preprocessing import make_initial_condition
 from model.specs import DEFAULT_SPEC
-from model.common import NoImportRateEquations, FixedImportRateEquations, StepImportRateEquations, ExpImportRateEquations
+from model.common import RateEquations
+from model.imports import (
+    ExponentialImportModel, StepImportModel, FixedImportModel, NoImportModel)
 # pylint: disable=invalid-name
 
 model_input = TwoAgeModelInput(DEFAULT_SPEC)
@@ -26,30 +28,36 @@ if isfile('import-vars.pkl') is True:
         Q_int, states, which_composition, \
                 system_sizes, cum_sizes, \
                 inf_event_row, inf_event_col, inf_event_class \
-            = load(f)
+                = load(f)
 else:
     # With the parameters chosen, we calculate Q_int:
     Q_int, states, which_composition, \
             system_sizes, cum_sizes, \
             inf_event_row, inf_event_col, inf_event_class \
-        = build_household_population(composition_list, model_input)
+            = build_household_population(composition_list, model_input)
     with open('import-vars.pkl', 'wb') as f:
         dump((
             Q_int, states, which_composition, system_sizes, cum_sizes,
             inf_event_row, inf_event_col, inf_event_class), f)
 
-epsilon = 0.5 #Relative strength of between-household transmission compared to external imports
+# Relative strength of between-household transmission compared to external
+# imports
+epsilon = 0.5
 
 no_days = 100
 
-external_prev = rand(2,no_days)
-det_imports = diag(array([0.1,0.9])).dot(external_prev)
-undet_imports = diag(array([0.9,0.1])).dot(external_prev)
+external_prev = rand(no_days)
+detected_profile = array([0.1, 0.9])
+undetected_profile = array([0.9, 0.1])
 import_times = arange(no_days)
 
-def time_import_model(t,H):
-    rhs = StepImportRateEquations(
-    t,
+step_import_model = StepImportModel(
+    import_times,
+    external_prev,
+    detected_profile,
+    undetected_profile)
+
+step_import_rhs = RateEquations(
     model_input,
     Q_int,
     composition_list,
@@ -58,13 +66,10 @@ def time_import_model(t,H):
     inf_event_row,
     inf_event_col,
     inf_event_class,
-    epsilon,
-    det_imports,
-    undet_imports,
-    import_times)
-    return rhs(t,H)
+    step_import_model,
+    epsilon)
 
-rhs = NoImportRateEquations(
+no_import_rhs = RateEquations(
     model_input,
     Q_int,
     composition_list,
@@ -72,20 +77,16 @@ rhs = NoImportRateEquations(
     states,
     inf_event_row,
     inf_event_col,
-    inf_event_class)
+    inf_event_class,
+    epsilon=1.0,
+    importation_model=NoImportModel())
 
-# Initialisation
-fully_sus = where(rhs.states_sus_only.sum(axis=1) == states.sum(axis=1))[0]
-i_is_one = where((rhs.states_det_only + rhs.states_undet_only).sum(axis=1) == 1)[0]
-H0 = zeros(len(which_composition))
-# Assign probability of 1e-5 to each member of each composition being sole infectious person in hh
-H0[i_is_one] = (1.0e-5) * comp_dist[which_composition[i_is_one]]
-# Assign rest of probability to there being no infection in the household
-H0[fully_sus] = (1 - 1e-5 * sum(comp_dist[which_composition[i_is_one]])) * comp_dist
+H0 = make_initial_condition(
+    comp_dist, states, no_import_rhs, which_composition)
 
 tspan = (0.0, no_days)
 simple_model_start = get_time()
-solution = solve_ivp(rhs, tspan, H0, first_step=0.001)
+solution = solve_ivp(no_import_rhs, tspan, H0, first_step=0.001)
 simple_model_end = get_time()
 
 time = solution.t
@@ -96,7 +97,11 @@ U = H.T.dot(states[:, 3::5])
 with open('simple-results.pkl', 'wb') as f:
     dump((time, H, D, U, model_input.coarse_bds), f)
 
-rhs = FixedImportRateEquations(
+fixed_import_model = FixedImportModel(
+    step_import_model.detected(0.0),
+    step_import_model.undetected(0.0))
+
+fixed_rhs = RateEquations(
     model_input,
     Q_int,
     composition_list,
@@ -105,36 +110,8 @@ rhs = FixedImportRateEquations(
     inf_event_row,
     inf_event_col,
     inf_event_class,
-    det_imports[:, 0],
-    undet_imports[:, 0])
-
-
-tspan = (0.0, 1)
-stop_start_start = get_time()
-solution = solve_ivp(rhs, tspan, H0, first_step=0.001)
-
-time = solution.t
-H = solution.y
-
-for t in range(1, no_days):
-    rhs = FixedImportRateEquations(
-        model_input,
-        Q_int,
-        composition_list,
-        which_composition,
-        states,
-        inf_event_row,
-        inf_event_col,
-        inf_event_class,
-        det_imports[:,t],
-        undet_imports[:,t])
-    solution = solve_ivp(rhs, tspan, H[:,-1], first_step=0.001)
-    time = concatenate((time, time[-1]+solution.t))
-    H = concatenate((H, solution.y),axis=1)
-
-stop_start_end = get_time()
-D = H.T.dot(states[:, 2::5])
-U = H.T.dot(states[:, 3::5])
+    epsilon,
+    fixed_import_model)
 
 with open('static-import-results.pkl', 'wb') as f:
     dump((time, H, D, U, model_input.coarse_bds), f)
@@ -143,7 +120,7 @@ with open('static-import-results.pkl', 'wb') as f:
 
 tspan = (0.0, no_days)
 true_step_start = get_time()
-solution = solve_ivp(time_import_model, tspan, H0, first_step=0.001)
+solution = solve_ivp(step_import_rhs, tspan, H0, first_step=0.001)
 true_step_end = get_time()
 time = solution.t
 H = solution.y
@@ -157,11 +134,12 @@ with open('timed-import-results.pkl', 'wb') as f:
 # Now do exponential import model_input
 
 det_profile = model_input.det
-undet_profile = [1,1] - det_profile
+# TODO: is this always 1?
+undet_profile = array([1, 1]) - det_profile
 r = model_input.gamma*DEFAULT_SPEC['R0'] - model_input.gamma
+importation = ExponentialImportModel(r, det_profile, undet_profile)
 
-rhs = ExpImportRateEquations(
-    t,
+rhs = RateEquations(
     model_input,
     Q_int,
     composition_list,
@@ -170,10 +148,8 @@ rhs = ExpImportRateEquations(
     inf_event_row,
     inf_event_col,
     inf_event_class,
-    epsilon,
-    det_profile,
-    undet_profile,
-    r)
+    importation,
+    epsilon)
 
 exponential_start = get_time()
 solution = solve_ivp(rhs, tspan, H0, first_step=0.001)
@@ -187,8 +163,8 @@ U = H.T.dot(states[:, 3::5])
 with open('exponential-import-results.pkl', 'wb') as f:
     dump((time, H, D, U, model_input.coarse_bds), f)
 
-print('No imports model took ', simple_model_end-simple_model_start,' seconds.')
-print('"Stop-start" step function model took ',stop_start_end-stop_start_start,' seconds.')
-print('"True" step function model took ',true_step_end-true_step_start,' seconds.')
-print('Exponential model took ',exponential_end-exponential_start,' seconds.')
-NoImportRateEquations
+
+message = '{0} model took {1} seconds'
+print(message.format('No import', simple_model_end-simple_model_start))
+print(message.format('"True" step function', true_step_end-true_step_start))
+print(message.format('Exponential', exponential_end-exponential_start))

@@ -3,7 +3,7 @@ from numpy import array, where, zeros
 from numpy.linalg import norm
 from numpy.testing import assert_almost_equal
 from model.preprocessing import TwoAgeModelInput, build_household_population
-from model.preprocessing import initial_condition
+from model.preprocessing import make_initial_condition
 from model.specs import DEFAULT_SPEC
 from model.common import NoImportRateEquations
 
@@ -31,7 +31,7 @@ def test_simple():
         inf_event_col,
         inf_event_class)
 
-    H0 = initial_condition(
+    H0 = make_initial_condition(
         composition_distribution, states, rhs, which_composition)
     dH = rhs(0.0, H0)
     assert_almost_equal(7.776182090170313e-05, norm(dH))

@@ -10,16 +10,18 @@ from tqdm import tqdm
 from model.common import within_household_spread, sparse, my_int
 
 
-def initial_condition(composition_distribution, states, rhs, which_composition, alpha=1.0e-5):
+def make_initial_condition(composition_distribution, states, rhs, which_composition, alpha=1.0e-5):
+    '''TODO: docstring'''
     fully_sus = where(
         rhs.states_sus_only.sum(axis=1) == states.sum(axis=1))[0]
     i_is_one = where(
         (rhs.states_det_only + rhs.states_undet_only).sum(axis=1) == 1)[0]
     H0 = zeros(len(which_composition))
-    H0[i_is_one] = alpha * composition_distribution[which_composition[i_is_one]]
-    H0[fully_sus] = (1.0 - alpha * sum(
-        composition_distribution[which_composition[i_is_one]])) * composition_distribution
+    x = composition_distribution[which_composition[i_is_one]]
+    H0[i_is_one] = alpha * x
+    H0[fully_sus] = (1.0 - alpha * sum(x)) * composition_distribution
     return H0
+
 
 def make_aggregator(coarse_bounds, fine_bounds):
     '''Construct a matrix that stores where each class in finer structure is
