@@ -3,7 +3,7 @@ from time import time
 from sys import getsizeof
 from numpy import (
     arange, array, atleast_2d, concatenate, copy, cumprod, diag, exp,
-    ix_, ones, prod, shape, where, zeros)
+    ix_, ones, prod, shape, sum, where, zeros)
 from numpy import int64 as my_int
 from scipy.sparse import csc_matrix as sparse
 from scipy.special import binom
@@ -566,8 +566,8 @@ class ExpImportRateEquations:
     def get_FOI_by_class(self, H):
         '''This calculates the age-stratified force of infection (FOI) on each
         household composition'''
-        det_imports = exp(self.r)*self.det_profile
-        undet_imports = exp(self.r)*self.undet_profile
+        det_imports = exp(self.r*self.t)*self.det_profile
+        undet_imports = exp(self.r*self.t)*self.undet_profile
 
         # Average detected infected by household in each class
         denom = H.T.dot(self.composition_by_state)

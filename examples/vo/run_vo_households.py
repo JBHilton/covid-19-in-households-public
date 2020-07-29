@@ -14,7 +14,7 @@ from model.common import ExpImportRateEquations, my_int, get_symptoms_by_test
 ''' In the following function, t0 is the time point from which we run the master
 equations, start_date is the first day in the Vo data. This function assumes the
 ages are in numeric form, i.e. 0th age class, 1st age class etc.'''
-def get_test_probability(rhs,tests,symptoms,ages,states,composition,H0,t0,start_date):
+def get_test_probability(tests,symptoms,ages,states,composition,H0,t0,start_date):
 
     nn, tt = tests.shape
     tests[tests!=tests]=-1000 # Replace NaNs with a large negative value
@@ -25,11 +25,13 @@ def get_test_probability(rhs,tests,symptoms,ages,states,composition,H0,t0,start_
     t_start = start_date
     result_prob = []
     for t in test_days:
-        solution = solve_ivp(rhs, (t_start,t), H_start,first_step=0.001)
+        solution = solve_ivp(exponential_import_model, (t_start,t), H_start,first_step=0.001)
         H = solution.y
         H_end = H[:,-1] # Get end state
-        # print('H=',H_end)
-        # print('After initial run sum(H_end)=',sum(H_end))
+        print('H=',H_end)
+        print('After initial run sum(H_end)=',sum(H_end))
+        H_end[H_end<0]=0
+        print('Throwing away bad values, sum(H_end)=',sum(H_end))
 
         ''' Now calculate total positives and negatives by age class on this
         date'''
@@ -59,14 +61,16 @@ def get_test_probability(rhs,tests,symptoms,ages,states,composition,H0,t0,start_
 
         # The next line finds all the lines consistent with the min/max number of infecteds by multiplying truth values for each comparision along the rows
         valid_locs = where(prod(states[:,2::5]>=min_symps_by_age,axis=1)*(prod(states[:,3::5]>=min_asymps_by_age,axis=1)*prod(states[:,2::5]+states[:,3::5]<=max_inf_by_age,axis=1)))[0]
-        # print('Number of valid locations is ',len(valid_locs))
-        # print('Numbre of invalid locations is ',len(H_end)-len(valid_locs))
-        # print('Valid probability is ',sum(H_end[valid_locs]))
-        # print('Invalid probability is ',sum(H_end[where(1-prod(states[:,2::5]>=min_symps_by_age,axis=1)*(prod(states[:,3::5]>=min_asymps_by_age,axis=1)*prod(states[:,2::5]+states[:,3::5]<=max_inf_by_age,axis=1)))[0]]))
+        print('Number of valid states is ',len(valid_locs))
+        print('Number of invalid states is ',len(H_end)-len(valid_locs))
+        print('Valid probability is ',sum(H_end[valid_locs]))
+        print('Invalid probability is ',sum(H_end[where(1-prod(states[:,2::5]>=min_symps_by_age,axis=1)*(prod(states[:,3::5]>=min_asymps_by_age,axis=1)*prod(states[:,2::5]+states[:,3::5]<=max_inf_by_age,axis=1)))[0]]))
         result_prob.append(sum(H_end[valid_locs]))
-        H_start = 0*H_end
-        H_start[valid_locs] = (1/result_prob[-1])*H_end[valid_locs]
-        # print('New starting probability is ',sum(H_start))
+        H_start = 0*H_start
+        H_start[valid_locs] = H_end[valid_locs]
+        H_start = H_start/sum(H_start)
+        print('New starting probability is ',sum(H_start))
+        print('H_start = ',H_start)
         t_start = t
 
     return sum(log((result_prob)))
@@ -148,10 +152,10 @@ for i in range(10):
         start_date = 30
 
         composition = array([composition])
-        this_prob = get_test_probability(exponential_import_model,tests,symptoms,ages,states,composition,H0,t0,start_date)
+        this_prob = get_test_probability(tests,symptoms,ages,states,composition,H0,t0,start_date)
         test_prob.append(this_prob)
 
 with open('testing-probabilities.pkl','wb') as f:
     dump((test_prob),f)
 print('Likelihood of input parameters given data is ',exp(sum(test_prob)),'.')
-print('test_prob=',test_prob)
+print('Likelihoods are ',exp(test_prob),'.')
