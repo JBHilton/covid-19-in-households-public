@@ -10,16 +10,23 @@ from tqdm import tqdm
 from model.common import within_household_spread, sparse, my_int
 
 
-def make_initial_condition(composition_distribution, states, rhs, which_composition, alpha=1.0e-5):
+def make_initial_condition(
+        household_population,
+        rhs,
+        alpha=1.0e-5):
     '''TODO: docstring'''
     fully_sus = where(
-        rhs.states_sus_only.sum(axis=1) == states.sum(axis=1))[0]
+        rhs.states_sus_only.sum(axis=1)
+        ==
+        household_population.states.sum(axis=1))[0]
     i_is_one = where(
         (rhs.states_det_only + rhs.states_undet_only).sum(axis=1) == 1)[0]
-    H0 = zeros(len(which_composition))
-    x = composition_distribution[which_composition[i_is_one]]
+    H0 = zeros(len(household_population.which_composition))
+    x = household_population.composition_distribution[
+        household_population.which_composition[i_is_one]]
     H0[i_is_one] = alpha * x
-    H0[fully_sus] = (1.0 - alpha * sum(x)) * composition_distribution
+    H0[fully_sus] = (1.0 - alpha * sum(x)) \
+        * household_population.composition_distribution
     return H0
 
 
@@ -88,114 +95,124 @@ def aggregate_vector_quantities(v_fine, fine_bds, coarse_bds, pyramid):
     return pop_weight_matrix * v_fine
 
 
-def build_household_population(composition_list, model_input):
-    '''This builds internal mixing matrix for entire system of age-structured
-    households.'''
+class HouseholdPopulation:
+    def __init__(
+            self,
+            composition_list,
+            composition_distribution,
+            model_input):
+        '''This builds internal mixing matrix for entire system of
+        age-structured households.'''
+        sus = model_input.sigma
+        det = model_input.det
+        tau = model_input.tau
+        k_home = model_input.k_home
+        alpha = model_input.alpha
+        gamma = model_input.gamma
 
-    sus = model_input.sigma
-    det = model_input.det
-    tau = model_input.tau
-    k_home = model_input.k_home
-    alpha = model_input.alpha
-    gamma = model_input.gamma
+        self.composition_list = composition_list
+        self.composition_distribution = composition_distribution
 
-    # If the compositions include household size at the beginning, we throw it
-    # away here. While we would expect to see some households with equal
-    # numbers in age class 1 and all others combined, we should not see it
-    # everywhere and so this is a safe way to check.
-    condition = max(abs(
-        composition_list[:, 0] - composition_list[:, 1:].sum(axis=1)))
-    if condition == 0:
-        composition_list = composition_list[:, 1:]
+        # If the compositions include household size at the beginning, we
+        # throw it away here. While we would expect to see some households
+        # with equal numbers in age class 1 and all others combined, we should
+        # not see it everywhere and so this is a safe way to check.
+        condition = max(abs(
+            composition_list[:, 0] - composition_list[:, 1:].sum(axis=1)))
+        if condition == 0:
+            composition_list = composition_list[:, 1:]
 
-    no_types, no_classes = composition_list.shape
+        no_types, no_classes = composition_list.shape
 
-    # This is an array of logicals telling you which classes are present in
-    # each composition
-    classes_present = composition_list > 0
+        # This is an array of logicals telling you which classes are present in
+        # each composition
+        classes_present = composition_list > 0
 
-    system_sizes = ones(no_types, dtype=my_int)
-    for i, _ in enumerate(system_sizes):
-        for j in where(classes_present[i, :])[0]:
-            system_sizes[i] *= binom(
-                composition_list[i, j] + 5 - 1,
-                5 - 1)
+        system_sizes = ones(no_types, dtype=my_int)
+        for i, _ in enumerate(system_sizes):
+            for j in where(classes_present[i, :])[0]:
+                system_sizes[i] *= binom(
+                    composition_list[i, j] + 5 - 1,
+                    5 - 1)
 
-    # This is useful for placing blocks of system states
-    cum_sizes = cumsum(system_sizes)
-    # Total size is sum of the sizes of each composition-system, because we are
-    # considering a single household which can be in any one composition
-    total_size = cum_sizes[-1]
-    # Stores list of (S,E,D,U,R)_a states for each composition
-    states = zeros((total_size, 5 * no_classes), dtype=my_int)
-    which_composition = zeros(total_size, dtype=my_int)
+        # This is useful for placing blocks of system states
+        cum_sizes = cumsum(system_sizes)
+        # Total size is sum of the sizes of each composition-system, because we are
+        # considering a single household which can be in any one composition
+        total_size = cum_sizes[-1]
+        # Stores list of (S,E,D,U,R)_a states for each composition
+        states = zeros((total_size, 5 * no_classes), dtype=my_int)
+        which_composition = zeros(total_size, dtype=my_int)
 
-    # Initialise matrix of internal process by doing the first block
-    which_composition[:system_sizes[0]] = zeros(system_sizes[0], dtype=my_int)
-    Q_temp, states_temp, inf_event_row, inf_event_col, inf_event_class \
-        = within_household_spread(
-            composition_list[0, :],
-            sus,
-            det,
-            tau,
-            k_home,
-            alpha,
-            gamma)
-    Q_int = sparse(Q_temp)
-    class_list = where(classes_present[0, :])[0]
-    for j in range(len(class_list)):
-        this_class = class_list[j]
-        states[:system_sizes[0], 5*this_class:5*(this_class+1)] = \
-            states_temp[:, 5*j:5*(j+1)]
-
-    # NOTE: The way I do this loop is very wasteful, I'm making lots of arrays
-    # which I'm overwriting with different sizes
-    # start_time=cputime
-    # Just store this so we can estimate remaining time
-    matrix_sizes = power(system_sizes, 2)
-    # for i in range(1, no_types):
-    progress_bar = tqdm(
-        range(1, no_types),
-        desc='Building within-household transmission matrix')
-    for i in progress_bar:
-        # print('Processing {}/{}'.format(i, no_types))
-        which_composition[cum_sizes[i-1]:cum_sizes[i]] = i * ones(
-            system_sizes[i], dtype=my_int)
-        Q_temp, states_temp, inf_temp_row, inf_temp_col, inf_temp_class \
+        # Initialise matrix of internal process by doing the first block
+        which_composition[:system_sizes[0]] = zeros(system_sizes[0], dtype=my_int)
+        Q_temp, states_temp, inf_event_row, inf_event_col, inf_event_class \
             = within_household_spread(
-                composition_list[i, :],
+                composition_list[0, :],
                 sus,
                 det,
                 tau,
                 k_home,
                 alpha,
                 gamma)
-        Q_int = block_diag((Q_int, Q_temp), format='csc')
-        Q_int.eliminate_zeros()
-        class_list = where(classes_present[i,:])[0]
+        Q_int = sparse(Q_temp)
+        class_list = where(classes_present[0, :])[0]
         for j in range(len(class_list)):
             this_class = class_list[j]
-            states[
-                cum_sizes[i-1]:cum_sizes[i],
-                5*this_class:5*(this_class+1)] = states_temp[:, 5*j:5*(j+1)]
+            states[:system_sizes[0], 5*this_class:5*(this_class+1)] = \
+                states_temp[:, 5*j:5*(j+1)]
 
-        inf_event_row = concatenate((inf_event_row, cum_sizes[i-1] + inf_temp_row))
-        inf_event_col = concatenate((inf_event_col, cum_sizes[i-1] + inf_temp_col))
-        inf_event_class = concatenate((inf_event_class, inf_temp_class))
-        #print(i, type(Q_int), Q_int.shape, type(states), states.shape, len(inf_event))
-    return \
-        Q_int, \
-        states, \
-        which_composition, \
-        system_sizes, \
-        cum_sizes, \
-        inf_event_row, \
-        inf_event_col, \
-        inf_event_class
+        # NOTE: The way I do this loop is very wasteful, I'm making lots of arrays
+        # which I'm overwriting with different sizes
+        # start_time=cputime
+        # Just store this so we can estimate remaining time
+        matrix_sizes = power(system_sizes, 2)
+        # for i in range(1, no_types):
+        progress_bar = tqdm(
+            range(1, no_types),
+            desc='Building within-household transmission matrix')
+        for i in progress_bar:
+            # print('Processing {}/{}'.format(i, no_types))
+            which_composition[cum_sizes[i-1]:cum_sizes[i]] = i * ones(
+                system_sizes[i], dtype=my_int)
+            Q_temp, states_temp, inf_temp_row, inf_temp_col, inf_temp_class \
+                = within_household_spread(
+                    composition_list[i, :],
+                    sus,
+                    det,
+                    tau,
+                    k_home,
+                    alpha,
+                    gamma)
+            Q_int = block_diag((Q_int, Q_temp), format='csc')
+            Q_int.eliminate_zeros()
+            class_list = where(classes_present[i,:])[0]
+            for j in range(len(class_list)):
+                this_class = class_list[j]
+                states[
+                    cum_sizes[i-1]:cum_sizes[i],
+                    5*this_class:5*(this_class+1)] = states_temp[:, 5*j:5*(j+1)]
+
+            inf_event_row = concatenate((inf_event_row, cum_sizes[i-1] + inf_temp_row))
+            inf_event_col = concatenate((inf_event_col, cum_sizes[i-1] + inf_temp_col))
+            inf_event_class = concatenate((inf_event_class, inf_temp_class))
+
+        self.Q_int = Q_int
+        self.states = states
+        self.which_composition = which_composition
+        self.system_sizes = system_sizes
+        self.cum_sizes = cum_sizes
+        self.inf_event_row = inf_event_row
+        self.inf_event_col = inf_event_col
+        self.inf_event_class = inf_event_class
+
+    @property
+    def composition_by_state(self):
+        return self.composition_list[self.which_composition, :]
 
 
 class ConstantDetModel:
-    '''TODO: add docstring'''
+    '''This is a profile of detected individuals'''
     def __init__(self, spec):
         self.constant = spec['constant']
 
