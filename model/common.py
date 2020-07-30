@@ -1,11 +1,11 @@
 '''Module for additional computations required by the model'''
-from abc import ABC
 from numpy import (
-    arange, array, atleast_2d, concatenate, copy, cumprod, diag, exp,
-    ix_, ones, prod, where, zeros)
+    arange, array, atleast_2d, concatenate, copy, cumprod, diag, ix_,
+    ones, prod, where, zeros)
 from numpy import int32 as my_int
 from scipy.sparse import csc_matrix as sparse
 from scipy.special import binom
+from model.imports import NoImportModel
 
 
 def within_household_spread(
@@ -201,9 +201,14 @@ def within_household_spread(
 
 
 def build_external_import_matrix(
-        states, row, col, inf_class, FOI_det, FOI_undet, total_size):
+        household_population, FOI_det, FOI_undet):
     '''Gets sparse matrices containing rates of external infection in a
     household of a given type'''
+
+    row = household_population.inf_event_row
+    col = household_population.inf_event_col
+    inf_class = household_population.inf_event_class
+    total_size = len(household_population.which_composition)
 
     # Figure out which class gets infected in this transition
     d_vals = FOI_det[row, inf_class]
@@ -226,31 +231,21 @@ def build_external_import_matrix(
     return Q_ext_d, Q_ext_u
 
 
-class RateEquations(ABC):
+class RateEquations:
     '''This class represents a functor for evaluating the rate equations for
     the model with no imports of infection from outside the population. The
     state of the class contains all essential variables'''
     # pylint: disable=invalid-name
     def __init__(self,
                  model_input,
-                 Q_int,
-                 composition_list,
-                 which_composition,
-                 states,
-                 inf_event_row,
-                 inf_event_col,
-                 inf_event_class,
-                 importation_model,
+                 household_population,
+                 importation_model=NoImportModel(),
                  epsilon=1.0        # TODO: this needs a better name
                  ):
 
-        self.Q_int = Q_int
-        self.states = states
-        self.inf_event_row = inf_event_row
-        self.inf_event_col = inf_event_col
-        self.inf_event_class = inf_event_class
+        self.household_population = household_population
         self.epsilon = epsilon
-        self.total_size = len(which_composition)
+        self.Q_int = household_population.Q_int
         # To define external mixing we need to set up the transmission
         # matrices.
         # Scale rows of contact matrix by
@@ -260,18 +255,18 @@ class RateEquations(ABC):
         self.undet_trans_matrix = diag(model_input.sigma).dot(
             model_input.k_ext.dot(diag(model_input.tau)))
         # This stores number in each age class by household
-        self.composition_by_state = composition_list[which_composition, :]
+        self.composition_by_state = household_population.composition_by_state
         # ::5 gives columns corresponding to susceptible cases in each age
         # class in each state
-        self.states_sus_only = states[:, ::5]
+        self.states_sus_only = household_population.states[:, ::5]
 
         self.s_present = where(self.states_sus_only.sum(axis=1) > 0)[0]
         # 2::5 gives columns corresponding to detected cases in each age class
         # in each state
-        self.states_det_only = states[:, 2::5]
+        self.states_det_only = household_population.states[:, 2::5]
         # 4:5:end gives columns corresponding to undetected cases in each age
         # class in each state
-        self.states_undet_only = states[:, 3::5]
+        self.states_undet_only = household_population.states[:, 3::5]
         self.epsilon = epsilon
         self.importation_model = importation_model
 
@@ -285,13 +280,9 @@ class RateEquations(ABC):
     def external_matrices(self, t, H):
         FOI_det, FOI_undet = self.get_FOI_by_class(t, H)
         return build_external_import_matrix(
-            self.states,
-            self.inf_event_row,
-            self.inf_event_col,
-            self.inf_event_class,
+            self.household_population,
             FOI_det,
-            FOI_undet,
-            self.total_size)
+            FOI_undet)
 
     def get_FOI_by_class(self, t, H):
         '''This calculates the age-stratified force-of-infection (FOI) on each
