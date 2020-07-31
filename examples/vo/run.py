@@ -3,17 +3,17 @@ each household as an independent example with exponential imports'''
 
 from os.path import isfile
 from pickle import load, dump
-from numpy import arange, array, exp, histogram, log, ones, prod, shape, sum, where, zeros
+from numpy import (
+        arange, array, exp, histogram, isnan, log, ones, prod, sum,
+        where, zeros)
 from pandas import read_csv, unique
 from scipy.integrate import solve_ivp
-from scipy.special import binom
 from model.preprocessing import VoInput, HouseholdPopulation
 from model.specs import VO_SPEC
-from model.common import RateEquations, my_int
-from model.imports import (
-    ExponentialImportModel, StepImportModel, FixedImportModel, NoImportModel)
+from model.common import RateEquations
+from model.imports import ExponentialImportModel
 
-def get_symptoms_by_test(tests,symptoms):
+def get_symptoms_by_test(tests, symptoms):
     symp_locs = []
     asym_locs = []
     for i in range(len(tests)):
@@ -24,15 +24,17 @@ def get_symptoms_by_test(tests,symptoms):
                 asym_locs.append(i)
     return symp_locs, asym_locs
 
-''' In the following function, t0 is the time point from which we run the master
-equations, start_date is the first day in the Vo data. This function assumes the
-ages are in numeric form, i.e. 0th age class, 1st age class etc.'''
-def get_test_probability(tests,symptoms,ages,states,composition,H0,t0,start_date):
+
+def get_test_probability(
+        tests, symptoms, ages, states, composition, H0, t0, start_date):
+    '''In the following function, t0 is the time point from which we run the
+    master equations, start_date is the first day in the Vo data. This function
+    assumes the ages are in numeric form, i.e. 0th age class, 1st age class
+    etc.'''
 
     nn, tt = tests.shape
-    tests[tests!=tests]=-1000 # Replace NaNs with a large negative value
-    test_days = (start_date-t0) + where(tests>-1000)[1] # Find all locations where we have a test result
-    test_days = list(set(test_days)) # get unique days
+    # Find all locations where we have a test result
+    test_days = unique(start_date-t0 + where(~isnan(tests))[1])
 
     H_start = H0
     t_start = start_date
@@ -91,25 +93,27 @@ def get_test_probability(tests,symptoms,ages,states,composition,H0,t0,start_date
 model_input = VoInput(VO_SPEC)
 
 if isfile('vo-testing-data.pkl') is True:
-
     with open('vo-testing-data.pkl','rb') as f:
         hh_tests, hh_ages, hh_symptoms = load(f)
 else:
-    df = read_csv('C:/Users/Joe Hilton/Documents/GitHub/covid-19-in-households-public/examples/vo/vo_data.csv')
+    df = read_csv(
+        'examples/vo/vo_data.csv',
+        dtype={
+            'household_id': str})
     hcol = df.household_id.values
     hhids = unique(df.household_id)
-    testday_indices = range(104,123)
+    testday_indices = range(104, 123)
     hh_tests = []
     hh_ages = []
     hh_symptoms = []
     for hid in hhids:
         dfh = df[df.household_id == hid]
-        tests = dfh.iloc[:,testday_indices].values
+        tests = dfh.iloc[:, testday_indices].values
         aa = dfh.iloc[:,2].values
         ss = dfh.symptomatic.values
         tests[tests=='Neg'] = 0
         tests[tests=='Pos'] = 1
-        hh_tests.append(tests)
+        hh_tests.append(tests.astype(float))
         hh_ages.append(aa)
         hh_symptoms.append(ss)
     with open('vo-testing-data.pkl','wb') as f:
@@ -162,7 +166,6 @@ for i in range(10):
         # print(shape(composition))
         # print(shape(states))
 
-
         H0 = zeros((household_population.system_sizes[0],))
         states_sus_only = household_population.states[:,::5]
         fully_sus = where(states_sus_only.sum(axis=1) == household_population.states.sum(axis=1))[0]
@@ -176,7 +179,15 @@ for i in range(10):
         start_date = 30
 
         composition = array([composition])
-        this_prob = get_test_probability(tests,symptoms,ages,household_population.states,composition,H0,t0,start_date)
+        this_prob = get_test_probability(
+            tests,
+            symptoms,
+            ages,
+            household_population.states,
+            composition,
+            H0,
+            t0,
+            start_date)
         test_prob.append(this_prob)
 
 with open('testing-probabilities.pkl','wb') as f:
