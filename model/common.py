@@ -1,7 +1,7 @@
 '''Module for additional computations required by the model'''
 from numpy import (
     arange, array, atleast_2d, concatenate, copy, cumprod, diag, ix_,
-    ones, prod, where, zeros)
+    ones, prod, shape, where, zeros)
 from numpy import int32 as my_int
 from scipy.sparse import csc_matrix as sparse
 from scipy.special import binom
@@ -287,14 +287,17 @@ class RateEquations:
     def get_FOI_by_class(self, t, H):
         '''This calculates the age-stratified force-of-infection (FOI) on each
         household composition'''
+        denom = H.T.dot(self.composition_by_state) # Average number of each class by household
         # Average detected infected by household in each class
-        det_by_class = (
-            H.T.dot(self.states_det_only)
-            / H.T.dot(self.composition_by_state)).squeeze()
+        det_by_class = zeros(shape(denom))
+        det_by_class[denom>0] = (
+            H.T.dot(self.states_det_only)[denom>0] # Only want to do states with positive denominator
+            / denom[denom>0]).squeeze()
         # Average undetected infected by household in each class
-        undet_by_class = (
-            H.T.dot(self.states_undet_only)
-            / H.T.dot(self.composition_by_state)).squeeze()
+        undet_by_class = zeros(shape(denom))
+        undet_by_class[denom>0] = (
+            H.T.dot(self.states_undet_only)[denom>0]
+            / denom[denom>0]).squeeze()
         # This stores the rates of generating an infected of each class in each state
         FOI_det = self.states_sus_only.dot(
             diag(self.det_trans_matrix.dot(
