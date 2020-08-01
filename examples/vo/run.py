@@ -4,9 +4,9 @@ each household as an independent example with exponential imports'''
 from os.path import isfile
 from pickle import load, dump
 from numpy import (
-        arange, array, exp, histogram, isnan, log, ones, prod, sum,
+        arange, array, exp, histogram, log, ones, prod, sum,
         where, zeros)
-from pandas import read_csv, unique
+from pandas import isnull, read_csv, unique
 from scipy.integrate import solve_ivp
 from model.preprocessing import VoInput, HouseholdPopulation
 from model.specs import VO_SPEC
@@ -34,7 +34,7 @@ def get_test_probability(
 
     nn, tt = tests.shape
     # Find all locations where we have a test result
-    test_days = unique(start_date-t0 + where(~isnan(tests))[1])
+    test_days = unique(start_date-t0 + where(~isnull(tests))[1])
 
     H_start = H0
     t_start = start_date
