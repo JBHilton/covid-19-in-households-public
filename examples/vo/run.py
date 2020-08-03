@@ -18,12 +18,22 @@ HH_AGE_DICT = {
     ag: iag for iag, ag in enumerate(AGE_GROUPS)}
 
 
-def get_symptoms_by_test(tests, symptoms):
-    '''TODO: add docstring'''
+def get_symptoms_by_test(test, symptoms):
+    '''
+    Returns time indexes for symptomatic and asymptomatic tests.
+
+        Parameters:
+            test (array): array of tested individuals within the household.
+            symptoms (list): a yes/no list for symptoms in invididauls of the
+                household.
+        Returns:
+            symp_locs
+            asym_locs
+    '''
     symp_locs = []
     asym_locs = []
     for i in range(len(tests)):
-        if tests[i] == 1:
+        if test[i] == 1:
             if symptoms[i] == 'yes':
                 symp_locs.append(i)
             elif symptoms[i] == 'no':
@@ -56,20 +66,20 @@ def get_test_probability(
         # print('Throwing away bad values, sum(H_end)=',sum(H_end))
 
         # Now calculate total positives and negatives by age class on this date
-        symp_locs, asymp_locs = get_symptoms_by_test(
+        symp_locs, asym_locs = get_symptoms_by_test(
             tests[:, t - (start_date - t0)], symptoms)
         symp_ages = ages[symp_locs]
         # print('symp_ages=',symp_ages)
-        asymp_ages = ages[asymp_locs]
+        asym_ages = ages[asym_locs]
         # print('asym_ages=',asymp_ages)
         neg_ages = ages[tests[:, t-(start_date-t0)] == 0]
 
-        min_symps_by_age = zeros((10,))
+        min_symps_by_age = zeros((len(AGE_GROUPS),))
         for i in symp_ages:
             min_symps_by_age[i] += 1
-        min_asymps_by_age = zeros((10,))
-        for i in asymp_ages:
-            min_asymps_by_age[i] += 1
+        min_asyms_by_age = zeros((len(AGE_GROUPS),))
+        for i in asym_ages:
+            min_asyms_by_age[i] += 1
         # Index is needed because composition is inside an array
         max_inf_by_age = list(composition[0])
         # print(composition)
@@ -85,27 +95,21 @@ def get_test_probability(
         valid_locs = where(
             prod(states[:, 2::5] >= min_symps_by_age, axis=1)
             * (
-                prod(states[:, 3::5] >= min_asymps_by_age, axis=1)
+                prod(states[:, 3::5] >= min_asyms_by_age, axis=1)
                 * prod(
                     states[:, 2::5] + states[:, 3::5] <= max_inf_by_age,
                     axis=1)
-              )
-            )[0]
+            ))[0]
+        mask = zeros(H_end.shape, dtype=bool)
+        mask[valid_locs] = True
         print('Number of valid states is ', len(valid_locs))
         print('Number of invalid states is ', len(H_end) - len(valid_locs))
-        print('Valid probability is ', H_end[valid_locs].sum())
-        print('Invalid probability is ', H_end[where(
-            1.0 - prod(states[:, 2::5] >= min_symps_by_age, axis=1)
-            * (
-                prod(states[:, 3::5] >= min_asymps_by_age, axis=1)
-                * prod(
-                    states[:, 2::5] + states[:, 3::5] <= max_inf_by_age,
-                    axis=1)
-               ))[0]].sum())
-        result_prob.append(sum(H_end[valid_locs]))
-        H_start = 0*H_start
-        H_start[valid_locs] = H_end[valid_locs]
-        H_start = H_start/sum(H_start)
+        print('Valid probability is ', H_end[mask].sum())
+        print('Invalid probability is ', H_end[~mask].sum())
+        result_prob.append(H_end[mask].sum())
+        H_start = 0.0 * H_start
+        H_start[mask] = H_end[mask]
+        H_start = H_start / H_start.sum()
         print('New starting probability is ', H_start.sum())
         print('H_start = ', H_start)
         t_start = t
@@ -162,7 +166,7 @@ undet_profile = 1e-5*ones((10,))-det
 r = 1e-2
 exponential_importation = ExponentialImportModel(r, det_profile, undet_profile)
 
-for i in range(1):
+for i in range(7, 8):
     # There are a few huge households which we skip
     if sum(composition_list[i]) < 10:
         print('Processing household {0} of {1}'.format(
@@ -204,11 +208,11 @@ for i in range(1):
             H0,
             t0,
             start_date)
-        # test_prob.append(this_prob)
+        test_prob.append(this_prob)
 
 # with open('testing-probabilities.pkl', 'wb') as f:
     # dump((test_prob), f)
 
-# print('Likelihood of input parameters given data is {0}.'.format(
-    # exp(sum(test_prob))))
-# print('Likelihoods are {0}.'.format(exp(test_prob)))
+print('Likelihood of input parameters given data is {0}.'.format(
+    exp(sum(test_prob))))
+print('Likelihoods are {0}.'.format(exp(test_prob)))
