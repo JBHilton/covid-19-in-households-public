@@ -11,7 +11,8 @@ from model.imports import NoImportModel
 def within_household_spread(
         composition, sus, det, tau, K_home, alpha, gamma):
     '''Assuming frequency-dependent homogeneous within-household mixing
-    composition(i) isnumber of age class i individuals in the household'''
+    composition[i] is the number of individuals in age-class i inside the
+    household'''
 
     # Set of individuals actually present here
     classes_present = where(composition.ravel() > 0)[0]

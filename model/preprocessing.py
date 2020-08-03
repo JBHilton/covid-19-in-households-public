@@ -164,7 +164,6 @@ class HouseholdPopulation:
 
         # NOTE: The way I do this loop is very wasteful, I'm making lots of arrays
         # which I'm overwriting with different sizes
-        # start_time=cputime
         # Just store this so we can estimate remaining time
         matrix_sizes = power(system_sizes, 2)
         # for i in range(1, no_types):
