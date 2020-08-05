@@ -201,17 +201,17 @@ def within_household_spread(
         array(inf_event_class, dtype=my_int, ndmin=1)
 
 def within_household_spread_with_isolation(
-        composition, \
-        sus, \
-        det, \
-        tau, \
-        K_home, \
-        alpha, \
-        gamma, \
-        D_iso_rate, \
-        U_iso_rate, \
-        return_rate, \
-        adult_bd, \ # Defines which age class is considered first adult age class - i.e. for 5-year age bds this would probably be 20-25, so age class 4 under zero indexing
+        composition,
+        sus,
+        det,
+        tau,
+        K_home,
+        alpha,
+        gamma,
+        D_iso_rate,
+        U_iso_rate,
+        return_rate,
+        adult_bd, # Defines which age class is considered first adult age class - i.e. for 5-year age bds this would probably be 20-25, so age class 4 under zero indexing
         class_is_isolating # List of Booleans, T if class isolates, F otherwise
         ):
     '''Assuming frequency-dependent homogeneous within-household mixing
