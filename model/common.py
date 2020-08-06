@@ -1,18 +1,26 @@
 '''Module for additional computations required by the model'''
 from numpy import (
-    arange, array, atleast_2d, concatenate, copy, cumprod, diag, ix_,
+    arange, array, atleast_2d, concatenate, copy, cumprod, diag, isnan, ix_,
     ones, prod, shape, where, zeros)
 from numpy import int32 as my_int
 from scipy.sparse import csc_matrix as sparse
 from scipy.special import binom
 from model.imports import NoImportModel
+import pdb
 
 
 def within_household_spread(
-        composition, sus, det, tau, K_home, alpha, gamma):
+        composition, model_input):
     '''Assuming frequency-dependent homogeneous within-household mixing
     composition[i] is the number of individuals in age-class i inside the
     household'''
+
+    sus = model_input.sigma
+    det = model_input.det
+    tau = model_input.tau
+    K_home = model_input.k_home
+    alpha = model_input.alpha
+    gamma = model_input.gamma
 
     # Set of individuals actually present here
     classes_present = where(composition.ravel() > 0)[0]
@@ -201,22 +209,22 @@ def within_household_spread(
         array(inf_event_class, dtype=my_int, ndmin=1)
 
 def within_household_spread_with_isolation(
-        composition,
-        sus,
-        det,
-        tau,
-        K_home,
-        alpha,
-        gamma,
-        D_iso_rate,
-        U_iso_rate,
-        return_rate,
-        adult_bd, # Defines which age class is considered first adult age class - i.e. for 5-year age bds this would probably be 20-25, so age class 4 under zero indexing
-        class_is_isolating # List of Booleans, T if class isolates, F otherwise
-        ):
+        composition, model_input):
     '''Assuming frequency-dependent homogeneous within-household mixing
     composition[i] is the number of individuals in age-class i inside the
     household'''
+
+    sus = model_input.sigma
+    det = model_input.det
+    tau = model_input.tau
+    K_home = model_input.k_home
+    alpha = model_input.alpha
+    gamma = model_input.gamma
+    D_iso_rate = model_input.D_iso_rate
+    U_iso_rate = model_input.U_iso_rate
+    discharge_rate = model_input.discharge_rate
+    adult_bd = model_input.adult_bd
+    class_is_isolating = model_input.class_is_isolating
 
     # Set of individuals actually present here
     classes_present = where(composition.ravel() > 0)[0]
@@ -263,16 +271,20 @@ def within_household_spread_with_isolation(
                                         (consecutive_repeats[i], 1),
                                         dtype=my_int) \
                                     * array(
-                                        [s, e, d, u, c - s - e - d - u],
+                                        [s, e, d, u, r, c - s - e - d - u - r],
                                         ndmin=2, dtype=my_int)
-                                k += 1
+                            k += 1
     # Q_int=sparse(total_size, total_size)
 
     d_pos = 2 + 6 * arange(len(classes_present))
     u_pos = 3 + 6 * arange(len(classes_present))
+    iso_pos = 5 + 6 * arange(len(classes_present))
 
-    total_isolating = sum(state[:,5::6])
-    adults_isolating = sum(states[:,6*adult_bd+5::6]) # Number of adults isolating by state
+    present_minus_iso = composition[classes_present] - states[:,iso_pos] # This is number of people of each age class present in the household given some may isolate
+    present_minus_iso[present_minus_iso==0] = 1 # Replace zeros with ones - we only ever use this as a denominator whose numerator will be zero anyway if it should be zero
+    if (present_minus_iso<1).any():
+        pdb.set_trace()
+    adults_isolating = states[:,6*adult_bd+5::6].sum(axis=1) # Number of adults isolating by state
 
     # Now construct a sparse vector which tells you which row a state appears
     # from in the state array
@@ -324,13 +336,13 @@ def within_household_spread_with_isolation(
         inf_rate = zeros(len(s_present))
         for k in range(len(s_present)):
             old_state = copy(states[s_present[k], :])
-            inf_rate[k] = old_state[5*i] * (
+            inf_rate[k] = old_state[6*i] * (
                 r_home[i, :].dot(
-                    (old_state[d_pos] / (composition[classes_present] - total_isolating[s_present[k]]))
-                    + (old_state[u_pos] / (composition[classes_present] - total_isolating[s_present[k]])) * tau))
+                    (old_state[d_pos] / present_minus_iso[k])
+                    + (old_state[u_pos] / present_minus_iso[k]) * tau))
             new_state = old_state.copy()
-            new_state[5*i] -= 1
-            new_state[5*i + 1] += 1
+            new_state[6*i] -= 1
+            new_state[6*i + 1] += 1
             inf_to[k] = index_vector[
                 new_state.dot(reverse_prod) + new_state[-1], 0]
         Q_int += sparse(
@@ -350,7 +362,7 @@ def within_household_spread_with_isolation(
         for k in range(len(e_present)):
             # First do detected
             old_state = copy(states[e_present[k], :])
-            det_rate[k] = det[i] * alpha * old_state[5*i+1]
+            det_rate[k] = det[i] * alpha * old_state[6*i+1]
             new_state = copy(old_state)
             new_state[6*i + 1] -= 1
             new_state[6*i + 2] += 1
@@ -409,36 +421,51 @@ def within_household_spread_with_isolation(
                 d_can_isolate = d_present
                 u_can_isolate = u_present
             else: # If children are present adults_isolating must stay below no_adults-1 so the children still have a guardian
-                d_can_isolate = where(states[:, 6*i+2] > 0 and adults_isolating<no_adults-1)[0]
-                u_can_isolate = where(states[:, 6*i+3] > 0 and adults_isolating<no_adults-1)[0]
+                d_can_isolate = where((states[:, 6*i+2] > 0)*(adults_isolating<no_adults-1))[0]
+                u_can_isolate = where((states[:, 6*i+3] > 0)*(adults_isolating<no_adults-1))[0]
+            iso_present = where(states[:, 6*i+5] > 0)[0]
             # Isolation of detected cases
             iso_to = zeros(len(d_can_isolate), dtype=my_int)
             iso_rate = zeros(len(d_can_isolate))
             for k in range(len(d_can_isolate)):
                 old_state = copy(states[d_can_isolate[k], :])
-                rec_rate[k] = D_iso_rate * old_state[6*i+2]
+                iso_rate[k] = D_iso_rate * old_state[6*i+2]
                 new_state = copy(old_state)
                 new_state[6*i+2] -= 1
                 new_state[6*i+5] += 1
-                rec_to[k] = index_vector[
+                iso_to[k] = index_vector[
                     new_state.dot(reverse_prod) + new_state[-1], 0]
             Q_int += sparse(
-                (rec_rate, (d_present, rec_to)),
+                (iso_rate, (d_can_isolate, iso_to)),
                 shape=(total_size, total_size))
             # Isolation of undetected cases
             iso_to = zeros(len(u_can_isolate), dtype=my_int)
             iso_rate = zeros(len(u_can_isolate))
             for k in range(len(u_can_isolate)):
                 old_state = copy(states[u_can_isolate[k], :])
-                rec_rate[k] = U_iso_rate * old_state[6*i+2]
+                iso_rate[k] = U_iso_rate * old_state[6*i+3]
                 new_state = copy(old_state)
                 new_state[6*i+3] -= 1
                 new_state[6*i+5] += 1
-                rec_to[k] = index_vector[
+                iso_to[k] = index_vector[
                     new_state.dot(reverse_prod) + new_state[-1], 0]
             Q_int += sparse(
-                (rec_rate, (d_present, rec_to)),
+                (iso_rate, (u_can_isolate, iso_to)),
                 shape=(total_size, total_size))
+            # Return home of isolated cases
+            return_to = zeros(len(iso_present), dtype=my_int)
+            return_rate = zeros(len(iso_present))
+            for k in range(len(iso_present)):
+                old_state = copy(states[iso_present[k], :])
+                return_rate[k] = discharge_rate * old_state[6*i+5]
+                new_state = copy(old_state)
+                new_state[6*i+5] -= 1
+                new_state[6*i+4] += 1
+                return_to[k] = index_vector[
+                    new_state.dot(reverse_prod) + new_state[-1], 0]
+            Q_int += sparse(
+                (return_rate, (iso_present, return_to)),
+                shape = (total_size,total_size))
 
 
     S = Q_int.sum(axis=1).getA().squeeze()
@@ -490,7 +517,8 @@ class RateEquations:
                  model_input,
                  household_population,
                  importation_model=NoImportModel(),
-                 epsilon=1.0        # TODO: this needs a better name
+                 epsilon=1.0,        # TODO: this needs a better name
+                 no_compartments=5
                  ):
 
         self.household_population = household_population
@@ -508,15 +536,15 @@ class RateEquations:
         self.composition_by_state = household_population.composition_by_state
         # ::5 gives columns corresponding to susceptible cases in each age
         # class in each state
-        self.states_sus_only = household_population.states[:, ::5]
+        self.states_sus_only = household_population.states[:, ::no_compartments]
 
         self.s_present = where(self.states_sus_only.sum(axis=1) > 0)[0]
         # 2::5 gives columns corresponding to detected cases in each age class
         # in each state
-        self.states_det_only = household_population.states[:, 2::5]
+        self.states_det_only = household_population.states[:, 2::no_compartments]
         # 4:5:end gives columns corresponding to undetected cases in each age
         # class in each state
-        self.states_undet_only = household_population.states[:, 3::5]
+        self.states_undet_only = household_population.states[:, 3::no_compartments]
         self.epsilon = epsilon
         self.importation_model = importation_model
 
@@ -524,6 +552,8 @@ class RateEquations:
         '''hh_ODE_rates calculates the rates of the ODE system describing the
         household ODE model'''
         Q_ext_det, Q_ext_undet = self.external_matrices(t, H)
+        if isnan(H).any():
+            pdb.set_trace()
         dH = (H.T * (self.Q_int + Q_ext_det + Q_ext_undet)).T
         return dH
 

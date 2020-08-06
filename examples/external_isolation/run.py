@@ -10,12 +10,16 @@ from scipy.integrate import solve_ivp
 from model.preprocessing import TwoAgeModelInput, HouseholdPopulation
 from model.preprocessing import make_initial_condition
 from model.specs import DEFAULT_SPEC
-from model.common import RateEquations
-from model.imports import (
-    ExponentialImportModel, StepImportModel, FixedImportModel, NoImportModel)
+from model.common import RateEquations, within_household_spread_with_isolation
+from model.imports import ( FixedImportModel)
 # pylint: disable=invalid-name
 
 model_input = TwoAgeModelInput(DEFAULT_SPEC)
+model_input.D_iso_rate = 1/1
+model_input.U_iso_rate = 1/2
+model_input.discharge_rate = 1/7
+model_input.adult_bd = 1
+model_input.class_is_isolating = [True, True]
 
 if isfile('iso-vars.pkl') is True:
     with open('iso-vars.pkl', 'rb') as f:
@@ -28,7 +32,7 @@ else:
     comp_dist = array([0.2, 0.2, 0.1, 0.1, 0.1, 0.1])
     # With the parameters chosen, we calculate Q_int:
     household_population = HouseholdPopulation(
-        composition_list, comp_dist, model_input)
+        composition_list, comp_dist, model_input, within_household_spread_with_isolation,6)
     with open('iso-vars.pkl', 'wb') as f:
         dump(household_population, f)
 
@@ -37,99 +41,32 @@ else:
 epsilon = 0.5
 no_days = 100
 
-external_prev = rand(no_days)
-detected_profile = array([0.1, 0.9])
-undetected_profile = array([0.9, 0.1])
-import_times = arange(no_days)
-
-step_import_model = StepImportModel(
-    import_times,
-    external_prev,
-    detected_profile,
-    undetected_profile)
-
-step_import_rhs = RateEquations(
-    model_input,
-    household_population,
-    step_import_model,
-    epsilon)
-
-no_import_rhs = RateEquations(
-    model_input,
-    household_population,
-    epsilon=1.0,
-    importation_model=NoImportModel())
-
-H0 = make_initial_condition(household_population, no_import_rhs)
-
-tspan = (0.0, 100)
-simple_model_start = get_time()
-solution = solve_ivp(no_import_rhs, tspan, H0, first_step=0.001)
-simple_model_end = get_time()
-
-time = solution.t
-H = solution.y
-D = H.T.dot(household_population.states[:, 2::5])
-U = H.T.dot(household_population.states[:, 3::5])
-
-with open('simple-results.pkl', 'wb') as f:
-    dump((time, H, D, U, model_input.coarse_bds), f)
-
-fixed_import_model = FixedImportModel(
-    step_import_model.detected(0.0),
-    step_import_model.undetected(0.0))
-
-fixed_rhs = RateEquations(
-    model_input,
-    household_population,
-    epsilon,
-    fixed_import_model)
-
-with open('static-import-results.pkl', 'wb') as f:
-    dump((time, H, D, U, model_input.coarse_bds), f)
-
-# Now do timed version
-
-tspan = (0.0, no_days)
-true_step_start = get_time()
-solution = solve_ivp(step_import_rhs, tspan, H0, first_step=0.001)
-true_step_end = get_time()
-time = solution.t
-H = solution.y
-
-D = H.T.dot(household_population.states[:, 2::5])
-U = H.T.dot(household_population.states[:, 3::5])
-
-with open('timed-import-results.pkl', 'wb') as f:
-    dump((time, H, D, U, model_input.coarse_bds), f)
-
-det_profile = model_input.det
-undet_profile = array([1, 1]) - det_profile
-# TODO: Rescaling here is necessary to slow down the dynamics. Otherwise time
-# steps become to small.
-r = 1.0e-2 * (model_input.gamma*DEFAULT_SPEC['R0'] - model_input.gamma)
-exponential_importation = ExponentialImportModel(r, det_profile, undet_profile)
+import_model = FixedImportModel(
+    1e-1,
+    1e-1)
 
 rhs = RateEquations(
     model_input,
     household_population,
-    exponential_importation,
-    epsilon)
+    import_model,
+    epsilon,
+    6)
 
-exponential_start = get_time()
+H0 = make_initial_condition(household_population, rhs)
+
+tspan = (0.0, 100)
+solver_start = get_time()
 solution = solve_ivp(rhs, tspan, H0, first_step=0.001)
-exponential_end = get_time()
+solver_end = get_time()
+
 time = solution.t
 H = solution.y
+D = H.T.dot(household_population.states[:, 2::6])
+U = H.T.dot(household_population.states[:, 3::6])
+Q = H.T.dot(household_population.states[:, 5::6])
 
-D = H.T.dot(household_population.states[:, 2::5])
-U = H.T.dot(household_population.states[:, 3::5])
-
-with open('exponential-import-results.pkl', 'wb') as f:
-    dump((time, H, D, U, model_input.coarse_bds), f)
+with open('external-isolation-results.pkl', 'wb') as f:
+    dump((time, H, D, U, Q, model_input.coarse_bds), f)
 
 
-message = '{0} model took {1} seconds'
-print(message.format('No import', simple_model_end-simple_model_start))
-print(message.format('"True" step function', true_step_end-true_step_start))
-print(message.format('Exponential', exponential_end-exponential_start))
+print('Integration completed in', solver_end-solver_start,'seconds.')

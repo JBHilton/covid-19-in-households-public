@@ -7,7 +7,7 @@ from scipy.sparse import block_diag
 from scipy.special import binom
 from pandas import read_excel, read_csv
 from tqdm import tqdm
-from model.common import within_household_spread, sparse, my_int
+from model.common import within_household_spread, within_household_spread_with_isolation, sparse, my_int
 
 
 def make_initial_condition(
@@ -100,15 +100,11 @@ class HouseholdPopulation:
             self,
             composition_list,
             composition_distribution,
-            model_input):
+            model_input,
+            build_function=within_household_spread,
+            no_compartments = 5):
         '''This builds internal mixing matrix for entire system of
         age-structured households.'''
-        sus = model_input.sigma
-        det = model_input.det
-        tau = model_input.tau
-        k_home = model_input.k_home
-        alpha = model_input.alpha
-        gamma = model_input.gamma
 
         self.composition_list = composition_list
         self.composition_distribution = composition_distribution
@@ -132,8 +128,8 @@ class HouseholdPopulation:
         for i, _ in enumerate(system_sizes):
             for j in where(classes_present[i, :])[0]:
                 system_sizes[i] *= binom(
-                    composition_list[i, j] + 5 - 1,
-                    5 - 1)
+                    composition_list[i, j] + no_compartments - 1,
+                    no_compartments - 1)
 
         # This is useful for placing blocks of system states
         cum_sizes = cumsum(system_sizes)
@@ -141,26 +137,21 @@ class HouseholdPopulation:
         # considering a single household which can be in any one composition
         total_size = cum_sizes[-1]
         # Stores list of (S,E,D,U,R)_a states for each composition
-        states = zeros((total_size, 5 * no_classes), dtype=my_int)
+        states = zeros((total_size, no_compartments * no_classes), dtype=my_int)
         which_composition = zeros(total_size, dtype=my_int)
 
         # Initialise matrix of internal process by doing the first block
         which_composition[:system_sizes[0]] = zeros(system_sizes[0], dtype=my_int)
         Q_temp, states_temp, inf_event_row, inf_event_col, inf_event_class \
-            = within_household_spread(
+            = build_function(
                 composition_list[0, :],
-                sus,
-                det,
-                tau,
-                k_home,
-                alpha,
-                gamma)
+                model_input)
         Q_int = sparse(Q_temp)
         class_list = where(classes_present[0, :])[0]
         for j in range(len(class_list)):
             this_class = class_list[j]
-            states[:system_sizes[0], 5*this_class:5*(this_class+1)] = \
-                states_temp[:, 5*j:5*(j+1)]
+            states[:system_sizes[0], no_compartments*this_class:no_compartments*(this_class+1)] = \
+                states_temp[:, no_compartments*j:no_compartments*(j+1)]
 
         # NOTE: The way I do this loop is very wasteful, I'm making lots of arrays
         # which I'm overwriting with different sizes
@@ -175,14 +166,9 @@ class HouseholdPopulation:
             which_composition[cum_sizes[i-1]:cum_sizes[i]] = i * ones(
                 system_sizes[i], dtype=my_int)
             Q_temp, states_temp, inf_temp_row, inf_temp_col, inf_temp_class \
-                = within_household_spread(
+                = build_function(
                     composition_list[i, :],
-                    sus,
-                    det,
-                    tau,
-                    k_home,
-                    alpha,
-                    gamma)
+                    model_input)
             Q_int = block_diag((Q_int, Q_temp), format='csc')
             Q_int.eliminate_zeros()
             class_list = where(classes_present[i,:])[0]
@@ -190,7 +176,7 @@ class HouseholdPopulation:
                 this_class = class_list[j]
                 states[
                     cum_sizes[i-1]:cum_sizes[i],
-                    5*this_class:5*(this_class+1)] = states_temp[:, 5*j:5*(j+1)]
+                    no_compartments*this_class:no_compartments*(this_class+1)] = states_temp[:, no_compartments*j:no_compartments*(j+1)]
 
             inf_event_row = concatenate((inf_event_row, cum_sizes[i-1] + inf_temp_row))
             inf_event_col = concatenate((inf_event_col, cum_sizes[i-1] + inf_temp_col))
