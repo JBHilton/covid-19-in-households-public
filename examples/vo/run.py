@@ -55,9 +55,10 @@ def get_test_probability(
     H_start = H0
     t_start = start_date
     result_prob = []
+    test_days.sort()
     for t in test_days:
         solution = solve_ivp(
-            rhs, (t_start, t), H_start, first_step=0.001, atol=1e-9)
+            rhs, (t_start, t), H_start, first_step=1e-6, atol=1e-9)
         H = solution.y
         H_end = H[:, -1]  # Get end state
         print('H=', H_end)
@@ -166,7 +167,7 @@ undet_profile = 1e-5*ones((10,))-det
 r = 1e-2
 exponential_importation = ExponentialImportModel(r, det_profile, undet_profile)
 
-for i in range(7, 8):
+for i in range(100):
     # There are a few huge households which we skip
     if sum(composition_list[i]) < 10:
         print('Processing household {0} of {1}'.format(
