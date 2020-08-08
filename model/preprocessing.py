@@ -7,7 +7,7 @@ from scipy.sparse import block_diag
 from scipy.special import binom
 from pandas import read_excel, read_csv
 from tqdm import tqdm
-from model.common import within_household_spread, within_household_spread_with_isolation, sparse, my_int
+from model.common import within_household_spread, within_household_SEDURQ, within_household_SEPIRQ, sparse, my_int
 
 
 def make_initial_condition(

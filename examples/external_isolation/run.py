@@ -10,7 +10,7 @@ from scipy.integrate import solve_ivp
 from model.preprocessing import TwoAgeModelInput, HouseholdPopulation
 from model.preprocessing import make_initial_condition
 from model.specs import DEFAULT_SPEC
-from model.common import RateEquations, within_household_spread_with_isolation
+from model.common import RateEquations, within_household_SEDURQ
 from model.imports import ( FixedImportModel)
 # pylint: disable=invalid-name
 
@@ -19,7 +19,7 @@ model_input.D_iso_rate = 1/1
 model_input.U_iso_rate = 1/2
 model_input.discharge_rate = 1/7
 model_input.adult_bd = 1
-model_input.class_is_isolating = [True, True]
+model_input.class_is_isolating = array([[False, False],[False,True]])
 
 if isfile('iso-vars.pkl') is True:
     with open('iso-vars.pkl', 'rb') as f:
@@ -32,7 +32,7 @@ else:
     comp_dist = array([0.2, 0.2, 0.1, 0.1, 0.1, 0.1])
     # With the parameters chosen, we calculate Q_int:
     household_population = HouseholdPopulation(
-        composition_list, comp_dist, model_input, within_household_spread_with_isolation,6)
+        composition_list, comp_dist, model_input, within_household_SEDURQ,6)
     with open('iso-vars.pkl', 'wb') as f:
         dump(household_population, f)
 

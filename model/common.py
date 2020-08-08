@@ -208,7 +208,7 @@ def within_household_spread(
         array(inf_event_col, dtype=my_int, ndmin=1), \
         array(inf_event_class, dtype=my_int, ndmin=1)
 
-def within_household_spread_with_isolation(
+def within_household_SEDURQ(
         composition, model_input):
     '''Assuming frequency-dependent homogeneous within-household mixing
     composition[i] is the number of individuals in age-class i inside the
@@ -416,7 +416,7 @@ def within_household_spread_with_isolation(
         # disp('Recovery events from undetecteds done')
 
         #Now do isolation
-        if class_is_isolating[i]:
+        if (class_is_isolating[i,classes_present]).any():
             if (i<adult_bd) or not children_present: # If i is a child class or there are no children around, anyone can isolate
                 d_can_isolate = d_present
                 u_can_isolate = u_present
@@ -451,6 +451,282 @@ def within_household_spread_with_isolation(
                     new_state.dot(reverse_prod) + new_state[-1], 0]
             Q_int += sparse(
                 (iso_rate, (u_can_isolate, iso_to)),
+                shape=(total_size, total_size))
+            # Return home of isolated cases
+            return_to = zeros(len(iso_present), dtype=my_int)
+            return_rate = zeros(len(iso_present))
+            for k in range(len(iso_present)):
+                old_state = copy(states[iso_present[k], :])
+                return_rate[k] = discharge_rate * old_state[6*i+5]
+                new_state = copy(old_state)
+                new_state[6*i+5] -= 1
+                new_state[6*i+4] += 1
+                return_to[k] = index_vector[
+                    new_state.dot(reverse_prod) + new_state[-1], 0]
+            Q_int += sparse(
+                (return_rate, (iso_present, return_to)),
+                shape = (total_size,total_size))
+
+
+    S = Q_int.sum(axis=1).getA().squeeze()
+    Q_int += sparse((
+        -S, (arange(total_size), arange(total_size))))
+    return \
+        Q_int, states, \
+        array(inf_event_row, dtype=my_int, ndmin=1), \
+        array(inf_event_col, dtype=my_int, ndmin=1), \
+        array(inf_event_class, dtype=my_int, ndmin=1)
+
+def within_household_SEPIRQ(
+        composition, model_input):
+    '''Assuming frequency-dependent homogeneous within-household mixing
+    composition[i] is the number of individuals in age-class i inside the
+    household'''
+
+    sus = model_input.sigma
+    det = model_input.det
+    tau = model_input.tau
+    K_home = model_input.k_home
+    alpha = model_input.alpha
+    alpha2 = model_input.alpha2
+    gamma = model_input.gamma
+    E_iso_rate = model_input.E_iso_rate
+    P_iso_rate = model_input.P_iso_rate
+    I_iso_rate = model_input.I_iso_rate
+    discharge_rate = model_input.discharge_rate
+    adult_bd = model_input.adult_bd
+    class_is_isolating = model_input.class_is_isolating
+
+    # Set of individuals actually present here
+    classes_present = where(composition.ravel() > 0)[0]
+
+    # Check number of adults and whether children_present
+    no_adults = sum(composition[adult_bd:])
+    children_present = sum(composition[:adult_bd])>0
+
+    K_home = K_home[ix_(classes_present, classes_present)]
+    sus = sus[classes_present]
+    det = det[classes_present]
+    tau = tau[classes_present]
+    r_home = atleast_2d(diag(sus).dot(K_home))
+
+    system_sizes = array([
+        binom(composition[classes_present[i]] + 6 - 1, 6 - 1)
+        for i, _ in enumerate(classes_present)], dtype=my_int)
+
+    total_size = prod(system_sizes)
+
+    states = zeros((total_size, 6*len(classes_present)), dtype=my_int)
+    # Number of times you repeat states for each configuration
+    consecutive_repeats = concatenate((
+        ones(1, dtype=my_int), cumprod(system_sizes[:-1])))
+    block_size = consecutive_repeats * system_sizes
+    num_blocks = total_size // block_size
+
+    for age_class in range(len(classes_present)):
+        k = 0
+        c = composition[classes_present[i]]
+        for s in arange(c + 1):
+            for e in arange(c - s + 1):
+                for p in arange(c - s - e + 1):
+                    for i in arange(c - s - e - p + 1):
+                        for r in arange(c - s - e - p - i + 1):
+                            for block in arange(num_blocks[age_class]):
+                                repeat_range = arange(
+                                    block * block_size[age_class]
+                                    + k * consecutive_repeats[age_class],
+                                    block * block_size[age_class] +
+                                    (k + 1) * consecutive_repeats[age_class])
+                                states[repeat_range, 6*age_class:6*(age_class+1)] = \
+                                    ones(
+                                        (consecutive_repeats[age_class], 1),
+                                        dtype=my_int) \
+                                    * array(
+                                        [s, e, p, i, r, c - s - e - p - i - r],
+                                        ndmin=2, dtype=my_int)
+                            k += 1
+    # Q_int=sparse(total_size, total_size)
+
+    p_pos = 2 + 6 * arange(len(classes_present))
+    i_pos = 3 + 6 * arange(len(classes_present))
+    iso_pos = 5 + 6 * arange(len(classes_present))
+
+    present_minus_iso = composition[classes_present] - states[:,iso_pos] # This is number of people of each age class present in the household given some may isolate
+    present_minus_iso[present_minus_iso==0] = 1 # Replace zeros with ones - we only ever use this as a denominator whose numerator will be zero anyway if it should be zero
+    if (present_minus_iso<1).any():
+        pdb.set_trace()
+    adults_isolating = states[:,6*adult_bd+5::6].sum(axis=1) # Number of adults isolating by state
+
+    # Now construct a sparse vector which tells you which row a state appears
+    # from in the state array
+
+    # This loop tells us how many values each column of the state array can
+    # take
+    state_sizes = concatenate([
+        (composition[i] + 1) * ones(6, dtype=my_int) for i in classes_present])
+
+    # This vector stores the number of combinations you can get of all
+    # subsequent elements in the state array, i.e. reverse_prod(i) tells you
+    # how many arrangements you can get in states(:,i+1:end)
+    reverse_prod = array([0, *cumprod(state_sizes[:0:-1])])[::-1]
+
+    # We can then define index_vector look up the location of a state by
+    # weighting its elements using reverse_prod - this gives a unique mapping
+    # from the set of states to the integers. Because lots of combinations
+    # don't actually appear in the states array, we use a sparse array which
+    # will be much bigger than we actually require
+    rows = [
+        states[k, :].dot(reverse_prod) + states[k, -1]
+        for k in range(total_size)]
+    if min(rows) < 0:
+        print(
+            'Negative row indices found, proportional total',
+            sum(array(rows) < 0),
+            '/',
+            len(rows),
+            '=',
+            sum(array(rows) < 0) / len(rows))
+    index_vector = sparse((
+        arange(total_size),
+        (rows, [0]*total_size)))
+
+    Q_int = sparse((total_size, total_size))
+    inf_event_row = array([], dtype=my_int)
+    inf_event_col = array([], dtype=my_int)
+    inf_event_class = array([], dtype=my_int)
+
+    # Add events for each age class
+    for i in range(len(classes_present)):
+        s_present = where(states[:, 6*i] > 0)[0]
+        e_present = where(states[:, 6*i+1] > 0)[0]
+        p_present = where(states[:, 6*i+2] > 0)[0]
+        i_present = where(states[:, 6*i+3] > 0)[0]
+
+        # First do infection events
+        inf_to = zeros(len(s_present), dtype=my_int)
+        inf_rate = zeros(len(s_present))
+        for k in range(len(s_present)):
+            old_state = copy(states[s_present[k], :])
+            inf_rate[k] = old_state[6*i] * (
+                r_home[i, :].dot(
+                    (old_state[i_pos] / present_minus_iso[k])
+                    + (old_state[p_pos] / present_minus_iso[k]) * tau)) # Now let tau be reduction for prodromal transmission
+            new_state = old_state.copy()
+            new_state[6*i] -= 1
+            new_state[6*i + 1] += 1
+            inf_to[k] = index_vector[
+                new_state.dot(reverse_prod) + new_state[-1], 0]
+        Q_int += sparse(
+            (inf_rate, (s_present, inf_to)),
+            shape=(total_size, total_size))
+        inf_event_row = concatenate((inf_event_row, s_present))
+        inf_event_col = concatenate((inf_event_col, inf_to))
+        inf_event_class = concatenate(
+            (inf_event_class, classes_present[i]*ones((len(s_present)))))
+        # input('Press enter to continue')
+        # # disp('Infection events done')
+        # # Now do exposure to prodromal
+        inc_to = zeros(len(e_present), dtype=my_int)
+        inc_rate = zeros(len(e_present))
+        for k in range(len(e_present)):
+            # First do detected
+            old_state = copy(states[e_present[k], :])
+            inc_rate[k] = alpha * old_state[6*i+1]
+            new_state = copy(old_state)
+            new_state[6*i + 1] -= 1
+            new_state[6*i + 2] += 1
+            inc_to[k] = index_vector[
+                new_state.dot(reverse_prod) + new_state[-1], 0]
+
+        Q_int += sparse(
+            (inc_rate, (e_present, inc_to)),
+            shape=(total_size, total_size))
+        # # disp('Incubaion events done')
+        # # Now do prodromal to infectious
+        dev_to = zeros(len(p_present), dtype=my_int)
+        dev_rate = zeros(len(p_present))
+        for k in range(len(p_present)):
+            # First do detected
+            old_state = copy(states[p_present[k], :])
+            dev_rate[k] = alpha2 * old_state[6*i+2]
+            new_state = copy(old_state)
+            new_state[6*i + 2] -= 1
+            new_state[6*i + 3] += 1
+            dev_to[k] = index_vector[
+                new_state.dot(reverse_prod) + new_state[-1], 0]
+
+        Q_int += sparse(
+            (dev_rate, (p_present, dev_to)),
+            shape=(total_size, total_size))
+
+        # Now do recovery of detected cases
+        rec_to = zeros(len(i_present), dtype=my_int)
+        rec_rate = zeros(len(i_present))
+        for k in range(len(i_present)):
+            old_state = copy(states[i_present[k], :])
+            rec_rate[k] = gamma * old_state[6*i+3]
+            new_state = copy(old_state)
+            new_state[6*i+3] -= 1
+            new_state[6*i+4] += 1
+            rec_to[k] = index_vector[
+                new_state.dot(reverse_prod) + new_state[-1], 0]
+        Q_int += sparse(
+            (rec_rate, (i_present, rec_to)),
+            shape=(total_size, total_size))
+        # disp('Recovery events from detecteds done')
+
+        #Now do isolation
+        if (class_is_isolating[i,classes_present]).any(): # This checks whether class i is meant to isolated and whether any of the vulnerable classes are present
+            if (i<adult_bd) or not children_present: # If i is a child class or there are no children around, anyone can isolate
+                e_can_isolate = e_present
+                p_can_isolate = p_present
+                i_can_isolate = i_present
+            else: # If children are present adults_isolating must stay below no_adults-1 so the children still have a guardian
+                e_can_isolate = where((states[:, 6*i+1] > 0)*(adults_isolating<no_adults-1))[0]
+                p_can_isolate = where((states[:, 6*i+2] > 0)*(adults_isolating<no_adults-1))[0]
+                i_can_isolate = where((states[:, 6*i+3] > 0)*(adults_isolating<no_adults-1))[0]
+            iso_present = where(states[:, 6*i+5] > 0)[0]
+            # Isolation of incubating cases
+            iso_to = zeros(len(e_can_isolate), dtype=my_int)
+            iso_rate = zeros(len(e_can_isolate))
+            for k in range(len(e_can_isolate)):
+                old_state = copy(states[e_can_isolate[k], :])
+                iso_rate[k] = E_iso_rate * old_state[6*i+1]
+                new_state = copy(old_state)
+                new_state[6*i+1] -= 1
+                new_state[6*i+5] += 1
+                iso_to[k] = index_vector[
+                    new_state.dot(reverse_prod) + new_state[-1], 0]
+            Q_int += sparse(
+                (iso_rate, (e_can_isolate, iso_to)),
+                shape=(total_size, total_size))
+            # Isolation of prodromal cases
+            iso_to = zeros(len(p_can_isolate), dtype=my_int)
+            iso_rate = zeros(len(p_can_isolate))
+            for k in range(len(p_can_isolate)):
+                old_state = copy(states[p_can_isolate[k], :])
+                iso_rate[k] = P_iso_rate * old_state[6*i+2]
+                new_state = copy(old_state)
+                new_state[6*i+2] -= 1
+                new_state[6*i+5] += 1
+                iso_to[k] = index_vector[
+                    new_state.dot(reverse_prod) + new_state[-1], 0]
+            Q_int += sparse(
+                (iso_rate, (p_can_isolate, iso_to)),
+                shape=(total_size, total_size))
+            # Isolation of fully infectious cases
+            iso_to = zeros(len(i_can_isolate), dtype=my_int)
+            iso_rate = zeros(len(i_can_isolate))
+            for k in range(len(i_can_isolate)):
+                old_state = copy(states[i_can_isolate[k], :])
+                iso_rate[k] = I_iso_rate * old_state[6*i+3]
+                new_state = copy(old_state)
+                new_state[6*i+3] -= 1
+                new_state[6*i+5] += 1
+                iso_to[k] = index_vector[
+                    new_state.dot(reverse_prod) + new_state[-1], 0]
+            Q_int += sparse(
+                (iso_rate, (i_can_isolate, iso_to)),
                 shape=(total_size, total_size))
             # Return home of isolated cases
             return_to = zeros(len(iso_present), dtype=my_int)
