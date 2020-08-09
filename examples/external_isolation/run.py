@@ -5,14 +5,18 @@ from os.path import isfile
 from pickle import load, dump
 from numpy import arange, array
 from numpy.random import rand
+from pandas import read_csv
 from time import time as get_time
 from scipy.integrate import solve_ivp
-from model.preprocessing import TwoAgeModelInput, HouseholdPopulation
+from model.preprocessing import TwoAgeWithVulnerableInput, HouseholdPopulation
 from model.preprocessing import make_initial_condition
 from model.specs import DEFAULT_SPEC
 from model.common import RateEquations, within_household_SEDURQ
 from model.imports import ( FixedImportModel)
 # pylint: disable=invalid-name
+
+spec = DEFAULT_SPEC
+DEFAULT_SPEC['vuln_prop'] = 0.1
 
 model_input = TwoAgeModelInput(DEFAULT_SPEC)
 model_input.D_iso_rate = 1/1
@@ -26,10 +30,13 @@ if isfile('iso-vars.pkl') is True:
         household_population = load(f)
 else:
     # List of observed household compositions
-    composition_list = array([
-        [0, 1], [0, 2], [1, 1], [1, 2], [2, 1], [2, 2]])
+    composition_list = read_csv(
+        'inputs/eng_and_wales_adult_child_composition_list.csv',
+        header=0).to_numpy()
     # Proportion of households which are in each composition
-    comp_dist = array([0.2, 0.2, 0.1, 0.1, 0.1, 0.1])
+    comp_dist = read_csv(
+        'inputs/eng_and_wales_adult_child_composition_dist.csv',
+        header=0).to_numpy().squeeze()
     # With the parameters chosen, we calculate Q_int:
     household_population = HouseholdPopulation(
         composition_list, comp_dist, model_input, within_household_SEDURQ,6)
