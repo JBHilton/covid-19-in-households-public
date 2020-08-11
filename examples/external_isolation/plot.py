@@ -5,11 +5,13 @@ from matplotlib.pyplot import subplots
 from matplotlib.cm import get_cmap
 
 with open('external-isolation-results.pkl', 'rb') as f:
-    t, H, D, U, Q, coarse_bds = load(f)
+    t, H, P, I, Q, children_per_hh, nonv_adults_per_hh, vuln_adults_per_hh = load(f)
 
-lgd=[
-    'Age {} to {}'.format(coarse_bds[i], coarse_bds[i+1])
-    for i, _ in enumerate(coarse_bds[:-1])]
+class_per_hh = [children_per_hh, nonv_adults_per_hh, vuln_adults_per_hh]
+
+print(class_per_hh)
+
+lgd=['Children','Non-vulnerable adults','Vulnerable adults']
 
 #clist=0.5*ones(10,3)
 #clist(:,1)=(1/11)*(1:10)
@@ -19,27 +21,23 @@ fig, (axis_det, axis_undet, axis_isolate) = subplots(3,1, sharex=True)
 
 cmap = get_cmap('tab20')
 alpha = 0.5
-for i, _ in enumerate(coarse_bds[:-1]):
+for i in range(3):
     axis_det.plot(
-        t, D[:,i], label=lgd[i],
-        color=cmap(i/len(coarse_bds)), alpha=alpha)
-axis_det.plot(t,D[:,-1], label='Age{}+'.format(coarse_bds[-1]))
-axis_det.set_ylabel('Detected prevalence')
+        t,P[:,i]/class_per_hh[i], label=lgd[i],
+        color=cmap(i/3), alpha=alpha)
+axis_det.set_ylabel('Prodromal prevalence')
 
 
-for i, _ in enumerate(coarse_bds[:-1]):
+for i in range(3):
     axis_undet.plot(
-        t, U[:,i], label=lgd[i],
-        color=cmap(i/len(coarse_bds)), alpha=alpha)
-axis_undet.plot(t,U[:,-1], label='Age{}+'.format(coarse_bds[-1]))
-axis_undet.set_xlabel('Time in days')
-axis_undet.set_ylabel('Undetected prevalence')
+        t, I[:,i]/class_per_hh[i], label=lgd[i],
+        color=cmap(i/3), alpha=alpha)
+axis_undet.set_ylabel('Infectious prevalence')
 
-for i, _ in enumerate(coarse_bds[:-1]):
+for i in range(3):
     axis_isolate.plot(
-        t, Q[:,i], label=lgd[i],
-        color=cmap(i/len(coarse_bds)), alpha=alpha)
-axis_isolate.plot(t,U[:,-1], label='Age{}+'.format(coarse_bds[-1]))
+        t, Q[:,i]/class_per_hh[i], label=lgd[i],
+        color=cmap(i/3), alpha=alpha)
 axis_isolate.set_xlabel('Time in days')
 axis_isolate.set_ylabel('Proportion in isolation')
 

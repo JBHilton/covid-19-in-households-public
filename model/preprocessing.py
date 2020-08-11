@@ -1,13 +1,15 @@
 '''Various functions and classes that help build the model'''
-from copy import deepcopy
+from copy import copy, deepcopy
 from numpy import (
         append, arange, array, cumsum, ones, ones_like, power, where, zeros,
         concatenate, vstack, identity, tile, hstack)
 from scipy.sparse import block_diag
-from scipy.special import binom
+from scipy.special import binom as binom_coeff
+from scipy.stats import binom
 from pandas import read_excel, read_csv
 from tqdm import tqdm
 from model.common import within_household_spread, within_household_SEDURQ, within_household_SEPIRQ, sparse, my_int
+import pdb
 
 
 def make_initial_condition(
@@ -21,6 +23,25 @@ def make_initial_condition(
         household_population.states.sum(axis=1))[0]
     i_is_one = where(
         (rhs.states_det_only + rhs.states_undet_only).sum(axis=1) == 1)[0]
+    H0 = zeros(len(household_population.which_composition))
+    x = household_population.composition_distribution[
+        household_population.which_composition[i_is_one]]
+    H0[i_is_one] = alpha * x
+    H0[fully_sus] = (1.0 - alpha * sum(x)) \
+        * household_population.composition_distribution
+    return H0
+
+def make_initial_SEPIRQ_condition(
+        household_population,
+        rhs,
+        alpha=1.0e-5):
+    '''TODO: docstring'''
+    fully_sus = where(
+        rhs.states_sus_only.sum(axis=1)
+        ==
+        household_population.states.sum(axis=1))[0]
+    i_is_one = where(
+        (rhs.states_inf_only).sum(axis=1) == 1)[0]
     H0 = zeros(len(household_population.which_composition))
     x = household_population.composition_distribution[
         household_population.which_composition[i_is_one]]
@@ -94,6 +115,24 @@ def aggregate_vector_quantities(v_fine, fine_bds, coarse_bds, pyramid):
 
     return pop_weight_matrix * v_fine
 
+'''The next function creates a version of the adult-child composition list and
+distribution which distinguishes between vulnerable and non-vulnerable adutls.
+Note that as written it is assuming only two age classes, with the second one
+being the one we divide by vulnerability.'''
+def add_vulnerable_hh_members(composition_list,composition_distribution,vuln_prop):
+    new_comp_list = copy(composition_list)
+    new_comp_list = hstack((composition_list,zeros((len(composition_list),1),dtype=my_int)))
+    new_comp_dist = copy(composition_distribution)
+    for comp_no in range(len(composition_list)):
+        comp = composition_list[comp_no]
+        if comp[1]>0:
+            new_comp_dist[comp_no] = composition_distribution[comp_no]*binom.pmf(0,comp[1],vuln_prop)
+            for i in range(1,comp[1]+1):
+                new_comp_list = vstack((new_comp_list,[comp[0],comp[1]-i,i]))
+                prob = composition_distribution[comp_no]*binom.pmf(i,comp[1],vuln_prop)
+                new_comp_dist = append(new_comp_dist,prob)
+    # pdb.set_trace()
+    return new_comp_list,new_comp_dist
 
 class HouseholdPopulation:
     def __init__(
@@ -127,7 +166,7 @@ class HouseholdPopulation:
         system_sizes = ones(no_types, dtype=my_int)
         for i, _ in enumerate(system_sizes):
             for j in where(classes_present[i, :])[0]:
-                system_sizes[i] *= binom(
+                system_sizes[i] *= binom_coeff(
                     composition_list[i, j] + no_compartments - 1,
                     no_compartments - 1)
 
@@ -410,6 +449,9 @@ class TwoAgeWithVulnerableInput:
 
         self.vuln_prop = spec['vuln_prop'] # Proportion vulnerable who require shileding/isolation
 
+        left_expander = vstack((identity(2),[0,1])) # Add copy of bottom row - vulnerables behave identically to adults
+        right_expander = array([[1,0,0],[0,1-self.vuln_prop,self.vuln_prop]]) # Add copy of right row, scaled by vulnerables, and scale adult column by non-vuln proportion
+
         k_home = read_excel(
             spec['k_home']['file_name'],
             sheet_name=spec['k_home']['sheet_name'],
@@ -434,30 +476,14 @@ class TwoAgeWithVulnerableInput:
             k_all, fine_bds, self.coarse_bds, pop_pyramid)
         self.k_ext = self.k_all - self.k_home
 
-        # This is in ten year blocks
-        rho = read_csv(
-            spec['rho_file_name'], header=None).to_numpy().flatten()
+        self.k_home = left_expander.dot(self.k_home.dot(right_expander))
+        self.k_all = left_expander.dot(self.k_all.dot(right_expander))
+        self.k_ext = left_expander.dot(self.k_ext.dot(right_expander))
 
-        # This is in ten year blocks
-        # rho = read_csv(
-        #     'inputs/rho_estimate_cdc.csv', header=None).to_numpy().flatten()
+        self.sus = spec['sus']
+        self.tau = spec['tau']
 
-        cdc_bds = arange(0, 81, 10)
-        aggregator = make_aggregator(cdc_bds, fine_bds)
-
-        # This is in five year blocks
-        rho = sparse((
-            rho[aggregator],
-            (arange(len(aggregator)), [0]*len(aggregator))))
-
-        rho = spec['gamma'] * spec['R0'] * aggregate_vector_quantities(
-            rho, fine_bds, self.coarse_bds, pop_pyramid).toarray().squeeze()
-
-        det_model = det_from_spec(self.spec)
-        # self.det = (0.9/max(rho)) * rho
-        self.det = det_model(rho)
-        self.tau = spec['tau'] * ones(rho.shape)
-        self.sigma = rho / self.det
+        self.vuln_prop = spec['vuln_prop']
 
     @property
     def alpha(self):

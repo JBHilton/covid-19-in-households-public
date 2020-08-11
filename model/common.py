@@ -315,6 +315,7 @@ def within_household_SEDURQ(
             len(rows),
             '=',
             sum(array(rows) < 0) / len(rows))
+    # pdb.set_trace()
     index_vector = sparse((
         arange(total_size),
         (rows, [0]*total_size)))
@@ -483,8 +484,7 @@ def within_household_SEPIRQ(
     composition[i] is the number of individuals in age-class i inside the
     household'''
 
-    sus = model_input.sigma
-    det = model_input.det
+    sus = model_input.sus
     tau = model_input.tau
     K_home = model_input.k_home
     alpha = model_input.alpha
@@ -506,7 +506,6 @@ def within_household_SEPIRQ(
 
     K_home = K_home[ix_(classes_present, classes_present)]
     sus = sus[classes_present]
-    det = det[classes_present]
     tau = tau[classes_present]
     r_home = atleast_2d(diag(sus).dot(K_home))
 
@@ -525,7 +524,7 @@ def within_household_SEPIRQ(
 
     for age_class in range(len(classes_present)):
         k = 0
-        c = composition[classes_present[i]]
+        c = composition[classes_present[age_class]]
         for s in arange(c + 1):
             for e in arange(c - s + 1):
                 for p in arange(c - s - e + 1):
@@ -676,7 +675,9 @@ def within_household_SEPIRQ(
         # disp('Recovery events from detecteds done')
 
         #Now do isolation
-        if (class_is_isolating[i,classes_present]).any(): # This checks whether class i is meant to isolated and whether any of the vulnerable classes are present
+        if (class_is_isolating[classes_present[i],classes_present]).any(): # This checks whether class i is meant to isolated and whether any of the vulnerable classes are present
+            if not classes_present[i]==1:
+                pdb.set_trace()
             if (i<adult_bd) or not children_present: # If i is a child class or there are no children around, anyone can isolate
                 e_can_isolate = e_present
                 p_can_isolate = p_present
@@ -783,6 +784,36 @@ def build_external_import_matrix(
 
     return Q_ext_d, Q_ext_u
 
+def build_external_import_matrix_SEPIRQ(
+        household_population, FOI_pro, FOI_inf):
+    '''Gets sparse matrices containing rates of external infection in a
+    household of a given type'''
+
+    row = household_population.inf_event_row
+    col = household_population.inf_event_col
+    inf_class = household_population.inf_event_class
+    total_size = len(household_population.which_composition)
+
+    # Figure out which class gets infected in this transition
+    p_vals = FOI_pro[row, inf_class]
+    i_vals = FOI_inf[row, inf_class]
+
+    matrix_shape = (total_size, total_size)
+    Q_ext_p = sparse(
+        (p_vals, (row, col)),
+        shape=matrix_shape)
+    Q_ext_i = sparse(
+        (i_vals, (row, col)),
+        shape=matrix_shape)
+
+    diagonal_idexes = (arange(total_size), arange(total_size))
+    S = Q_ext_p.sum(axis=1).getA().squeeze()
+    Q_ext_p += sparse((-S, diagonal_idexes))
+    S = Q_ext_i.sum(axis=1).getA().squeeze()
+    Q_ext_i += sparse((-S, diagonal_idexes))
+
+    return Q_ext_p, Q_ext_i
+
 
 class RateEquations:
     '''This class represents a functor for evaluating the rate equations for
@@ -828,6 +859,9 @@ class RateEquations:
         '''hh_ODE_rates calculates the rates of the ODE system describing the
         household ODE model'''
         Q_ext_det, Q_ext_undet = self.external_matrices(t, H)
+        if (H<0).any():
+            # pdb.set_trace()
+            H[where(H<0)[0]]=0
         if isnan(H).any():
             pdb.set_trace()
         dH = (H.T * (self.Q_int + Q_ext_det + Q_ext_undet)).T
@@ -866,3 +900,89 @@ class RateEquations:
                 + self.importation_model.undetected(t))))
 
         return FOI_det, FOI_undet
+
+class SEPIRQRateEquations:
+    '''This class represents a functor for evaluating the rate equations for
+    the model with no imports of infection from outside the population. The
+    state of the class contains all essential variables'''
+    # pylint: disable=invalid-name
+    def __init__(self,
+                 model_input,
+                 household_population,
+                 importation_model=NoImportModel(),
+                 epsilon=1.0,        # TODO: this needs a better name
+                 no_compartments=5
+                 ):
+
+        self.household_population = household_population
+        self.epsilon = epsilon
+        self.Q_int = household_population.Q_int
+        # To define external mixing we need to set up the transmission
+        # matrices.
+        # Scale rows of contact matrix by
+        self.pro_trans_matrix = model_input.k_ext.dot(diag(model_input.tau))
+        # age-specific susceptibilities
+        # Scale columns by asymptomatic reduction in transmission
+        self.inf_trans_matrix = model_input.k_ext
+        # This stores number in each age class by household
+        self.composition_by_state = household_population.composition_by_state
+        # ::5 gives columns corresponding to susceptible cases in each age
+        # class in each state
+        self.states_sus_only = household_population.states[:, ::no_compartments]
+
+        self.s_present = where(self.states_sus_only.sum(axis=1) > 0)[0]
+        # 2::5 gives columns corresponding to detected cases in each age class
+        # in each state
+        self.states_pro_only = household_population.states[:, 2::no_compartments]
+        # 4:5:end gives columns corresponding to undetected cases in each age
+        # class in each state
+        self.states_inf_only = household_population.states[:, 3::no_compartments]
+        self.epsilon = epsilon
+        self.importation_model = importation_model
+
+    def __call__(self, t, H):
+        '''hh_ODE_rates calculates the rates of the ODE system describing the
+        household ODE model'''
+        Q_ext_pro, Q_ext_inf = self.external_matrices(t, H)
+        if (H<-0).any():
+            # pdb.set_trace()
+            H[where(H<0)[0]]=0
+            H = H/sum(H)
+        if isnan(H).any():
+            pdb.set_trace()
+        dH = (H.T * (self.Q_int + Q_ext_pro + Q_ext_inf)).T
+        return dH
+
+    def external_matrices(self, t, H):
+        FOI_pro, FOI_inf = self.get_FOI_by_class(t, H)
+        return build_external_import_matrix_SEPIRQ(
+            self.household_population,
+            FOI_pro,
+            FOI_inf)
+
+    def get_FOI_by_class(self, t, H):
+        '''This calculates the age-stratified force-of-infection (FOI) on each
+        household composition'''
+        denom = H.T.dot(self.composition_by_state) # Average number of each class by household
+        # Average prodromal infected by household in each class
+        pro_by_class = zeros(shape(denom))
+        pro_by_class[denom>0] = (
+            H.T.dot(self.states_pro_only)[denom>0] # Only want to do states with positive denominator
+            / denom[denom>0]).squeeze()
+        # Average full infectious infected by household in each class
+        inf_by_class = zeros(shape(denom))
+        inf_by_class[denom>0] = (
+            H.T.dot(self.states_inf_only)[denom>0]
+            / denom[denom>0]).squeeze()
+        # This stores the rates of generating an infected of each class in each state
+        FOI_pro = self.states_sus_only.dot(
+            diag(self.pro_trans_matrix.dot(
+                self.epsilon * pro_by_class.T
+                + self.importation_model.detected(t))))
+        # This stores the rates of generating an infected of each class in each state
+        FOI_inf = self.states_sus_only.dot(
+            diag(self.inf_trans_matrix.dot(
+                self.epsilon * inf_by_class.T
+                + self.importation_model.undetected(t))))
+
+        return FOI_pro, FOI_inf
