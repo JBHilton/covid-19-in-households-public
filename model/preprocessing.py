@@ -480,14 +480,18 @@ class TwoAgeWithVulnerableInput:
         self.k_all = left_expander.dot(self.k_all.dot(right_expander))
         self.k_ext = left_expander.dot(self.k_ext.dot(right_expander))
 
-        self.sus = spec['sus']
+        self.sus = spec['R0']*spec['gamma']*spec['sus']
         self.tau = spec['tau']
 
         self.vuln_prop = spec['vuln_prop']
 
     @property
-    def alpha(self):
-        return self.spec['alpha']
+    def alpha_1(self):
+        return self.spec['alpha_1']
+
+    @property
+    def alpha_2(self):
+        return self.spec['alpha_2']
 
     @property
     def gamma(self):

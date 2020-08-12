@@ -19,13 +19,14 @@ import pdb
 spec = SEPIRQ_SPEC
 
 model_input = TwoAgeWithVulnerableInput(SEPIRQ_SPEC)
-model_input.alpha2 = 1/1
+# model_input.alpha2 = 1/1
 model_input.E_iso_rate = 1/2
 model_input.P_iso_rate = 1/1
 model_input.I_iso_rate = 2
 model_input.discharge_rate = 1/7
 model_input.adult_bd = 1
-model_input.class_is_isolating = array([[False, False, False],[False,False,True],[False,False,False]])
+model_input.class_is_isolating = array([[True, True, True],[True,True,True],[True,True,True]])
+model_input.iso_method = 1
 
 if isfile('iso-vars.pkl') is True:
     with open('iso-vars.pkl', 'rb') as f:
@@ -64,7 +65,7 @@ rhs = SEPIRQRateEquations(
 
 H0 = make_initial_SEPIRQ_condition(household_population, rhs)
 
-tspan = (0.0, 100)
+tspan = (0.0, 30)
 solver_start = get_time()
 solution = solve_ivp(rhs, tspan, H0, first_step=0.001)
 solver_end = get_time()
@@ -73,7 +74,13 @@ time = solution.t
 H = solution.y
 P = H.T.dot(household_population.states[:, 2::6])
 I = H.T.dot(household_population.states[:, 3::6])
-Q = H.T.dot(household_population.states[:, 5::6])
+if model_input.iso_method==0:
+    Q = H.T.dot(household_population.states[:, 5::6])
+else:
+    states_iso_only = household_population.states[:,5::6]
+    total_iso_by_state =states_iso_only.sum(axis=1)
+    iso_present = total_iso_by_state>0
+    Q = H[iso_present,:].T.dot(household_population.composition_by_state[iso_present,:])
 
 # pdb.set_trace()
 children_per_hh = comp_dist.T.dot(composition_list[:,0])

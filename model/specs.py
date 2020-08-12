@@ -59,7 +59,8 @@ SEPIRQ_SPEC = {
     # Interpretable parameters:
     'R0': 2.4,                      # Reproduction number
     'gamma': 0.5,                   # Mean infectious period
-    'alpha': 0.2,                   # Incubation period
+    'alpha_1': 0.2,                   # E->P incubation period
+    'alpha_2': 1,                   # P->I prodromal to symptomatic period
     'tau': array([0.5,0.5,0.5]),           # Prodromal transmission intensity relative to full inf transmission
     'sus': array([1,1,1]),                 # Relative susceptibility by age
     'vuln_prop': 0.1,               #Proportion vulnerable who must be protected

@@ -487,8 +487,8 @@ def within_household_SEPIRQ(
     sus = model_input.sus
     tau = model_input.tau
     K_home = model_input.k_home
-    alpha = model_input.alpha
-    alpha2 = model_input.alpha2
+    alpha_1 = model_input.alpha_1
+    alpha_2 = model_input.alpha_2
     gamma = model_input.gamma
     E_iso_rate = model_input.E_iso_rate
     P_iso_rate = model_input.P_iso_rate
@@ -496,6 +496,7 @@ def within_household_SEPIRQ(
     discharge_rate = model_input.discharge_rate
     adult_bd = model_input.adult_bd
     class_is_isolating = model_input.class_is_isolating
+    iso_method = model_input.iso_method # Set to 0 if isolating externaly, 1 if isolating internally
 
     # Set of individuals actually present here
     classes_present = where(composition.ravel() > 0)[0]
@@ -604,17 +605,30 @@ def within_household_SEPIRQ(
         # First do infection events
         inf_to = zeros(len(s_present), dtype=my_int)
         inf_rate = zeros(len(s_present))
-        for k in range(len(s_present)):
-            old_state = copy(states[s_present[k], :])
-            inf_rate[k] = old_state[6*i] * (
-                r_home[i, :].dot(
-                    (old_state[i_pos] / present_minus_iso[k])
-                    + (old_state[p_pos] / present_minus_iso[k]) * tau)) # Now let tau be reduction for prodromal transmission
-            new_state = old_state.copy()
-            new_state[6*i] -= 1
-            new_state[6*i + 1] += 1
-            inf_to[k] = index_vector[
-                new_state.dot(reverse_prod) + new_state[-1], 0]
+        if iso_method==0:
+            for k in range(len(s_present)):
+                old_state = copy(states[s_present[k], :])
+                inf_rate[k] = old_state[6*i] * (
+                    r_home[i, :].dot(
+                        (old_state[i_pos] / present_minus_iso[k])
+                        + (old_state[p_pos] / present_minus_iso[k]) * tau)) # Now let tau be reduction for prodromal transmission
+                new_state = old_state.copy()
+                new_state[6*i] -= 1
+                new_state[6*i + 1] += 1
+                inf_to[k] = index_vector[
+                    new_state.dot(reverse_prod) + new_state[-1], 0]
+        else:
+            for k in range(len(s_present)):
+                old_state = copy(states[s_present[k], :])
+                inf_rate[k] = old_state[6*i] * (
+                    r_home[i, :].dot(
+                        ((old_state[i_pos] + old_state[iso_pos]) / composition[classes_present])
+                        + (old_state[p_pos] / composition[classes_present]) * tau)) # Now let tau be reduction for prodromal transmission
+                new_state = old_state.copy()
+                new_state[6*i] -= 1
+                new_state[6*i + 1] += 1
+                inf_to[k] = index_vector[
+                    new_state.dot(reverse_prod) + new_state[-1], 0]
         Q_int += sparse(
             (inf_rate, (s_present, inf_to)),
             shape=(total_size, total_size))
@@ -630,7 +644,7 @@ def within_household_SEPIRQ(
         for k in range(len(e_present)):
             # First do detected
             old_state = copy(states[e_present[k], :])
-            inc_rate[k] = alpha * old_state[6*i+1]
+            inc_rate[k] = alpha_1 * old_state[6*i+1]
             new_state = copy(old_state)
             new_state[6*i + 1] -= 1
             new_state[6*i + 2] += 1
@@ -647,7 +661,7 @@ def within_household_SEPIRQ(
         for k in range(len(p_present)):
             # First do detected
             old_state = copy(states[p_present[k], :])
-            dev_rate[k] = alpha2 * old_state[6*i+2]
+            dev_rate[k] = alpha_2 * old_state[6*i+2]
             new_state = copy(old_state)
             new_state[6*i + 2] -= 1
             new_state[6*i + 3] += 1
@@ -676,9 +690,9 @@ def within_household_SEPIRQ(
 
         #Now do isolation
         if (class_is_isolating[classes_present[i],classes_present]).any(): # This checks whether class i is meant to isolated and whether any of the vulnerable classes are present
-            if not classes_present[i]==1:
-                pdb.set_trace()
-            if (i<adult_bd) or not children_present: # If i is a child class or there are no children around, anyone can isolate
+            # if not classes_present[i]==1:
+            #     pdb.set_trace()
+            if iso_method==1 or (i<adult_bd) or not children_present: # If isolating internally, i is a child class, or there are no children around, anyone can isolate
                 e_can_isolate = e_present
                 p_can_isolate = p_present
                 i_can_isolate = i_present
@@ -911,7 +925,7 @@ class SEPIRQRateEquations:
                  household_population,
                  importation_model=NoImportModel(),
                  epsilon=1.0,        # TODO: this needs a better name
-                 no_compartments=5
+                 no_compartments=6
                  ):
 
         self.household_population = household_population
@@ -940,6 +954,13 @@ class SEPIRQRateEquations:
         self.epsilon = epsilon
         self.importation_model = importation_model
 
+        self.iso_method = model_input.iso_method
+
+        if self.iso_method==1:
+            self.states_iso_only = household_population.states[:,5::no_compartments]
+            total_iso_by_state = self.states_iso_only.sum(axis=1)
+            self.no_isos = total_iso_by_state==0
+
     def __call__(self, t, H):
         '''hh_ODE_rates calculates the rates of the ODE system describing the
         household ODE model'''
@@ -964,15 +985,19 @@ class SEPIRQRateEquations:
         '''This calculates the age-stratified force-of-infection (FOI) on each
         household composition'''
         denom = H.T.dot(self.composition_by_state) # Average number of each class by household
+        if self.iso_method == 0:
+            FOI_range = range(len(H))
+        else:
+            FOI_range = where(self.no_isos)[0]
         # Average prodromal infected by household in each class
         pro_by_class = zeros(shape(denom))
         pro_by_class[denom>0] = (
-            H.T.dot(self.states_pro_only)[denom>0] # Only want to do states with positive denominator
+            H[FOI_range].T.dot(self.states_pro_only[FOI_range])[denom>0] # Only want to do states with positive denominator
             / denom[denom>0]).squeeze()
         # Average full infectious infected by household in each class
         inf_by_class = zeros(shape(denom))
         inf_by_class[denom>0] = (
-            H.T.dot(self.states_inf_only)[denom>0]
+            H[FOI_range].T.dot(self.states_inf_only[FOI_range])[denom>0]
             / denom[denom>0]).squeeze()
         # This stores the rates of generating an infected of each class in each state
         FOI_pro = self.states_sus_only.dot(
