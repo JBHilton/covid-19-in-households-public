@@ -27,21 +27,22 @@ model_input.discharge_rate = 1/7
 model_input.adult_bd = 1
 model_input.class_is_isolating = array([[True, True, True],[True,True,True],[True,True,True]])
 model_input.iso_method = 1
+model_input.iso_prob = 0.5
 
 if isfile('iso-vars.pkl') is True:
     with open('iso-vars.pkl', 'rb') as f:
         household_population, composition_list, comp_dist = load(f)
 else:
     # List of observed household compositions
-    baseline_composition_list = read_csv(
-        'inputs/eng_and_wales_adult_child_composition_list.csv',
+    composition_list = read_csv(
+        'inputs/eng_and_wales_adult_child_vuln_composition_list.csv',
         header=0).to_numpy()
     # Proportion of households which are in each composition
-    baseline_comp_dist = read_csv(
-        'inputs/eng_and_wales_adult_child_composition_dist.csv',
+    comp_dist = read_csv(
+        'inputs/eng_and_wales_adult_child_vuln_composition_dist.csv',
         header=0).to_numpy().squeeze()
     # With the parameters chosen, we calculate Q_int:
-    composition_list, comp_dist = add_vulnerable_hh_members(baseline_composition_list,baseline_comp_dist,model_input.vuln_prop)
+    # composition_list, comp_dist = add_vulnerable_hh_members(baseline_composition_list,baseline_comp_dist,model_input.vuln_prop)
     household_population = HouseholdPopulation(
         composition_list, comp_dist, model_input, within_household_SEPIRQ,6)
     with open('iso-vars.pkl', 'wb') as f:

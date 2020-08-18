@@ -960,6 +960,8 @@ class SEPIRQRateEquations:
             self.states_iso_only = household_population.states[:,5::no_compartments]
             total_iso_by_state = self.states_iso_only.sum(axis=1)
             self.no_isos = total_iso_by_state==0
+            self.isos_present = total_iso_by_state>0
+            self.iso_prob = model_input.iso_prob
 
     def __call__(self, t, H):
         '''hh_ODE_rates calculates the rates of the ODE system describing the
@@ -986,19 +988,29 @@ class SEPIRQRateEquations:
         household composition'''
         denom = H.T.dot(self.composition_by_state) # Average number of each class by household
         if self.iso_method == 0:
-            FOI_range = range(len(H))
+            # Average prodromal infected by household in each class
+            pro_by_class = zeros(shape(denom))
+            pro_by_class[denom>0] = (
+                H.T.dot(self.states_pro_only[ix_(arange(len(H)),denom>0)]) # Only want to do states with positive denominator
+                / denom[denom>0]).squeeze()
+            # Average full infectious infected by household in each class
+            inf_by_class = zeros(shape(denom))
+            inf_by_class[denom>0] = (
+                H.T.dot(self.states_inf_only[ix_(range(len(H)),denom>0)])
+                / denom[denom>0]).squeeze()
         else:
-            FOI_range = where(self.no_isos)[0]
-        # Average prodromal infected by household in each class
-        pro_by_class = zeros(shape(denom))
-        pro_by_class[denom>0] = (
-            H[FOI_range].T.dot(self.states_pro_only[FOI_range])[denom>0] # Only want to do states with positive denominator
-            / denom[denom>0]).squeeze()
-        # Average full infectious infected by household in each class
-        inf_by_class = zeros(shape(denom))
-        inf_by_class[denom>0] = (
-            H[FOI_range].T.dot(self.states_inf_only[FOI_range])[denom>0]
-            / denom[denom>0]).squeeze()
+            # Average prodromal infected by household in each class
+            pro_by_class = zeros(shape(denom))
+            pro_by_class[denom>0] = (
+                (H[where(self.no_isos)[0]].T.dot(self.states_pro_only[ix_(where(self.no_isos)[0],denom>0)]) +
+                (1 - self.iso_prob)*H[where(self.isos_present)[0]].T.dot(self.states_pro_only[ix_(where(self.isos_present)[0],denom>0)]))
+                / denom[denom>0]).squeeze()
+            # Average full infectious infected by household in each class
+            inf_by_class = zeros(shape(denom))
+            inf_by_class[denom>0] = (
+                (H[where(self.no_isos)[0]].T.dot(self.states_inf_only[ix_(where(self.no_isos)[0],denom>0)]) +
+                (1 - self.iso_prob)*H[where(self.isos_present)[0]].T.dot(self.states_inf_only[ix_(where(self.isos_present)[0],denom>0)]))
+                / denom[denom>0]).squeeze()
         # This stores the rates of generating an infected of each class in each state
         FOI_pro = self.states_sus_only.dot(
             diag(self.pro_trans_matrix.dot(
