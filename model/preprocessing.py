@@ -34,19 +34,22 @@ def make_initial_condition(
 def make_initial_SEPIRQ_condition(
         household_population,
         rhs,
-        alpha=1.0e-5):
+        prev=1.0e-5):
     '''TODO: docstring'''
     fully_sus = where(
         rhs.states_sus_only.sum(axis=1)
         ==
         household_population.states.sum(axis=1))[0]
     i_is_one = where(
-        (rhs.states_inf_only).sum(axis=1) == 1)[0]
+        ((rhs.states_inf_only).sum(axis=1) == 1) & \
+        ((rhs.states_sus_only+rhs.states_inf_only).sum(axis=1)
+        ==
+        household_population.states.sum(axis=1)) )[0]
     H0 = zeros(len(household_population.which_composition))
     x = household_population.composition_distribution[
         household_population.which_composition[i_is_one]]
-    H0[i_is_one] = alpha * x
-    H0[fully_sus] = (1.0 - alpha * sum(x)) \
+    H0[i_is_one] = prev * x
+    H0[fully_sus] = (1.0 - prev * sum(x)) \
         * household_population.composition_distribution
     return H0
 
@@ -447,7 +450,9 @@ class TwoAgeWithVulnerableInput:
     def __init__(self, spec):
         self.spec = deepcopy(spec)
 
-        self.vuln_prop = spec['vuln_prop'] # Proportion vulnerable who require shileding/isolation
+        self.epsilon = spec['epsilon']
+
+        self.vuln_prop = spec['vuln_prop']
 
         left_expander = vstack((identity(2),[0,1])) # Add copy of bottom row - vulnerables behave identically to adults
         right_expander = array([[1,0,0],[0,1-self.vuln_prop,self.vuln_prop]]) # Add copy of right row, scaled by vulnerables, and scale adult column by non-vuln proportion

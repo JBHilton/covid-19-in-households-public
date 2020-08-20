@@ -50,7 +50,6 @@ else:
 
 # Relative strength of between-household transmission compared to external
 # imports
-epsilon = 0.5
 no_days = 100
 
 import_model = FixedImportModel(
@@ -60,15 +59,14 @@ import_model = FixedImportModel(
 rhs = SEPIRQRateEquations(
     model_input,
     household_population,
-    import_model,
-    epsilon,
-    6)
+    import_model
+    )
 
 H0 = make_initial_SEPIRQ_condition(household_population, rhs)
 
 tspan = (0.0, 30)
 solver_start = get_time()
-solution = solve_ivp(rhs, tspan, H0, first_step=0.001)
+solution = solve_ivp(rhs, tspan, H0, first_step=0.001, atol=1e-16)
 solver_end = get_time()
 
 time = solution.t

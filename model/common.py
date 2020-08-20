@@ -280,9 +280,9 @@ def within_household_SEDURQ(
     u_pos = 3 + 6 * arange(len(classes_present))
     iso_pos = 5 + 6 * arange(len(classes_present))
 
-    present_minus_iso = composition[classes_present] - states[:,iso_pos] # This is number of people of each age class present in the household given some may isolate
-    present_minus_iso[present_minus_iso==0] = 1 # Replace zeros with ones - we only ever use this as a denominator whose numerator will be zero anyway if it should be zero
-    if (present_minus_iso<1).any():
+    iso_adjusted_comp = composition[classes_present] - states[:,iso_pos] # This is number of people of each age class present in the household given some may isolate
+    iso_adjusted_comp[iso_adjusted_comp==0] = 1 # Replace zeros with ones - we only ever use this as a denominator whose numerator will be zero anyway if it should be zero
+    if (iso_adjusted_comp<1).any():
         pdb.set_trace()
     adults_isolating = states[:,6*adult_bd+5::6].sum(axis=1) # Number of adults isolating by state
 
@@ -339,8 +339,8 @@ def within_household_SEDURQ(
             old_state = copy(states[s_present[k], :])
             inf_rate[k] = old_state[6*i] * (
                 r_home[i, :].dot(
-                    (old_state[d_pos] / present_minus_iso[k])
-                    + (old_state[u_pos] / present_minus_iso[k]) * tau))
+                    (old_state[d_pos] / iso_adjusted_comp[k])
+                    + (old_state[u_pos] / iso_adjusted_comp[k]) * tau))
             new_state = old_state.copy()
             new_state[6*i] -= 1
             new_state[6*i + 1] += 1
@@ -498,6 +498,8 @@ def within_household_SEPIRQ(
     class_is_isolating = model_input.class_is_isolating
     iso_method = model_input.iso_method # Set to 0 if isolating externaly, 1 if isolating internally
 
+    tau_Q = (tau/alpha_2 + 1/gamma)/(1/alpha_1+1/alpha_2+1/gamma) # Scaling for infection from quarantined cases
+
     # Set of individuals actually present here
     classes_present = where(composition.ravel() > 0)[0]
 
@@ -508,6 +510,7 @@ def within_household_SEPIRQ(
     K_home = K_home[ix_(classes_present, classes_present)]
     sus = sus[classes_present]
     tau = tau[classes_present]
+    tau_Q = tau_Q[classes_present]
     r_home = atleast_2d(diag(sus).dot(K_home))
 
     system_sizes = array([
@@ -551,9 +554,9 @@ def within_household_SEPIRQ(
     i_pos = 3 + 6 * arange(len(classes_present))
     iso_pos = 5 + 6 * arange(len(classes_present))
 
-    present_minus_iso = composition[classes_present] - states[:,iso_pos] # This is number of people of each age class present in the household given some may isolate
-    present_minus_iso[present_minus_iso==0] = 1 # Replace zeros with ones - we only ever use this as a denominator whose numerator will be zero anyway if it should be zero
-    if (present_minus_iso<1).any():
+    iso_adjusted_comp = composition[classes_present] - (1-iso_method)*states[:,iso_pos] # This is number of people of each age class present in the household given some may isolate
+    iso_adjusted_comp[iso_adjusted_comp==0] = 1 # Replace zeros with ones - we only ever use this as a denominator whose numerator will be zero anyway if it should be zero
+    if (iso_adjusted_comp<1).any():
         pdb.set_trace()
     adults_isolating = states[:,6*adult_bd+5::6].sum(axis=1) # Number of adults isolating by state
 
@@ -605,30 +608,18 @@ def within_household_SEPIRQ(
         # First do infection events
         inf_to = zeros(len(s_present), dtype=my_int)
         inf_rate = zeros(len(s_present))
-        if iso_method==0:
-            for k in range(len(s_present)):
-                old_state = copy(states[s_present[k], :])
-                inf_rate[k] = old_state[6*i] * (
-                    r_home[i, :].dot(
-                        (old_state[i_pos] / present_minus_iso[k])
-                        + (old_state[p_pos] / present_minus_iso[k]) * tau)) # Now let tau be reduction for prodromal transmission
-                new_state = old_state.copy()
-                new_state[6*i] -= 1
-                new_state[6*i + 1] += 1
-                inf_to[k] = index_vector[
-                    new_state.dot(reverse_prod) + new_state[-1], 0]
-        else:
-            for k in range(len(s_present)):
-                old_state = copy(states[s_present[k], :])
-                inf_rate[k] = old_state[6*i] * (
-                    r_home[i, :].dot(
-                        ((old_state[i_pos] + old_state[iso_pos]) / composition[classes_present])
-                        + (old_state[p_pos] / composition[classes_present]) * tau)) # Now let tau be reduction for prodromal transmission
-                new_state = old_state.copy()
-                new_state[6*i] -= 1
-                new_state[6*i + 1] += 1
-                inf_to[k] = index_vector[
-                    new_state.dot(reverse_prod) + new_state[-1], 0]
+        for k in range(len(s_present)):
+            old_state = copy(states[s_present[k], :])
+            inf_rate[k] = old_state[6*i] * (
+                r_home[i, :].dot(
+                    (old_state[i_pos] / iso_adjusted_comp[k])
+                    + (old_state[p_pos] / iso_adjusted_comp[k]) * tau # tau is prodromal reduction
+                    + iso_method*(old_state[iso_pos] / iso_adjusted_comp[k]) * tau_Q)) # if we are doing internal isolation we scale down by tau_Q
+            new_state = old_state.copy()
+            new_state[6*i] -= 1
+            new_state[6*i + 1] += 1
+            inf_to[k] = index_vector[
+                new_state.dot(reverse_prod) + new_state[-1], 0]
         Q_int += sparse(
             (inf_rate, (s_present, inf_to)),
             shape=(total_size, total_size))
@@ -923,13 +914,14 @@ class SEPIRQRateEquations:
     def __init__(self,
                  model_input,
                  household_population,
-                 importation_model=NoImportModel(),
-                 epsilon=1.0,        # TODO: this needs a better name
-                 no_compartments=6
+                 importation_model=NoImportModel()
                  ):
 
+        no_compartments=6
+
         self.household_population = household_population
-        self.epsilon = epsilon
+        self.states = household_population.states # We don't actually use this anywhere but it's very useful to have for debugging purposes
+        self.epsilon = model_input.epsilon
         self.Q_int = household_population.Q_int
         # To define external mixing we need to set up the transmission
         # matrices.
@@ -951,13 +943,14 @@ class SEPIRQRateEquations:
         # 4:5:end gives columns corresponding to undetected cases in each age
         # class in each state
         self.states_inf_only = household_population.states[:, 3::no_compartments]
-        self.epsilon = epsilon
+        self.epsilon = model_input.epsilon
         self.importation_model = importation_model
+
+        self.states_iso_only = household_population.states[:,5::no_compartments]
 
         self.iso_method = model_input.iso_method
 
         if self.iso_method==1:
-            self.states_iso_only = household_population.states[:,5::no_compartments]
             total_iso_by_state = self.states_iso_only.sum(axis=1)
             self.no_isos = total_iso_by_state==0
             self.isos_present = total_iso_by_state>0
@@ -966,14 +959,17 @@ class SEPIRQRateEquations:
     def __call__(self, t, H):
         '''hh_ODE_rates calculates the rates of the ODE system describing the
         household ODE model'''
-        Q_ext_pro, Q_ext_inf = self.external_matrices(t, H)
         if (H<-0).any():
-            # pdb.set_trace()
+            # if (H<-1e-6).any():
+            #     pdb.set_trace()
             H[where(H<0)[0]]=0
             H = H/sum(H)
+        Q_ext_pro, Q_ext_inf = self.external_matrices(t, H)
         if isnan(H).any():
             pdb.set_trace()
         dH = (H.T * (self.Q_int + Q_ext_pro + Q_ext_inf)).T
+        # if (H+dH<-1e-6).any():
+        #     pdb.set_trace()
         return dH
 
     def external_matrices(self, t, H):
