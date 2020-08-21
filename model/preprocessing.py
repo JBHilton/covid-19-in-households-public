@@ -3,6 +3,7 @@ from copy import copy, deepcopy
 from numpy import (
         append, arange, array, cumsum, ones, ones_like, power, where, zeros,
         concatenate, vstack, identity, tile, hstack)
+from numpy.linalg import eig
 from scipy.sparse import block_diag
 from scipy.special import binom as binom_coeff
 from scipy.stats import binom
@@ -485,8 +486,17 @@ class TwoAgeWithVulnerableInput:
         self.k_all = left_expander.dot(self.k_all.dot(right_expander))
         self.k_ext = left_expander.dot(self.k_ext.dot(right_expander))
 
-        self.sus = spec['R0']*spec['gamma']*spec['sus']
+        self.sus = spec['sus']
         self.tau = spec['tau']
+
+        eigenvalue = max(eig(
+            self.sus * (spec['gamma'] * (self.k_home + self.epsilon * self.k_ext) + \
+            spec['alpha_2'] * (self.k_home + self.epsilon * self.k_ext) * self.tau)
+            )[0])
+
+        self.k_home = (spec['R0']/eigenvalue)*self.k_home
+        self.k_all = (spec['R0']/eigenvalue)*self.k_all
+        self.k_ext = (spec['R0']/eigenvalue)*self.k_ext
 
         self.vuln_prop = spec['vuln_prop']
 
