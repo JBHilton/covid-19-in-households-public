@@ -57,14 +57,14 @@ VO_SPEC = {
 
 SEPIRQ_SPEC = {
     # Interpretable parameters:
-    'R0': 2.4,                      # Reproduction number
+    'R0': 1.1,                      # Reproduction number
     'gamma': 1/4,                   # Recovery rate
     'alpha_1': 1/1,                   # E->P incubation rate
     'alpha_2': 1/5,                   # P->I prodromal to symptomatic rate
     'tau': array([0.5,0.5,0.5]),           # Prodromal transmission intensity relative to full inf transmission
     'sus': array([1,1,1]),                 # Relative susceptibility by age/vulnerability class
     'epsilon': 0.5,                  # Relative intensity of external compared to internal contacts
-    'vuln_prop': 2.2/60,            # Total proportion of adults who are shielding
+    'vuln_prop': 2.2/56,            # Total proportion of adults who are shielding
     'k_home': {
         'file_name': 'inputs/MUestimates_home_2.xlsx',
         'sheet_name':'United Kingdom of Great Britain'

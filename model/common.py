@@ -684,9 +684,9 @@ def within_household_SEPIRQ(
             # if not classes_present[i]==1:
             #     pdb.set_trace()
             if iso_method==1 or (i<adult_bd) or not children_present: # If isolating internally, i is a child class, or there are no children around, anyone can isolate
-                e_can_isolate = e_present
-                p_can_isolate = p_present
-                i_can_isolate = i_present
+                e_can_isolate = where((states[:, 6*i+1] > 0)*(states[:, 6*i+5] == 0))[0]
+                p_can_isolate = where((states[:, 6*i+2] > 0)*(states[:, 6*i+5] == 0))[0]
+                i_can_isolate = where((states[:, 6*i+3] > 0)*(states[:, 6*i+5] == 0))[0]
             else: # If children are present adults_isolating must stay below no_adults-1 so the children still have a guardian
                 e_can_isolate = where((states[:, 6*i+1] > 0)*(adults_isolating<no_adults-1))[0]
                 p_can_isolate = where((states[:, 6*i+2] > 0)*(adults_isolating<no_adults-1))[0]
@@ -926,10 +926,10 @@ class SEPIRQRateEquations:
         # To define external mixing we need to set up the transmission
         # matrices.
         # Scale rows of contact matrix by
-        self.pro_trans_matrix = model_input.k_ext.dot(diag(model_input.tau))
+        self.pro_trans_matrix = model_input.sus*model_input.k_ext.dot(diag(model_input.tau))
         # age-specific susceptibilities
         # Scale columns by asymptomatic reduction in transmission
-        self.inf_trans_matrix = model_input.k_ext
+        self.inf_trans_matrix = model_input.sus*model_input.k_ext
         # This stores number in each age class by household
         self.composition_by_state = household_population.composition_by_state
         # ::5 gives columns corresponding to susceptible cases in each age
@@ -942,6 +942,7 @@ class SEPIRQRateEquations:
         self.states_pro_only = household_population.states[:, 2::no_compartments]
         # 4:5:end gives columns corresponding to undetected cases in each age
         # class in each state
+        self.states_rec_only = household_population.states[:, 4::no_compartments]
         self.states_inf_only = household_population.states[:, 3::no_compartments]
         self.epsilon = model_input.epsilon
         self.importation_model = importation_model

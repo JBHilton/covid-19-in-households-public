@@ -4,90 +4,142 @@ individuals get isolated outside of the household'''
 from os.path import isfile
 from pickle import load, dump
 from numpy import arange, array
+from numpy.linalg import eig
 from numpy.random import rand
 from pandas import read_csv
 from time import time as get_time
 from scipy.integrate import solve_ivp
+from matplotlib.pyplot import subplots
+from matplotlib.cm import get_cmap
 from model.preprocessing import TwoAgeWithVulnerableInput, HouseholdPopulation
 from model.preprocessing import add_vulnerable_hh_members, make_initial_SEPIRQ_condition
-from model.specs import SEPIRQ_SPEC
 from model.common import SEPIRQRateEquations, within_household_SEPIRQ
 from model.imports import ( FixedImportModel)
-import pdb
-# pylint: disable=invalid-name
+from model.specs import SEPIRQ_SPEC
 
 spec = SEPIRQ_SPEC
+model_input = TwoAgeWithVulnerableInput(spec)
+prev = 1e-5
 
-model_input = TwoAgeWithVulnerableInput(SEPIRQ_SPEC)
-# model_input.alpha2 = 1/1
-model_input.E_iso_rate = 1/2
-model_input.P_iso_rate = 1/1
-model_input.I_iso_rate = 2
-model_input.discharge_rate = 1/7
+adherence_rate = 1
+
+model_input.E_iso_rate = adherence_rate*1/1
+model_input.P_iso_rate = adherence_rate*1/1
+model_input.I_iso_rate = adherence_rate*1/0.5
+model_input.discharge_rate = 1/14
 model_input.adult_bd = 1
-model_input.class_is_isolating = array([[True, True, True],[True,True,True],[True,True,True]])
-model_input.iso_method = 1
-model_input.iso_prob = 0.5
+model_input.class_is_isolating = array([[False, False, False],[False, False, True],[False, False, False]])
+model_input.iso_method = 0
+model_input.iso_prob = 1
 
-if isfile('iso-vars.pkl') is True:
-    with open('iso-vars.pkl', 'rb') as f:
-        household_population, composition_list, comp_dist = load(f)
-else:
-    # List of observed household compositions
-    composition_list = read_csv(
-        'inputs/eng_and_wales_adult_child_vuln_composition_list.csv',
-        header=0).to_numpy()
-    # Proportion of households which are in each composition
-    comp_dist = read_csv(
-        'inputs/eng_and_wales_adult_child_vuln_composition_dist.csv',
-        header=0).to_numpy().squeeze()
-    # With the parameters chosen, we calculate Q_int:
-    # composition_list, comp_dist = add_vulnerable_hh_members(baseline_composition_list,baseline_comp_dist,model_input.vuln_prop)
-    household_population = HouseholdPopulation(
-        composition_list, comp_dist, model_input, within_household_SEPIRQ,6)
-    with open('iso-vars.pkl', 'wb') as f:
-        dump((household_population, composition_list, comp_dist), f)
-
-# Relative strength of between-household transmission compared to external
-# imports
-no_days = 100
+# List of observed household compositions
+composition_list = read_csv(
+    'inputs/eng_and_wales_adult_child_vuln_composition_list.csv',
+    header=0).to_numpy()
+# Proportion of households which are in each composition
+comp_dist = read_csv(
+    'inputs/eng_and_wales_adult_child_vuln_composition_dist.csv',
+    header=0).to_numpy().squeeze()
+# With the parameters chosen, we calculate Q_int:
+OOHI_household_population = HouseholdPopulation(
+    composition_list, comp_dist, model_input, within_household_SEPIRQ,6)
 
 import_model = FixedImportModel(
-    1e-5,
-    1e-5)
+    1e-5, # Import rate of prodromals
+    1e-5) # Import rate of symptomatic cases
 
-rhs = SEPIRQRateEquations(
+OOHI_rhs = SEPIRQRateEquations(
     model_input,
-    household_population,
-    import_model
-    )
+    OOHI_household_population,
+    import_model)
 
-H0 = make_initial_SEPIRQ_condition(household_population, rhs)
+H0 = make_initial_SEPIRQ_condition(OOHI_household_population, OOHI_rhs, prev)
 
-tspan = (0.0, 30)
+no_days = 100
+tspan = (0.0, no_days)
 solver_start = get_time()
-solution = solve_ivp(rhs, tspan, H0, first_step=0.001, atol=1e-16)
+solution = solve_ivp(OOHI_rhs, tspan, H0, first_step=0.001, atol=1e-16)
 solver_end = get_time()
 
-time = solution.t
-H = solution.y
-P = H.T.dot(household_population.states[:, 2::6])
-I = H.T.dot(household_population.states[:, 3::6])
-if model_input.iso_method==0:
-    Q = H.T.dot(household_population.states[:, 5::6])
-else:
-    states_iso_only = household_population.states[:,5::6]
-    total_iso_by_state =states_iso_only.sum(axis=1)
-    iso_present = total_iso_by_state>0
-    Q = H[iso_present,:].T.dot(household_population.composition_by_state[iso_present,:])
+print('Integration completed in', solver_end-solver_start,'seconds.')
 
-# pdb.set_trace()
+OOHI_time = solution.t
+OOHI_H = solution.y
+
+S_OOHI = OOHI_H.T.dot(OOHI_household_population.states[:, ::6])
+E_OOHI = OOHI_H.T.dot(OOHI_household_population.states[:, 1::6])
+P_OOHI = OOHI_H.T.dot(OOHI_household_population.states[:, 2::6])
+I_OOHI = OOHI_H.T.dot(OOHI_household_population.states[:, 3::6])
+R_OOHI = OOHI_H.T.dot(OOHI_household_population.states[:, 4::6])
+Q_OOHI = OOHI_H.T.dot(OOHI_household_population.states[:, 5::6])
+
 children_per_hh = comp_dist.T.dot(composition_list[:,0])
 nonv_adults_per_hh = comp_dist.T.dot(composition_list[:,1])
 vuln_adults_per_hh = comp_dist.T.dot(composition_list[:,2])
 
-with open('external-isolation-results.pkl', 'wb') as f:
-    dump((time, H, P, I, Q, children_per_hh, nonv_adults_per_hh, vuln_adults_per_hh), f)
+model_input.class_is_isolating = array([[True, True, True],[True, True, True],[True, True, True]])
+model_input.iso_method = 1
 
+WHQ_household_population = HouseholdPopulation(
+    composition_list, comp_dist, model_input, within_household_SEPIRQ,6)
+
+WHQ_rhs = SEPIRQRateEquations(
+    model_input,
+    WHQ_household_population,
+    import_model)
+
+H0 = make_initial_SEPIRQ_condition(WHQ_household_population, WHQ_rhs, prev)
+
+tspan = (0.0, no_days)
+solver_start = get_time()
+solution = solve_ivp(WHQ_rhs, tspan, H0, first_step=0.001,atol=1e-16)
+solver_end = get_time()
 
 print('Integration completed in', solver_end-solver_start,'seconds.')
+
+WHQ_time = solution.t
+WHQ_H = solution.y
+
+S_WHQ = WHQ_H.T.dot(WHQ_household_population.states[:, ::6])
+E_WHQ = WHQ_H.T.dot(WHQ_household_population.states[:, 1::6])
+P_WHQ = WHQ_H.T.dot(WHQ_household_population.states[:, 2::6])
+I_WHQ = WHQ_H.T.dot(WHQ_household_population.states[:, 3::6])
+R_WHQ = WHQ_H.T.dot(WHQ_household_population.states[:, 4::6])
+states_iso_only = WHQ_household_population.states[:,5::6]
+total_iso_by_state =states_iso_only.sum(axis=1)
+iso_present = total_iso_by_state>0
+Q_WHQ = WHQ_H[iso_present,:].T.dot(WHQ_household_population.composition_by_state[iso_present,:])
+
+# model_input.class_is_isolating = array([[False, False, False],[False, False, False],[False, False, False]])
+# model_input.iso_method = 0
+#
+# baseline_household_population = HouseholdPopulation(
+#     composition_list, comp_dist, model_input, within_household_SEPIRQ,6)
+#
+# baseline_rhs = SEPIRQRateEquations(
+#     model_input,
+#     baseline_household_population,
+#     import_model)
+#
+# H0 = make_initial_SEPIRQ_condition(baseline_household_population, baseline_rhs, prev)
+#
+# tspan = (0.0, no_days)
+# solver_start = get_time()
+# solution = solve_ivp(baseline_rhs, tspan, H0, first_step=0.001,atol=1e-16)
+# solver_end = get_time()
+#
+# print('Integration completed in', solver_end-solver_start,'seconds.')
+#
+# baseline_time = solution.t
+# baseline_H = solution.y
+#
+# S_baseline = baseline_H.T.dot(baseline_household_population.states[:, ::6])
+# E_baseline = baseline_H.T.dot(baseline_household_population.states[:, 1::6])
+# P_baseline = baseline_H.T.dot(baseline_household_population.states[:, 2::6])
+# I_baseline = baseline_H.T.dot(baseline_household_population.states[:, 3::6])
+# R_baseline = baseline_H.T.dot(baseline_household_population.states[:, 4::6])
+# Q_baseline = baseline_H.T.dot(baseline_household_population.states[:, 5::6])
+
+with open('isolation_data.pkl','wb') as f:
+    dump((I_OOHI,R_OOHI,Q_OOHI,OOHI_time,I_WHQ,R_WHQ,Q_WHQ,WHQ_time),f)
+    # dump((I_baseline,R_baseline,Q_baseline,baseline_time,I_OOHI,R_OOHI,Q_OOHI,OOHI_time,I_WHQ,R_WHQ,Q_WHQ,WHQ_time),f)

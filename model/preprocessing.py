@@ -1,7 +1,7 @@
 '''Various functions and classes that help build the model'''
 from copy import copy, deepcopy
 from numpy import (
-        append, arange, array, cumsum, ones, ones_like, power, where, zeros,
+        append, arange, around, array, cumsum, ones, ones_like, power, where, zeros,
         concatenate, vstack, identity, tile, hstack)
 from numpy.linalg import eig
 from scipy.sparse import block_diag
@@ -35,23 +35,46 @@ def make_initial_condition(
 def make_initial_SEPIRQ_condition(
         household_population,
         rhs,
-        prev=1.0e-5):
+        prev=1.0e-5,
+        seroprev=6e-2,
+        AR=0.78):
     '''TODO: docstring'''
     fully_sus = where(
         rhs.states_sus_only.sum(axis=1)
         ==
         household_population.states.sum(axis=1))[0]
+    already_visited = where(
+        (rhs.states_rec_only.sum(axis=1)
+        ==
+        around(AR*household_population.states.sum(axis=1)).astype(int) & \
+        ((rhs.states_sus_only+rhs.states_rec_only).sum(axis=1)
+        ==
+        household_population.states.sum(axis=1))) & \
+        ((rhs.states_rec_only).sum(axis=1) > 0)) [0] # This last condition is needed to make sure we don't include any fully susceptible states
     i_is_one = where(
         ((rhs.states_inf_only).sum(axis=1) == 1) & \
         ((rhs.states_sus_only+rhs.states_inf_only).sum(axis=1)
         ==
         household_population.states.sum(axis=1)) )[0]
+    ave_hh_size = sum(household_population.composition_distribution.T.dot(household_population.composition_list))
     H0 = zeros(len(household_population.which_composition))
-    x = household_population.composition_distribution[
-        household_population.which_composition[i_is_one]]
-    H0[i_is_one] = prev * x
-    H0[fully_sus] = (1.0 - prev * sum(x)) \
-        * household_population.composition_distribution
+    base_comp_dist = copy(household_population.composition_distribution)
+    inf_comps = household_population.which_composition[i_is_one]
+    x = array([])
+    for state in i_is_one:
+        x = append(x,(1/len(inf_comps==household_population.which_composition[state]))*household_population.composition_distribution[household_population.which_composition[state]])
+        # base_comp_dist[household_population.which_composition[state]]-=x[-1]
+    visited_comps = household_population.which_composition[already_visited]
+    y=array([])
+    for state in already_visited:
+        y = append(y,(1/len(visited_comps==household_population.which_composition[state]))*household_population.composition_distribution[household_population.which_composition[state]])
+        # base_comp_dist[household_population.which_composition[state]]-=y[-1]
+    # y = household_population.composition_distribution[
+    #     household_population.which_composition[already_visited]]
+    H0[i_is_one] = ave_hh_size*(prev/sum(x)) * x
+    H0[already_visited] = ave_hh_size*((seroprev/AR)/sum(y)) * y
+    H0[fully_sus] = (1-sum(H0)) * household_population.composition_distribution
+
     return H0
 
 
@@ -490,15 +513,15 @@ class TwoAgeWithVulnerableInput:
         self.tau = spec['tau']
 
         eigenvalue = max(eig(
-            self.sus * (spec['gamma'] * (self.k_home + self.epsilon * self.k_ext) + \
-            spec['alpha_2'] * (self.k_home + self.epsilon * self.k_ext) * self.tau)
+            self.sus * ((1/spec['gamma']) * (self.k_home + self.epsilon * self.k_ext) + \
+            (1/spec['alpha_2']) * (self.k_home + self.epsilon * self.k_ext) * self.tau)
             )[0])
 
         self.k_home = (spec['R0']/eigenvalue)*self.k_home
         self.k_all = (spec['R0']/eigenvalue)*self.k_all
         self.k_ext = (spec['R0']/eigenvalue)*self.k_ext
 
-        self.vuln_prop = spec['vuln_prop']
+        self.k_ext[2,:] = 0*self.k_ext[2,:]
 
     @property
     def alpha_1(self):
