@@ -534,3 +534,36 @@ class TwoAgeWithVulnerableInput:
     @property
     def gamma(self):
         return self.spec['gamma']
+
+class CareHomeInput:
+    '''TODO: add docstring'''
+    def __init__(self, spec):
+        self.spec = deepcopy(spec)
+
+        k_home = array([[1,1],[1,1]]) # Within-home contact matrix for patients and carers
+        k_all = array([[1,1],[1,1]]) # Outside of home contact matrix for patients and carers
+
+        self.sus = spec['sus']
+        self.tau = spec['tau']
+
+        eigenvalue = max(eig(
+            self.sus * ((1/spec['gamma']) * (self.k_home) + \
+            (1/spec['alpha_2']) * (self.k_home) * self.tau)
+            )[0])
+
+        # Scaling below means R0 is the one defined in specs
+        self.k_home = (spec['R0']/eigenvalue)*self.k_home
+        self.k_all = (spec['R0']/eigenvalue)*self.k_all
+        self.k_ext = (spec['R0']/eigenvalue)*self.k_ext
+
+    @property
+    def alpha_1(self):
+        return self.spec['alpha_1']
+
+    @property
+    def alpha_2(self):
+        return self.spec['alpha_2']
+
+    @property
+    def gamma(self):
+        return self.spec['gamma']

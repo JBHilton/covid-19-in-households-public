@@ -75,3 +75,16 @@ SEPIRQ_SPEC = {
     },
     'pop_pyramid_file_name': 'inputs/United Kingdom-2019.csv'
 }
+
+CAREHOME_SPEC = {
+    # Interpretable parameters:
+    'R0': 1.1,                      # Reproduction number
+    'gamma': 1/4,                   # Recovery rate
+    'alpha_1': 1/1,                   # E->P incubation rate
+    'alpha_2': 1/5,                   # P->I prodromal to symptomatic rate
+    'tau': array([0.5,0.5,0.5]),           # Prodromal transmission intensity relative to full inf transmission
+    'sus': array([1,1,1]),                 # Relative susceptibility by age/vulnerability class
+    'mu': 1/90,                    # Rate of bed emptying
+    'mu_cov': (0.01)*(1/4),        # Coronavirus death rate - death prob times time to death
+    'b': 1/1                      # Rate of bed refilling - 1/(ave. days until refil)
+}
