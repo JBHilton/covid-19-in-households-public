@@ -2,10 +2,10 @@
 from numpy import (
     arange, array, atleast_2d, concatenate, copy, cumprod, diag, isnan, ix_,
     ones, prod, shape, where, zeros)
-from numpy import int32 as my_int
+from numpy import int64 as my_int
 from scipy.sparse import csc_matrix as sparse
 from scipy.special import binom
-from model.imports import NoImportModel
+from model.imports import NoImportModel, CareHomeImportModel
 import pdb
 
 def within_carehome_system(
@@ -98,6 +98,7 @@ def within_carehome_system(
     rows = [
         states[k, :].dot(reverse_prod) + states[k, -1]
         for k in range(total_size)]
+
     if min(rows) < 0:
         print(
             'Negative row indices found, proportional total',
@@ -106,6 +107,7 @@ def within_carehome_system(
             len(rows),
             '=',
             sum(array(rows) < 0) / len(rows))
+        pdb.set_trace()
     index_vector = sparse((
         arange(total_size),
         (rows, [0]*total_size)))
@@ -117,6 +119,7 @@ def within_carehome_system(
 
     # Add events for each age class
     for i in range(len(classes_present)):
+
         s_present = where(states[:, 6*i] > 0)[0]
         e_present = where(states[:, 6*i+1] > 0)[0]
         p_present = where(states[:, 6*i+2] > 0)[0]
@@ -132,7 +135,7 @@ def within_carehome_system(
             inf_rate[k] = old_state[6*i] * (
                 r_home[i, :].dot(
                     (old_state[i_pos] / empty_adjusted_comp[k])
-                    + (old_state[p_pos] / empty_adjusted_comp[k]) * tau ) # tau is prodromal reduction in infectivity
+                    + (old_state[p_pos] / empty_adjusted_comp[k]) * tau )) # tau is prodromal reduction in infectivity
             new_state = old_state.copy()
             new_state[6*i] -= 1
             new_state[6*i + 1] += 1
@@ -147,6 +150,7 @@ def within_carehome_system(
             (inf_event_class, classes_present[i]*ones((len(s_present)))))
         # input('Press enter to continue')
         # # disp('Infection events done')
+
         # # Now do exposure to prodromal
         inc_to = zeros(len(e_present), dtype=my_int)
         inc_rate = zeros(len(e_present))
@@ -164,6 +168,7 @@ def within_carehome_system(
             (inc_rate, (e_present, inc_to)),
             shape=(total_size, total_size))
         # # disp('Incubaion events done')
+
         # # Now do prodromal to infectious
         dev_to = zeros(len(p_present), dtype=my_int)
         dev_rate = zeros(len(p_present))
@@ -207,7 +212,7 @@ def within_carehome_system(
             new_state[6*i] -= 1
             new_state[6*i+5] += 1
             emp_to[k] - index_vector[
-                new)state.dot(reverse_prod) + new_state[-1], 0]
+                new_state.dot(reverse_prod) + new_state[-1], 0]
         Q_int += sparse(
             (emp_rate, (s_present, emp_to)),
             shape=(total_size, total_size))
@@ -221,7 +226,7 @@ def within_carehome_system(
             new_state[6*i+1] -= 1
             new_state[6*i+5] += 1
             emp_to[k] - index_vector[
-                new)state.dot(reverse_prod) + new_state[-1], 0]
+                new_state.dot(reverse_prod) + new_state[-1], 0]
         Q_int += sparse(
             (emp_rate, (e_present, emp_to)),
             shape=(total_size, total_size))
@@ -235,7 +240,7 @@ def within_carehome_system(
             new_state[6*i+2] -= 1
             new_state[6*i+5] += 1
             emp_to[k] - index_vector[
-                new)state.dot(reverse_prod) + new_state[-1], 0]
+                new_state.dot(reverse_prod) + new_state[-1], 0]
         Q_int += sparse(
             (emp_rate, (p_present, emp_to)),
             shape=(total_size, total_size))
@@ -249,7 +254,7 @@ def within_carehome_system(
             new_state[6*i+3] -= 1
             new_state[6*i+5] += 1
             emp_to[k] - index_vector[
-                new)state.dot(reverse_prod) + new_state[-1], 0]
+                new_state.dot(reverse_prod) + new_state[-1], 0]
         Q_int += sparse(
             (emp_rate, (i_present, emp_to)),
             shape=(total_size, total_size))
@@ -263,7 +268,7 @@ def within_carehome_system(
             new_state[6*i+4] -= 1
             new_state[6*i+5] += 1
             emp_to[k] - index_vector[
-                new)state.dot(reverse_prod) + new_state[-1], 0]
+                new_state.dot(reverse_prod) + new_state[-1], 0]
         Q_int += sparse(
             (emp_rate, (r_present, emp_to)),
             shape=(total_size, total_size))
@@ -278,7 +283,7 @@ def within_carehome_system(
             new_state[6*i+5] -= 1
             new_state[6*i] += 1 # We assume new arrivals are susceptible!
             arr_to[k] - index_vector[
-                new)state.dot(reverse_prod) + new_state[-1], 0]
+                new_state.dot(reverse_prod) + new_state[-1], 0]
         Q_int += sparse(
             (arr_rate, (d_present, arr_to)),
             shape=(total_size, total_size))
@@ -1314,14 +1319,13 @@ class CareHomeRateEquations:
     def __init__(self,
                  model_input,
                  household_population,
-                 importation_model=CareHomeImportModel()
+                 importation_model
                  ):
 
         no_compartments=6
 
         self.household_population = household_population
         self.states = household_population.states # We don't actually use this anywhere but it's very useful to have for debugging purposes
-        self.epsilon = model_input.epsilon
         self.Q_int = household_population.Q_int
         # To define external mixing we need to set up the transmission
         # matrices.
@@ -1332,20 +1336,16 @@ class CareHomeRateEquations:
         self.inf_trans_matrix = model_input.sus*model_input.k_ext
         # This stores number in each age class by household
         self.composition_by_state = household_population.composition_by_state
-        # ::5 gives columns corresponding to susceptible cases in each age
-        # class in each state
-        self.states_sus_only = household_population.states[:, ::no_compartments]
 
-        self.s_present = where(self.states_sus_only.sum(axis=1) > 0)[0]
-        # 2::5 gives columns corresponding to detected cases in each age class
-        # in each state
+        self.states_sus_only = household_population.states[:, ::no_compartments]
         self.states_pro_only = household_population.states[:, 2::no_compartments]
-        # 4:5:end gives columns corresponding to undetected cases in each age
-        # class in each state
-        self.states_rec_only = household_population.states[:, 4::no_compartments]
         self.states_inf_only = household_population.states[:, 3::no_compartments]
-        self.epsilon = model_input.epsilon
+        self.states_emp_only = household_population.states[:, 5::no_compartments]
+
+        self.import_rate = model_input.import_rate
         self.importation_model = importation_model
+
+        self.epsilon = model_input.epsilon
 
     def __call__(self, t, H):
         '''hh_ODE_rates calculates the rates of the ODE system describing the
@@ -1373,12 +1373,27 @@ class CareHomeRateEquations:
     def get_FOI_by_class(self, t, H):
         '''This calculates the age-stratified force-of-infection (FOI) on each
         household composition'''
+        denom = H.T.dot(self.composition_by_state) # Average number of each class by household
+        # Average prodromal infected by household in each class
+        pro_by_class = zeros(shape(denom))
+        pro_by_class[denom>0] = (
+            H.T.dot(self.states_pro_only[ix_(arange(len(H)),denom>0)]) # Only want to do states with positive denominator
+            / denom[denom>0]).squeeze()
+        # Average full infectious infected by household in each class
+        inf_by_class = zeros(shape(denom))
+        inf_by_class[denom>0] = (
+            H.T.dot(self.states_inf_only[ix_(range(len(H)),denom>0)])
+            / denom[denom>0]).squeeze()
+
         FOI_pro = self.states_sus_only.dot(
-            diag(self.pro_trans_matrix.dot(
+            diag(self.epsilon *
+                self.pro_trans_matrix.dot(pro_by_class.T)
+                + self.import_rate.dot(
                 self.importation_model.prodromal(t))))
-        # This stores the rates of generating an infected of each class in each state
         FOI_inf = self.states_sus_only.dot(
-            diag(self.inf_trans_matrix.dot(
+            diag(self.epsilon *
+                self.inf_trans_matrix.dot(inf_by_class.T)
+                + self.import_rate.dot(
                 self.importation_model.infected(t))))
 
         return FOI_pro, FOI_inf

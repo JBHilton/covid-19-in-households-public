@@ -12,6 +12,20 @@ from tqdm import tqdm
 from model.common import within_household_spread, within_household_SEDURQ, within_household_SEPIRQ, sparse, my_int
 import pdb
 
+def initialise_carehome(
+        household_population,
+        rhs,
+        initial_presence):
+    '''TODO: docstring'''
+    initial_absence = household_population.composition_list - initial_presence
+    starting_states = where(
+        (rhs.states_sus_only == initial_presence) *
+        (rhs.states_emp_only == initial_absence)
+        )[0]
+    H0 = zeros(len(household_population.which_composition))
+    H0[starting_states] = household_population.composition_distribution
+    return H0
+
 
 def make_initial_condition(
         household_population,
@@ -540,8 +554,10 @@ class CareHomeInput:
     def __init__(self, spec):
         self.spec = deepcopy(spec)
 
-        k_home = array([[1,1],[1,1]]) # Within-home contact matrix for patients and carers
-        k_all = array([[1,1],[1,1]]) # Outside of home contact matrix for patients and carers
+        self.k_home = array([[1,1,1],[1,1,1],[1,1,1]]) # Within-home contact matrix for patients and carers (full time and agency)
+        self.k_ext = array([[0,0,0],[0,0.01,0.01],[0.5,0.5,0.5]]) # Contact matrix with other care homes - agency staff may work more than one home
+
+        self.import_rate = array([0,0.5,0.5]) # Rate of contact with general outside population
 
         self.sus = spec['sus']
         self.tau = spec['tau']
@@ -552,9 +568,13 @@ class CareHomeInput:
             )[0])
 
         # Scaling below means R0 is the one defined in specs
-        self.k_home = (spec['R0']/eigenvalue)*self.k_home
-        self.k_all = (spec['R0']/eigenvalue)*self.k_all
-        self.k_ext = (spec['R0']/eigenvalue)*self.k_ext
+        self.k_home = (spec['R_carehome']/eigenvalue)*self.k_home
+        self.k_ext = self.k_ext
+
+        self.mu = spec['mu']
+        self.mu_cov = spec['mu_cov']
+        self.b = spec['b']
+        self.epsilon = spec['epsilon']
 
     @property
     def alpha_1(self):
