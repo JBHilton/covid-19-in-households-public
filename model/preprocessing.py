@@ -18,10 +18,11 @@ def initialise_carehome(
         initial_presence):
     '''TODO: docstring'''
     initial_absence = household_population.composition_list - initial_presence
-    starting_states = where(
-        (rhs.states_sus_only == initial_presence) *
-        (rhs.states_emp_only == initial_absence)
-        )[0]
+
+    # Starting state is one where total difference between S and initial presence and total difference between E and initial absence are both zero
+    starting_states = where((abs(rhs.states_sus_only - initial_presence).sum(axis=1) +
+     abs(rhs.states_emp_only - initial_absence).sum(axis=1))==0)[0]
+
     H0 = zeros(len(household_population.which_composition))
     H0[starting_states] = household_population.composition_distribution
     return H0
