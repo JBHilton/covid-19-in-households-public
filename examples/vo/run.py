@@ -41,74 +41,85 @@ def get_symptoms_by_test(test, symptoms):
     return symp_locs, asym_locs
 
 
-def get_test_probability(
-        tests, symptoms, ages, states, composition, H0, t0, start_date, rhs):
-    '''In the following function, t0 is the time point from which we run the
-    master equations, start_date is the first day in the Vo data. This function
-    assumes the ages are in numeric form (zero-based numbering), i.e. index 0
-    for first age class, index 1 for second age class etc.'''
+class HouseholdTestData:
+    def __init__(self, ages, symptoms, tests):
+        self.ages = ages
+        self.symptoms = symptoms
+        self.tests = tests
+        # Convert the age information into composition data
+        self.composition = histogram(
+            ages, bins=arange(0, len(AGE_GROUPS)+1))[0]
 
-    nn, tt = tests.shape
-    # Find all locations where we have a test result
-    test_days = unique(start_date - t0 + where(~isnan(tests))[1])
+    def get_test_probability(self, rhs, H0, t0, start_date):
+        '''In the following function, t0 is the time point from which we run
+        the master equations, start_date is the first day in the Vo data. This
+        function assumes the ages are in numeric form (zero-based numbering),
+        i.e. index 0 for first age class, index 1 for second age class etc.'''
 
-    H_start = H0
-    t_start = start_date
-    result_prob = []
-    for t in test_days:
-        solution = solve_ivp(
-            rhs, (t_start, t), H_start, first_step=1e-9, atol=1e-12)
-        H = solution.y
-        H_end = H[:, -1]  # Get end state
-        # print('H = ', H_end)
-        # print('After initial run sum(H_end)=',sum(H_end))
-        # H_end[H_end<0]=0
-        # print('Throwing away bad values, sum(H_end)=',sum(H_end))
+        nn, tt = self.tests.shape
+        # Find all locations where we have a test result
+        test_days = unique(start_date - t0 + where(~isnan(self.tests))[1])
 
-        # Now calculate total positives and negatives by age class on this date
-        symp_locs, asym_locs = get_symptoms_by_test(
-            tests[:, t - (start_date - t0)], symptoms)
-        symp_ages = ages[symp_locs]
-        # print('symp_ages=', symp_ages)
-        asym_ages = ages[asym_locs]
-        # print('asym_ages=',asymp_ages)
-        neg_ages = ages[tests[:, t-(start_date-t0)] == 0]
+        H_start = H0
+        t_start = start_date
+        result_prob = []
+        for t in test_days:
+            solution = solve_ivp(
+                rhs, (t_start, t), H_start, first_step=1e-9, atol=1e-12)
+            H = solution.y
+            H_end = H[:, -1]  # Get end state
+            # print('H = ', H_end)
+            # print('After initial run sum(H_end)=',sum(H_end))
+            # H_end[H_end<0]=0
+            # print('Throwing away bad values, sum(H_end)=',sum(H_end))
 
-        min_symps_by_age = zeros((len(AGE_GROUPS),))
-        for i in symp_ages:
-            min_symps_by_age[i] += 1
-        min_asyms_by_age = zeros((len(AGE_GROUPS),))
-        # Index is needed because composition is inside an array
-        for i in asym_ages:
-            min_asyms_by_age[i] += 1
-        max_inf_by_age = list(composition[0])
-        # print(composition)
-        for i in neg_ages:
-            max_inf_by_age[i] -= 1
-        # print('min_symps=',min_symps_by_age)
-        # print('min_asymps_by_age=',min_asymps_by_age)
-        # print('max_inf_by_age=',max_inf_by_age)
+            # Now calculate total positives and negatives by age class on this
+            # date
+            symp_locs, asym_locs = get_symptoms_by_test(
+                self.tests[:, t - (start_date - t0)], self.symptoms)
+            symp_ages = self.ages[symp_locs]
+            # print('symp_ages=', symp_ages)
+            asym_ages = self.ages[asym_locs]
+            # print('asym_ages=',asymp_ages)
+            neg_ages = self.ages[self.tests[:, t-(start_date-t0)] == 0]
 
-        # The next line finds all the lines consistent with the min/max number
-        # of infecteds by multiplying truth values for each comparision along
-        # the rows
-        mask = array(
-            prod(states[:, 2::5] >= min_symps_by_age, axis=1)
-            * prod(states[:, 3::5] >= min_asyms_by_age, axis=1)
-            * prod(states[:, 2::5] + states[:, 3::5] <= max_inf_by_age, axis=1),
-            dtype=bool)
-        # print('Number of valid states is ', len(valid_locs))
-        # print('Number of invalid states is ', len(H_end) - len(valid_locs))
-        # print('Valid probability is ', H_end[mask].sum())
-        # print('Invalid probability is ', H_end[~mask].sum())
-        result_prob.append(H_end[mask].sum())
-        H_start = 0.0 * H_start
-        H_start[mask] = H_end[mask]
-        H_start = H_start / H_start.sum()
-        # print('New starting probability is ', H_start.sum())
-        # print('H_start = ', H_start)
-        t_start = t
-    return sum(log((result_prob)))
+            min_symps_by_age = zeros((len(AGE_GROUPS),))
+            for i in symp_ages:
+                min_symps_by_age[i] += 1
+            min_asyms_by_age = zeros((len(AGE_GROUPS),))
+            # Index is needed because composition is inside an array
+            for i in asym_ages:
+                min_asyms_by_age[i] += 1
+            max_inf_by_age = list(self.composition)
+            # print(composition)
+            for i in neg_ages:
+                max_inf_by_age[i] -= 1
+            # print('min_symps=',min_symps_by_age)
+            # print('min_asymps_by_age=',min_asymps_by_age)
+            # print('max_inf_by_age=',max_inf_by_age)
+
+            # The next line finds all the lines consistent with the min/max
+            # number of infecteds by multiplying truth values for each
+            # comparision along the rows
+
+            states = rhs.household_population.states
+            mask = array(
+                prod(states[:, 2::5] >= min_symps_by_age, axis=1)
+                * prod(states[:, 3::5] >= min_asyms_by_age, axis=1)
+                * prod(states[:, 2::5] + states[:, 3::5] <= max_inf_by_age, axis=1),
+                dtype=bool)
+            # print('Number of valid states is ', len(valid_locs))
+            # print('Number of invalid states is ', len(H_end) - len(valid_locs))
+            # print('Valid probability is ', H_end[mask].sum())
+            # print('Invalid probability is ', H_end[~mask].sum())
+            result_prob.append(H_end[mask].sum())
+            H_start = 0.0 * H_start
+            H_start[mask] = H_end[mask]
+            H_start = H_start / H_start.sum()
+            # print('New starting probability is ', H_start.sum())
+            # print('H_start = ', H_start)
+            t_start = t
+        return sum(log((result_prob)))
 
 
 class SerialLikelihoodCalculation:
@@ -117,7 +128,7 @@ class SerialLikelihoodCalculation:
 
         if isfile('vo-testing-data.pkl') is True:
             with open('vo-testing-data.pkl', 'rb') as f:
-                self.tests, self.ages, self.symptoms = load(f)
+                tests, ages, symptoms = load(f)
         else:
             df = read_csv(
                 'examples/vo/vo_data.csv',
@@ -126,32 +137,31 @@ class SerialLikelihoodCalculation:
             hcol = df.household_id.values
             hhids = unique(df.household_id)
             testday_columns = range(104, 123)
-            self.tests = []
-            self.ages = []
-            self.symptoms = []
+            tests = []
+            ages = []
+            symptoms = []
             for hid in hhids:
                 dfh = df[df.household_id == hid]
-                tests = dfh.iloc[:, testday_columns].values
+                test = dfh.iloc[:, testday_columns].values
                 age_groups = dfh.age_group.values
                 ss = dfh.symptomatic.values
-                tests[tests == 'Neg'] = 0
-                tests[tests == 'Pos'] = 1
-                self.tests.append(tests.astype(float))
-                self.ages.append(
+                test[test == 'Neg'] = 0
+                test[test == 'Pos'] = 1
+                tests.append(tests.astype(float))
+                ages.append(
                     array([HH_AGE_DICT[ag] for ag in age_groups]))
-                self.symptoms.append(ss)
+                symptoms.append(ss)
             with open('vo-testing-data.pkl', 'wb') as f:
-                dump((self.tests, self.ages, self.symptoms), f)
+                dump((tests, ages, symptoms), f)
 
-        self.composition_list = [
-            histogram(h, bins=arange(0, len(AGE_GROUPS)+1))[0]
-            for h in self.ages]
+        self.households = [
+            HouseholdTestData(a, s, t)
+            for a, s, t in zip(ages, symptoms, tests)]
 
     def __call__(self, r):
         test_prob = []
         epsilon = 0.0
 
-        sus = self.model_input.sigma
         det = self.model_input.det
 
         det_profile = 1e-5*det
@@ -159,22 +169,16 @@ class SerialLikelihoodCalculation:
         exponential_importation = ExponentialImportModel(
             r, det_profile, undet_profile)
 
-        for i in range(1):
+        for i, household in enumerate(self.households[:1]):
             # There are a few huge households which we skip
-            if sum(self.composition_list[i]) < 10:
+            if sum(household.composition) < 10:
                 print('Processing household {0} of {1}'.format(
-                    i+1, len(self.composition_list)))
-                composition = self.composition_list[i]
-                tests = self.tests[i]
-                symptoms = self.symptoms[i]
-                ages = self.ages[i]
+                    i+1, len(self.households)))
 
                 household_population = HouseholdPopulation(
-                    array([composition]), array([1.0]), self.model_input)
-
-                # print(composition)
-                # print(shape(composition))
-                # print(shape(states))
+                    array([household.composition]),
+                    array([1.0]),
+                    self.model_input)
 
                 H0 = zeros((household_population.system_sizes[0],))
                 states_sus_only = household_population.states[:, ::5]
@@ -191,17 +195,11 @@ class SerialLikelihoodCalculation:
                 t0 = 0
                 start_date = 30
 
-                composition = array([composition])
-                this_prob = get_test_probability(
-                    tests,
-                    symptoms,
-                    ages,
-                    household_population.states,
-                    composition,
+                this_prob = household.get_test_probability(
+                    rhs,
                     H0,
                     t0,
-                    start_date,
-                    rhs)
+                    start_date)
                 test_prob.append(this_prob)
 
         # with open('testing-probabilities.pkl', 'wb') as f:
@@ -216,3 +214,4 @@ class SerialLikelihoodCalculation:
 if __name__ == '__main__':
     calculator = SerialLikelihoodCalculation()
     print(calculator(1e-2))
+    print(calculator(2e-2))
