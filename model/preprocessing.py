@@ -100,7 +100,8 @@ class HouseholdPopulation:
             self,
             composition_list,
             composition_distribution,
-            model_input):
+            model_input,
+            print_progress=True):
         '''This builds internal mixing matrix for entire system of
         age-structured households.'''
         sus = model_input.sigma
@@ -167,9 +168,13 @@ class HouseholdPopulation:
         # Just store this so we can estimate remaining time
         matrix_sizes = power(system_sizes, 2)
         # for i in range(1, no_types):
-        progress_bar = tqdm(
-            range(1, no_types),
-            desc='Building within-household transmission matrix')
+
+        if print_progress:
+            progress_bar = tqdm(
+                range(1, no_types),
+                desc='Building within-household transmission matrix')
+        else:
+            progress_bar = range(1, no_types)
         for i in progress_bar:
             # print('Processing {}/{}'.format(i, no_types))
             which_composition[cum_sizes[i-1]:cum_sizes[i]] = i * ones(

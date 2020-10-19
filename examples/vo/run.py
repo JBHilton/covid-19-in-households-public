@@ -18,6 +18,59 @@ HH_AGE_DICT = {
     ag: iag for iag, ag in enumerate(AGE_GROUPS)}
 
 
+class ModelEvaluator:
+    def __init__(self, model_input, r, epsilon=0.0):
+        self.model_input = model_input
+        self.r = r
+        self.epsilon = epsilon
+
+        alpha = 1.0e-5
+        det = model_input.det
+        det_profile = alpha * det
+        undet_profile = alpha * (ones((10,)) - det)
+        self.exponential_importation = ExponentialImportModel(
+            r, det_profile, undet_profile)
+
+    def __call__(self, household):
+        # There are a few huge households which we skip
+        household_is_acceptable = (
+            (household.composition.sum() < 8)
+            and
+            (household.composition.sum() == household.tests.shape[0]))
+        if household_is_acceptable:
+            return self._compute_probability_for_valid(household)
+        else:
+            return None
+
+    def _compute_probability_for_valid(self, household):
+        household_population = HouseholdPopulation(
+            array([household.composition]),
+            array([1.0]),
+            self.model_input,
+            print_progress=False)
+
+        H0 = zeros((household_population.system_sizes[0],))
+        states_sus_only = household_population.states[:, ::5]
+        fully_sus = where(
+            states_sus_only.sum(axis=1)
+            ==
+            household_population.states.sum(axis=1))[0]
+        H0[fully_sus] = 1
+        rhs = RateEquations(
+            self.model_input,
+            household_population,
+            self.exponential_importation,
+            self.epsilon)
+        t0 = 0
+        start_date = 30
+
+        return household.get_test_probability(
+            rhs,
+            H0,
+            t0,
+            start_date)
+
+
 def get_symptoms_by_test(test, symptoms):
     '''
     Returns time indexes for symptomatic and asymptomatic tests.
@@ -63,6 +116,7 @@ class HouseholdTestData:
         H_start = H0
         t_start = start_date
         result_prob = []
+        test_days.sort()
         for t in test_days:
             solution = solve_ivp(
                 rhs, (t_start, t), H_start, first_step=1e-9, atol=1e-12)
@@ -124,8 +178,6 @@ class HouseholdTestData:
 
 class SerialLikelihoodCalculation:
     def __init__(self):
-        self.model_input = VoInput(VO_SPEC)
-
         if isfile('vo-testing-data.pkl') is True:
             with open('vo-testing-data.pkl', 'rb') as f:
                 tests, ages, symptoms = load(f)
@@ -134,7 +186,6 @@ class SerialLikelihoodCalculation:
                 'examples/vo/vo_data.csv',
                 dtype={
                     'household_id': str})
-            hcol = df.household_id.values
             hhids = unique(df.household_id)
             testday_columns = range(104, 123)
             tests = []
@@ -160,47 +211,13 @@ class SerialLikelihoodCalculation:
 
     def __call__(self, r):
         test_prob = []
-        epsilon = 0.0
+        model = ModelEvaluator(VoInput(VO_SPEC), r)
 
-        det = self.model_input.det
-
-        det_profile = 1e-5*det
-        undet_profile = 1e-5*(ones((10,))-det)
-        exponential_importation = ExponentialImportModel(
-            r, det_profile, undet_profile)
-
-        for i, household in enumerate(self.households[:1]):
-            # There are a few huge households which we skip
-            if sum(household.composition) < 10:
-                print('Processing household {0} of {1}'.format(
-                    i+1, len(self.households)))
-
-                household_population = HouseholdPopulation(
-                    array([household.composition]),
-                    array([1.0]),
-                    self.model_input)
-
-                H0 = zeros((household_population.system_sizes[0],))
-                states_sus_only = household_population.states[:, ::5]
-                fully_sus = where(
-                    states_sus_only.sum(axis=1)
-                    ==
-                    household_population.states.sum(axis=1))[0]
-                H0[fully_sus] = 1
-                rhs = RateEquations(
-                    self.model_input,
-                    household_population,
-                    exponential_importation,
-                    epsilon)
-                t0 = 0
-                start_date = 30
-
-                this_prob = household.get_test_probability(
-                    rhs,
-                    H0,
-                    t0,
-                    start_date)
-                test_prob.append(this_prob)
+        unfiltered_probabilities = [
+            model(h) for h in self.households[:8]]
+        probabilities = [
+            likelihood for likelihood in unfiltered_probabilities
+            if likelihood is not None]
 
         # with open('testing-probabilities.pkl', 'wb') as f:
             # dump((test_prob), f)
@@ -208,10 +225,9 @@ class SerialLikelihoodCalculation:
         # print('Likelihood of input parameters given data is {0}.'.format(
         #    exp(sum(test_prob))))
         # print('Likelihoods are {0}.'.format(exp(test_prob)))
-        return exp(test_prob)
+        return exp(sum(probabilities))
 
 
 if __name__ == '__main__':
     calculator = SerialLikelihoodCalculation()
-    print(calculator(1e-2))
-    print(calculator(2e-2))
+    print(calculator(1e-1))
