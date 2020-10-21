@@ -118,10 +118,10 @@ class HouseholdPopulation:
         # throw it away here. While we would expect to see some households
         # with equal numbers in age class 1 and all others combined, we should
         # not see it everywhere and so this is a safe way to check.
-        condition = max(abs(
-            composition_list[:, 0] - composition_list[:, 1:].sum(axis=1)))
-        if condition == 0:
-            composition_list = composition_list[:, 1:]
+        # condition = max(abs(
+        #    composition_list[:, 0] - composition_list[:, 1:].sum(axis=1)))
+        # if condition == 0:
+        #    composition_list = composition_list[:, 1:]
 
         no_types, no_classes = composition_list.shape
 
@@ -138,8 +138,9 @@ class HouseholdPopulation:
 
         # This is useful for placing blocks of system states
         cum_sizes = cumsum(system_sizes)
-        # Total size is sum of the sizes of each composition-system, because we are
-        # considering a single household which can be in any one composition
+        # Total size is sum of the sizes of each composition-system, because
+        # we are considering a single household which can be in any one
+        # composition
         total_size = cum_sizes[-1]
         # Stores list of (S,E,D,U,R)_a states for each composition
         states = zeros((total_size, 5 * no_classes), dtype=my_int)
@@ -163,8 +164,6 @@ class HouseholdPopulation:
             states[:system_sizes[0], 5*this_class:5*(this_class+1)] = \
                 states_temp[:, 5*j:5*(j+1)]
 
-        # NOTE: The way I do this loop is very wasteful, I'm making lots of arrays
-        # which I'm overwriting with different sizes
         # Just store this so we can estimate remaining time
         matrix_sizes = power(system_sizes, 2)
         # for i in range(1, no_types):
@@ -175,6 +174,8 @@ class HouseholdPopulation:
                 desc='Building within-household transmission matrix')
         else:
             progress_bar = range(1, no_types)
+        # NOTE: The way I do this loop is very wasteful, I'm making lots of arrays
+        # which I'm overwriting with different sizes
         for i in progress_bar:
             # print('Processing {}/{}'.format(i, no_types))
             which_composition[cum_sizes[i-1]:cum_sizes[i]] = i * ones(
