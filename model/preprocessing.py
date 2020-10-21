@@ -18,14 +18,14 @@ def initialise_carehome(
         initial_presence):
     '''TODO: docstring'''
     initial_absence = household_population.composition_list - initial_presence
-    starting_states = where(
-        (rhs.states_sus_only == initial_presence) *
-        (rhs.states_emp_only == initial_absence)
-        )[0]
+
+    # Starting state is one where total difference between S and initial presence and total difference between E and initial absence are both zero
+    starting_states = where((abs(rhs.states_sus_only - initial_presence).sum(axis=1) +
+     abs(rhs.states_emp_only - initial_absence).sum(axis=1))==0)[0]
+
     H0 = zeros(len(household_population.which_composition))
     H0[starting_states] = household_population.composition_distribution
     return H0
-
 
 def make_initial_condition(
         household_population,
@@ -554,10 +554,10 @@ class CareHomeInput:
     def __init__(self, spec):
         self.spec = deepcopy(spec)
 
-        self.k_home = array([[1,1,1],[1,1,1],[1,1,1]]) # Within-home contact matrix for patients and carers (full time and agency)
+        self.k_home = array([[1,0,0],[0,0,0],[0,0,0]]) # Within-home contact matrix for patients and carers (full time and agency)
         self.k_ext = array([[0,0,0],[0,0.01,0.01],[0.5,0.5,0.5]]) # Contact matrix with other care homes - agency staff may work more than one home
 
-        self.import_rate = array([0,0.5,0.5]) # Rate of contact with general outside population
+        self.import_rate = array([0.5,0.5,0.5]) # Rate of contact with general outside population
 
         self.sus = spec['sus']
         self.tau = spec['tau']

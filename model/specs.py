@@ -77,15 +77,15 @@ SEPIRQ_SPEC = {
 }
 
 CAREHOME_SPEC = {
-    # Interpretable parameters:
+   # Interpretable parameters:
     'R_carehome': 1.1,                      # Within-carehome reproduction number
     'alpha_1': 1/1,                   # E->P incubation rate
     'alpha_2': 1/5,                   # P->I prodromal to symptomatic rate
     'gamma': 1/4,                   # Recovery rate
-    'tau': array([0.5,0.5,0.5]),           # Prodromal transmission intensity relative to full inf transmission
+    'tau': array([0.7,0.7,0.7]),           # Prodromal transmission intensity relative to full inf transmission
     'sus': array([1,1,1]),                 # Relative susceptibility by age/vulnerability class
-    'mu': 1/90,                    # Rate of bed emptying
-    'mu_cov': (0.01)*(1/4),        # Coronavirus death rate - death prob times time to death
-    'b': 1/1,                      # Rate of bed refilling - 1/(ave. days until refil)
-    'epsilon': 1                 # Coupling strength between different care homes, between 0 and 1
+    'mu': array([1/240,0,0]),                    # Rate of bed emptying
+    'mu_cov': array([(0.01)*(1/4),0,0]),        # Coronavirus death rate - death prob times time to death
+    'b': array([1/75, 0, 0]),                      # Rate of bed refilling - 1/(ave. days until refil)
+    'epsilon': 0                # Coupling strength between different care homes, between 0 and 1
 }

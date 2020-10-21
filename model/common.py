@@ -207,7 +207,7 @@ def within_carehome_system(
         emp_rate = zeros(len(s_present))
         for k in range(len(s_present)):
             old_state = copy(states[s_present[k], :])
-            emp_rate[k] = mu * old_state[6*i]
+            emp_rate[k] = mu[i] * old_state[6*i]
             new_state = copy(old_state)
             new_state[6*i] -= 1
             new_state[6*i+5] += 1
@@ -221,7 +221,7 @@ def within_carehome_system(
         emp_rate = zeros(len(e_present))
         for k in range(len(e_present)):
             old_state = copy(states[e_present[k], :])
-            emp_rate[k] = mu * old_state[6*i+1]
+            emp_rate[k] = mu[i] * old_state[6*i+1]
             new_state = copy(old_state)
             new_state[6*i+1] -= 1
             new_state[6*i+5] += 1
@@ -235,7 +235,7 @@ def within_carehome_system(
         emp_rate = zeros(len(p_present))
         for k in range(len(p_present)):
             old_state = copy(states[p_present[k], :])
-            emp_rate[k] = mu * old_state[6*i+2]
+            emp_rate[k] = mu[i] * old_state[6*i+2]
             new_state = copy(old_state)
             new_state[6*i+2] -= 1
             new_state[6*i+5] += 1
@@ -249,7 +249,7 @@ def within_carehome_system(
         emp_rate = zeros(len(i_present))
         for k in range(len(s_present)):
             old_state = copy(states[s_present[k], :])
-            emp_rate[k] = (mu + mu_cov) * old_state[6*i+3]
+            emp_rate[k] = (mu[i] + mu_cov[i]) * old_state[6*i+3]
             new_state = copy(old_state)
             new_state[6*i+3] -= 1
             new_state[6*i+5] += 1
@@ -263,7 +263,7 @@ def within_carehome_system(
         emp_rate = zeros(len(r_present))
         for k in range(len(r_present)):
             old_state = copy(states[s_present[k], :])
-            emp_rate[k] = mu * old_state[6*i+4]
+            emp_rate[k] = mu[i] * old_state[6*i+4]
             new_state = copy(old_state)
             new_state[6*i+4] -= 1
             new_state[6*i+5] += 1
@@ -278,7 +278,7 @@ def within_carehome_system(
         arr_rate = zeros(len(d_present))
         for k in range(len(d_present)):
             old_state = copy(states[d_present[k], :])
-            arr_rate[k] = b * old_state[6*i+5]
+            arr_rate[k] = b[i] * old_state[6*i+5]
             new_state = copy(old_state)
             new_state[6*i+5] -= 1
             new_state[6*i] += 1 # We assume new arrivals are susceptible!

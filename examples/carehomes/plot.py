@@ -5,8 +5,8 @@ from matplotlib.pyplot import subplots
 from matplotlib.cm import get_cmap
 
 with open('carehome_results.pkl', 'rb') as f:
-    t, H, P, I= load(f)
-
+    t, carehome_size, H, P, I, Prob = load(f)
+        
 lgd=['Patients','Full-time staff','Agency workers']
 
 #clist=0.5*ones(10,3)
