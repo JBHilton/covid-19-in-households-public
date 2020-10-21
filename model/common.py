@@ -288,26 +288,30 @@ class RateEquations:
     def get_FOI_by_class(self, t, H):
         '''This calculates the age-stratified force-of-infection (FOI) on each
         household composition'''
-        denom = H.T.dot(self.composition_by_state) # Average number of each class by household
+        # Average number of each class by household
+        denom = H.T.dot(self.composition_by_state)
         # Average detected infected by household in each class
         det_by_class = zeros(shape(denom))
-        det_by_class[denom>0] = (
-            H.T.dot(self.states_det_only)[denom>0] # Only want to do states with positive denominator
-            / denom[denom>0]).squeeze()
+        # Only want to do states with positive denominator
+        det_by_class[denom > 0] = (
+            H.T.dot(self.states_det_only)[denom > 0]
+            / denom[denom > 0]).squeeze()
         # Average undetected infected by household in each class
         undet_by_class = zeros(shape(denom))
-        undet_by_class[denom>0] = (
-            H.T.dot(self.states_undet_only)[denom>0]
-            / denom[denom>0]).squeeze()
-        # This stores the rates of generating an infected of each class in each state
+        undet_by_class[denom > 0] = (
+            H.T.dot(self.states_undet_only)[denom > 0]
+            / denom[denom > 0]).squeeze()
+        # This stores the rates of generating an infected of each class in
+        # each state
         FOI_det = self.states_sus_only.dot(
             diag(self.det_trans_matrix.dot(
                 self.epsilon * det_by_class.T
-                + self.importation_model.detected(t))))
-        # This stores the rates of generating an infected of each class in each state
+                +
+                self.importation_model.detected(t))))
         FOI_undet = self.states_sus_only.dot(
             diag(self.undet_trans_matrix.dot(
                 self.epsilon * undet_by_class.T
-                + self.importation_model.undetected(t))))
+                +
+                self.importation_model.undetected(t))))
 
         return FOI_det, FOI_undet
