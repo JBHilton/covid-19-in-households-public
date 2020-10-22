@@ -1,6 +1,6 @@
 '''In this example we import the age-stratified testing data for Vo and run
 each household as an independent example with exponential imports'''
-from numpy import linspace, logspace
+from numpy import log
 from multiprocessing import Pool
 from tqdm import tqdm
 from examples.vo.common import LikelihoodCalculation
@@ -17,18 +17,18 @@ class MPLikelihoodCalculation(LikelihoodCalculation):
             value for value in tqdm(
                 pool.imap(
                     model.compute_probability,
-                    self.households[:40]),
+                    self.households),
                 desc='Calculating',
-                total=len(self.households[:40]))]
+                total=len(self.households))]
         pool.close()
         pool.join()
         return likelihoods
 
 
 if __name__ == '__main__':
-    calculator = MPLikelihoodCalculation(2)
+    calculator = MPLikelihoodCalculation(3)
     # These parameters worked much better for alpha alone
     # params = linspace(0.001, 0.015, 10)
     # For r
-    params = logspace(-2, -1, 3)
-    likelihoods = [calculator(p) for p in params]
+    likelihoods = [
+        calculator(log(2)/tau) for tau in [2, 3, 7, 14, 21]]

@@ -1,6 +1,6 @@
 '''In this example we import the age-stratified testing data for Vo and run
 each household as an independent example with exponential imports'''
-from numpy import logspace
+from tqdm import tqdm
 from examples.vo.common import LikelihoodCalculation
 
 
@@ -11,7 +11,7 @@ class SerialLikelihoodCalculation(LikelihoodCalculation):
     def _process_households(self, model):
         return [
             model.compute_probability(h)
-            for h in self.households[:40]]
+            for h in tqdm(self.households)]
 
 
 if __name__ == '__main__':
@@ -19,5 +19,4 @@ if __name__ == '__main__':
     # These parameters worked much better for alpha alone
     # params = linspace(0.001, 0.015, 10)
     # For r
-    params = logspace(-2, -1, 3)
-    likelihoods = [calculator(p) for p in params]
+    likelihood = calculator(1e-1)

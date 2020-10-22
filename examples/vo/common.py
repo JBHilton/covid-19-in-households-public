@@ -18,7 +18,7 @@ HH_AGE_DICT = {
 
 class ModelEvaluator:
     def __init__(self, model_input, r, epsilon=0.0):
-        self.t_first_test = 1
+        self.t_first_test = 14
         self.t_end = self.t_first_test + 20.0
         self.model_input = model_input
         self.r = r
@@ -38,9 +38,12 @@ class ModelEvaluator:
             (household.composition.sum() < 8)
             and
             (household.composition.sum() == household.tests.shape[0]))
-        if household_is_acceptable:
-            return self._compute_probability_for_valid(household)
-        else:
+        try:
+            if household_is_acceptable:
+                return self._compute_probability_for_valid(household)
+            else:
+                return None
+        except ValueError:
             return None
 
     def _initialize(self, household):
@@ -190,11 +193,35 @@ class HouseholdTestData:
             result_prob.append(H_end[mask].sum())
             H_start = 0.0 * H_start
             H_start[mask] = H_end[mask]
+            if H_start.sum() == 0.0:
+                raise ValueError
             H_start = H_start / H_start.sum()
             # print('New starting probability is ', H_start.sum())
             # print('H_start = ', H_start)
             t_start = t_next_test
         return sum(log((result_prob)))
+
+    def plot2file(self, file_name):
+        from matplotlib.pyplot import figure
+        from re import findall
+        from numpy import argsort
+        fig = figure()
+        ax = fig.gca()
+        left_bounds = [
+            int(findall('[0-9]+', AGE_GROUPS[a])[0]) for a in self.ages]
+        index = argsort(left_bounds)
+        for i, timeline in enumerate(self.tests[index, :]):
+            for j, d in enumerate(timeline):
+                if d == 0:
+                    ax.plot(j, i, marker='o', color='b')
+                elif d == 1:
+                    ax.plot(j, i, marker='+', color='r')
+                else:
+                    ax.plot(j, i, marker='.', c='k')
+
+        ax.set_yticks(arange(len(self.ages)))
+        ax.set_yticklabels([AGE_GROUPS[a] for a in self.ages[index]])
+        fig.savefig(file_name, dpi=300)
 
 
 class LikelihoodCalculation:
