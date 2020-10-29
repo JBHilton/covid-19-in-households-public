@@ -6,7 +6,7 @@ from numpy import arange, array, where
 from numpy.random import rand
 from time import time as get_time
 from scipy.integrate import solve_ivp
-import ode
+# import ode
 from model.preprocessing import (
     CareHomeInput, HouseholdPopulation, initialise_carehome)
 from model.specs import CAREHOME_SPEC
@@ -69,7 +69,7 @@ solution = solve_ivp(rhs, tspan, H0, first_step=0.001)
 #solution = ode.backwardeuler(rhs, H0, tspan, timestep=0.001)
 sol_end = get_time()
 
-#ode.BackwardEuler(dfun=rhs, xzero=H0, timerange=tspan, 
+#ode.BackwardEuler(dfun=rhs, xzero=H0, timerange=tspan,
  #   timestep=0.001, convergencethreshold=1e-10, maxiterations=1000
 
 #time = solution[0]
@@ -83,7 +83,7 @@ print(
     'Solution took ',
     sol_end-sol_start,
     ' seconds.')
-    
+
 Prob = numpy.empty(shape=(carehome_size,len(time)), dtype = object)
 
 for i in range(carehome_size):

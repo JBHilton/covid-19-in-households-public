@@ -1,89 +1,109 @@
 '''Module for additional computations required by the model'''
 from numpy import (
     arange, array, atleast_2d, concatenate, copy, cumprod, diag, isnan, ix_,
-    ones, prod, shape, where, zeros)
+    ones, prod, shape, sum, where, zeros)
 from numpy import int64 as my_int
 from scipy.sparse import csc_matrix as sparse
 from scipy.special import binom
 from model.imports import NoImportModel, CareHomeImportModel
 import pdb
 
-def within_carehome_system(
-        composition, model_input):
-    '''Assuming frequency-dependent homogeneous within-household mixing
-    composition[i] is the number of individuals in age-class i inside the
-    household'''
+def state_recursor(states,no_compartments,age_class,b_size,n_blocks,con_reps,c,x,depth,k):
+    if depth<no_compartments-1:
+        for x_i in arange(c + 1 - sum(x)):
+            x[0,depth] = x_i
+            x[0,depth+1:] = zeros((1,no_compartments-depth-1),dtype=my_int)
+            states, k = state_recursor(states,
+                                        no_compartments,
+                                        age_class,
+                                        b_size,
+                                        n_blocks,
+                                        con_reps,
+                                        c,
+                                        x,
+                                        depth+1,
+                                        k)
+    else:
+        x[0,-1] = c - sum(x[0,:depth])
+        for block in arange(n_blocks):
+            repeat_range = arange(
+                block * b_size
+                + k * con_reps,
+                block * b_size +
+                (k + 1) * con_reps)
+            states[repeat_range, no_compartments*age_class:no_compartments*(age_class+1)] = \
+                ones(
+                    (con_reps, 1),
+                    dtype=my_int) \
+                * array(
+                    x,
+                    ndmin=2, dtype=my_int)
+        k += 1
+        return states, k
+    return states, k
 
-    sus = model_input.sus # susceptibility indexed by patients and carers
-    tau = model_input.tau # reduction in infectivity during prodrome
-    K_home = model_input.k_home # internal mixing matrix
-    alpha_1 = model_input.alpha_1 # E->P progression rate
-    alpha_2 = model_input.alpha_2 # P->I progression rate
-    gamma = model_input.gamma # Recovery (I->R) rate
-    mu_cov = model_input.mu_cov # Disease-specific mortality rate
-    mu = model_input.mu # Background bed clearance rate
-    b = model_input.b # Arrival rate into empty beds
+def build_states_recursively(total_size,no_compartments,classes_present,block_size,num_blocks,consecutive_repeats,composition):
+    states = zeros((total_size, no_compartments*len(classes_present)), dtype=my_int)
+    k=0
+    for age_class in range(len(classes_present)):
+        states, k = state_recursor(states,
+                                no_compartments,
+                                age_class,
+                                block_size[age_class],
+                                num_blocks[age_class],
+                                consecutive_repeats[age_class],
+                                composition[classes_present[age_class]],
+                                zeros([1,no_compartments],dtype=my_int),
+                                0,
+                                k)
+    return states,k
 
-    # Set of individuals actually present here
-    classes_present = where(composition.ravel() > 0)[0]
 
-    K_home = K_home[ix_(classes_present, classes_present)]
-    sus = sus[classes_present]
-    tau = tau[classes_present]
-    r_home = atleast_2d(diag(sus).dot(K_home))
+def build_state_matrix(composition, classes_present, no_compartments):
 
     system_sizes = array([
-        binom(composition[classes_present[i]] + 6 - 1, 6 - 1)
+        binom(composition[classes_present[i]] + no_compartments - 1, no_compartments - 1)
         for i, _ in enumerate(classes_present)], dtype=my_int)
 
     total_size = prod(system_sizes)
 
-    states = zeros((total_size, 6*len(classes_present)), dtype=my_int)
+    # states = zeros((total_size, 6*len(classes_present)), dtype=my_int)
     # Number of times you repeat states for each configuration
     consecutive_repeats = concatenate((
         ones(1, dtype=my_int), cumprod(system_sizes[:-1])))
     block_size = consecutive_repeats * system_sizes
     num_blocks = total_size // block_size
 
-    for age_class in range(len(classes_present)):
-        k = 0
-        c = composition[classes_present[age_class]]
-        for s in arange(c + 1):
-            for e in arange(c - s + 1):
-                for p in arange(c - s - e + 1):
-                    for i in arange(c - s - e - p + 1):
-                        for r in arange(c - s - e - p - i + 1):
-                            for block in arange(num_blocks[age_class]):
-                                repeat_range = arange(
-                                    block * block_size[age_class]
-                                    + k * consecutive_repeats[age_class],
-                                    block * block_size[age_class] +
-                                    (k + 1) * consecutive_repeats[age_class])
-                                states[repeat_range, 6*age_class:6*(age_class+1)] = \
-                                    ones(
-                                        (consecutive_repeats[age_class], 1),
-                                        dtype=my_int) \
-                                    * array(
-                                        [s, e, p, i, r, c - s - e - p - i - r],
-                                        ndmin=2, dtype=my_int)
-                            k += 1
-
-    p_pos = 2 + 6 * arange(len(classes_present)) # Location of prodromals in state vector
-    i_pos = 3 + 6 * arange(len(classes_present)) # Location of infected in state vector
-    d_pos = 5 + 6 * arange(len(classes_present)) # Location of empty beds in state vector
-
-    empty_adjusted_comp = composition[classes_present] - states[:,d_pos] # This is number of people actually present, given some beds are empty
-    empty_adjusted_comp[empty_adjusted_comp==0] = 1 # Replace zeros with ones - we only ever use this as a denominator whose numerator will be zero anyway if it should be zero
-    if (empty_adjusted_comp<1).any():
-        pdb.set_trace()
-
+    # for age_class in range(len(classes_present)):
+    #     k = 0
+    #     c = composition[classes_present[age_class]]
+    #     for x_1 in arange(c + 1):
+    #         for x_2 in arange(c - x_1 + 1):
+    #             for x_3 in arange(c - x_1 - x_2 + 1):
+    #                 for x_4 in arange(c - x_1 - x_2 - x_3 + 1):
+    #                     for x_5 in arange(c - x_1 - x_2 - x_3 - x_4 + 1):
+    #                         for block in arange(num_blocks[age_class]):
+    #                             repeat_range = arange(
+    #                                 block * block_size[age_class]
+    #                                 + k * consecutive_repeats[age_class],
+    #                                 block * block_size[age_class] +
+    #                                 (k + 1) * consecutive_repeats[age_class])
+    #                             states[repeat_range, 6*age_class:6*(age_class+1)] = \
+    #                                 ones(
+    #                                     (consecutive_repeats[age_class], 1),
+    #                                     dtype=my_int) \
+    #                                 * array(
+    #                                     [x_1, x_2, x_3, x_4, x_5, c - x_1 - x_2 - x_3 - x_4 - x_5],
+    #                                     ndmin=2, dtype=my_int)
+    #                         k += 1
+    states,k=build_states_recursively(total_size,no_compartments,classes_present,block_size,num_blocks,consecutive_repeats,composition)
     # Now construct a sparse vector which tells you which row a state appears
     # from in the state array
 
     # This loop tells us how many values each column of the state array can
     # take
     state_sizes = concatenate([
-        (composition[i] + 1) * ones(6, dtype=my_int) for i in classes_present])
+        (composition[i] + 1) * ones(no_compartments, dtype=my_int) for i in classes_present])
 
     # This vector stores the number of combinations you can get of all
     # subsequent elements in the state array, i.e. reverse_prod(i) tells you
@@ -111,6 +131,43 @@ def within_carehome_system(
     index_vector = sparse((
         arange(total_size),
         (rows, [0]*total_size)))
+
+    return states, total_size, reverse_prod, index_vector, rows
+
+def within_carehome_system(
+        composition, model_input):
+    '''Assuming frequency-dependent homogeneous within-household mixing
+    composition[i] is the number of individuals in age-class i inside the
+    household'''
+
+    sus = model_input.sus # susceptibility indexed by patients and carers
+    tau = model_input.tau # reduction in infectivity during prodrome
+    K_home = model_input.k_home # internal mixing matrix
+    alpha_1 = model_input.alpha_1 # E->P progression rate
+    alpha_2 = model_input.alpha_2 # P->I progression rate
+    gamma = model_input.gamma # Recovery (I->R) rate
+    mu_cov = model_input.mu_cov # Disease-specific mortality rate
+    mu = model_input.mu # Background bed clearance rate
+    b = model_input.b # Arrival rate into empty beds
+
+    # Set of individuals actually present here
+    classes_present = where(composition.ravel() > 0)[0]
+
+    K_home = K_home[ix_(classes_present, classes_present)]
+    sus = sus[classes_present]
+    tau = tau[classes_present]
+    r_home = atleast_2d(diag(sus).dot(K_home))
+
+    states, total_size, reverse_prod, index_vector, rows = build_state_matrix(composition, classes_present, 6)
+
+    p_pos = 2 + 6 * arange(len(classes_present)) # Location of prodromals in state vector
+    i_pos = 3 + 6 * arange(len(classes_present)) # Location of infected in state vector
+    d_pos = 5 + 6 * arange(len(classes_present)) # Location of empty beds in state vector
+
+    empty_adjusted_comp = composition[classes_present] - states[:,d_pos] # This is number of people actually present, given some beds are empty
+    empty_adjusted_comp[empty_adjusted_comp==0] = 1 # Replace zeros with ones - we only ever use this as a denominator whose numerator will be zero anyway if it should be zero
+    if (empty_adjusted_comp<1).any():
+        pdb.set_trace()
 
     Q_int = sparse((total_size, total_size))
     inf_event_row = array([], dtype=my_int)
@@ -148,7 +205,6 @@ def within_carehome_system(
         inf_event_col = concatenate((inf_event_col, inf_to))
         inf_event_class = concatenate(
             (inf_event_class, classes_present[i]*ones((len(s_present)))))
-        # input('Press enter to continue')
         # # disp('Infection events done')
 
         # # Now do exposure to prodromal
