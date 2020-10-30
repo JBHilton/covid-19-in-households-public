@@ -1,14 +1,31 @@
 '''Various functions and classes that help build the model'''
-from copy import deepcopy
+from copy import copy, deepcopy
 from numpy import (
-        append, arange, array, cumsum, ones, ones_like, power, where, zeros,
+        append, arange, around, array, cumsum, ones, ones_like, power, where, zeros,
         concatenate, vstack, identity, tile, hstack)
+from numpy.linalg import eig
 from scipy.sparse import block_diag
-from scipy.special import binom
+from scipy.special import binom as binom_coeff
+from scipy.stats import binom
 from pandas import read_excel, read_csv
 from tqdm import tqdm
-from model.common import within_household_spread, sparse, my_int
+from model.common import within_household_spread, within_household_SEDURQ, within_household_SEPIRQ, sparse, my_int
+import pdb
 
+def initialise_carehome(
+        household_population,
+        rhs,
+        initial_presence):
+    '''TODO: docstring'''
+    initial_absence = household_population.composition_list - initial_presence
+
+    # Starting state is one where total difference between S and initial presence and total difference between E and initial absence are both zero
+    starting_states = where((abs(rhs.states_sus_only - initial_presence).sum(axis=1) +
+     abs(rhs.states_emp_only - initial_absence).sum(axis=1))==0)[0]
+
+    H0 = zeros(len(household_population.which_composition))
+    H0[starting_states] = household_population.composition_distribution
+    return H0
 
 def make_initial_condition(
         household_population,
@@ -27,6 +44,51 @@ def make_initial_condition(
     H0[i_is_one] = alpha * x
     H0[fully_sus] = (1.0 - alpha * sum(x)) \
         * household_population.composition_distribution
+    return H0
+
+def make_initial_SEPIRQ_condition(
+        household_population,
+        rhs,
+        prev=1.0e-5,
+        seroprev=6e-2,
+        AR=0.78):
+    '''TODO: docstring'''
+    fully_sus = where(
+        rhs.states_sus_only.sum(axis=1)
+        ==
+        household_population.states.sum(axis=1))[0]
+    already_visited = where(
+        (rhs.states_rec_only.sum(axis=1)
+        ==
+        around(AR*household_population.states.sum(axis=1)).astype(int) & \
+        ((rhs.states_sus_only+rhs.states_rec_only).sum(axis=1)
+        ==
+        household_population.states.sum(axis=1))) & \
+        ((rhs.states_rec_only).sum(axis=1) > 0)) [0] # This last condition is needed to make sure we don't include any fully susceptible states
+    i_is_one = where(
+        ((rhs.states_inf_only).sum(axis=1) == 1) & \
+        ((rhs.states_sus_only+rhs.states_inf_only).sum(axis=1)
+        ==
+        household_population.states.sum(axis=1)) )[0]
+    ave_hh_size = sum(household_population.composition_distribution.T.dot(household_population.composition_list))
+    H0 = zeros(len(household_population.which_composition))
+    base_comp_dist = copy(household_population.composition_distribution)
+    inf_comps = household_population.which_composition[i_is_one]
+    x = array([])
+    for state in i_is_one:
+        x = append(x,(1/len(inf_comps==household_population.which_composition[state]))*household_population.composition_distribution[household_population.which_composition[state]])
+        # base_comp_dist[household_population.which_composition[state]]-=x[-1]
+    visited_comps = household_population.which_composition[already_visited]
+    y=array([])
+    for state in already_visited:
+        y = append(y,(1/len(visited_comps==household_population.which_composition[state]))*household_population.composition_distribution[household_population.which_composition[state]])
+        # base_comp_dist[household_population.which_composition[state]]-=y[-1]
+    # y = household_population.composition_distribution[
+    #     household_population.which_composition[already_visited]]
+    H0[i_is_one] = ave_hh_size*(prev/sum(x)) * x
+    H0[already_visited] = ave_hh_size*((seroprev/AR)/sum(y)) * y
+    H0[fully_sus] = (1-sum(H0)) * household_population.composition_distribution
+
     return H0
 
 
@@ -94,21 +156,35 @@ def aggregate_vector_quantities(v_fine, fine_bds, coarse_bds, pyramid):
 
     return pop_weight_matrix * v_fine
 
+'''The next function creates a version of the adult-child composition list and
+distribution which distinguishes between vulnerable and non-vulnerable adutls.
+Note that as written it is assuming only two age classes, with the second one
+being the one we divide by vulnerability.'''
+def add_vulnerable_hh_members(composition_list,composition_distribution,vuln_prop):
+    new_comp_list = copy(composition_list)
+    new_comp_list = hstack((composition_list,zeros((len(composition_list),1),dtype=my_int)))
+    new_comp_dist = copy(composition_distribution)
+    for comp_no in range(len(composition_list)):
+        comp = composition_list[comp_no]
+        if comp[1]>0:
+            new_comp_dist[comp_no] = composition_distribution[comp_no]*binom.pmf(0,comp[1],vuln_prop)
+            for i in range(1,comp[1]+1):
+                new_comp_list = vstack((new_comp_list,[comp[0],comp[1]-i,i]))
+                prob = composition_distribution[comp_no]*binom.pmf(i,comp[1],vuln_prop)
+                new_comp_dist = append(new_comp_dist,prob)
+    # pdb.set_trace()
+    return new_comp_list,new_comp_dist
 
 class HouseholdPopulation:
     def __init__(
             self,
             composition_list,
             composition_distribution,
-            model_input):
+            model_input,
+            build_function=within_household_spread,
+            no_compartments = 5):
         '''This builds internal mixing matrix for entire system of
         age-structured households.'''
-        sus = model_input.sigma
-        det = model_input.det
-        tau = model_input.tau
-        k_home = model_input.k_home
-        alpha = model_input.alpha
-        gamma = model_input.gamma
 
         self.composition_list = composition_list
         self.composition_distribution = composition_distribution
@@ -131,9 +207,9 @@ class HouseholdPopulation:
         system_sizes = ones(no_types, dtype=my_int)
         for i, _ in enumerate(system_sizes):
             for j in where(classes_present[i, :])[0]:
-                system_sizes[i] *= binom(
-                    composition_list[i, j] + 5 - 1,
-                    5 - 1)
+                system_sizes[i] *= binom_coeff(
+                    composition_list[i, j] + no_compartments - 1,
+                    no_compartments - 1)
 
         # This is useful for placing blocks of system states
         cum_sizes = cumsum(system_sizes)
@@ -141,26 +217,21 @@ class HouseholdPopulation:
         # considering a single household which can be in any one composition
         total_size = cum_sizes[-1]
         # Stores list of (S,E,D,U,R)_a states for each composition
-        states = zeros((total_size, 5 * no_classes), dtype=my_int)
+        states = zeros((total_size, no_compartments * no_classes), dtype=my_int)
         which_composition = zeros(total_size, dtype=my_int)
 
         # Initialise matrix of internal process by doing the first block
         which_composition[:system_sizes[0]] = zeros(system_sizes[0], dtype=my_int)
         Q_temp, states_temp, inf_event_row, inf_event_col, inf_event_class \
-            = within_household_spread(
+            = build_function(
                 composition_list[0, :],
-                sus,
-                det,
-                tau,
-                k_home,
-                alpha,
-                gamma)
+                model_input)
         Q_int = sparse(Q_temp)
         class_list = where(classes_present[0, :])[0]
         for j in range(len(class_list)):
             this_class = class_list[j]
-            states[:system_sizes[0], 5*this_class:5*(this_class+1)] = \
-                states_temp[:, 5*j:5*(j+1)]
+            states[:system_sizes[0], no_compartments*this_class:no_compartments*(this_class+1)] = \
+                states_temp[:, no_compartments*j:no_compartments*(j+1)]
 
         # NOTE: The way I do this loop is very wasteful, I'm making lots of arrays
         # which I'm overwriting with different sizes
@@ -175,14 +246,9 @@ class HouseholdPopulation:
             which_composition[cum_sizes[i-1]:cum_sizes[i]] = i * ones(
                 system_sizes[i], dtype=my_int)
             Q_temp, states_temp, inf_temp_row, inf_temp_col, inf_temp_class \
-                = within_household_spread(
+                = build_function(
                     composition_list[i, :],
-                    sus,
-                    det,
-                    tau,
-                    k_home,
-                    alpha,
-                    gamma)
+                    model_input)
             Q_int = block_diag((Q_int, Q_temp), format='csc')
             Q_int.eliminate_zeros()
             class_list = where(classes_present[i,:])[0]
@@ -190,7 +256,7 @@ class HouseholdPopulation:
                 this_class = class_list[j]
                 states[
                     cum_sizes[i-1]:cum_sizes[i],
-                    5*this_class:5*(this_class+1)] = states_temp[:, 5*j:5*(j+1)]
+                    no_compartments*this_class:no_compartments*(this_class+1)] = states_temp[:, no_compartments*j:no_compartments*(j+1)]
 
             inf_event_row = concatenate((inf_event_row, cum_sizes[i-1] + inf_temp_row))
             inf_event_col = concatenate((inf_event_col, cum_sizes[i-1] + inf_temp_col))
@@ -412,6 +478,111 @@ class VoInput:
     @property
     def alpha(self):
         return self.spec['alpha']
+
+    @property
+    def gamma(self):
+        return self.spec['gamma']
+
+class TwoAgeWithVulnerableInput:
+    '''TODO: add docstring'''
+    def __init__(self, spec):
+        self.spec = deepcopy(spec)
+
+        self.epsilon = spec['epsilon']
+
+        self.vuln_prop = spec['vuln_prop']
+
+        left_expander = vstack((identity(2),[0,1])) # Add copy of bottom row - vulnerables behave identically to adults
+        right_expander = array([[1,0,0],[0,1-self.vuln_prop,self.vuln_prop]]) # Add copy of right row, scaled by vulnerables, and scale adult column by non-vuln proportion
+
+        k_home = read_excel(
+            spec['k_home']['file_name'],
+            sheet_name=spec['k_home']['sheet_name'],
+            header=None).to_numpy()
+        k_all = read_excel(
+            spec['k_all']['file_name'],
+            sheet_name=spec['k_all']['sheet_name'],
+            header=None).to_numpy()
+
+        fine_bds = arange(0, 81, 5)
+        self.coarse_bds = array([0, 20])
+
+        # pop_pyramid = read_csv(
+        #     'inputs/United Kingdom-2019.csv', index_col=0)
+        pop_pyramid = read_csv(
+            spec['pop_pyramid_file_name'], index_col=0)
+        pop_pyramid = (pop_pyramid['F'] + pop_pyramid['M']).to_numpy()
+
+        self.k_home = aggregate_contact_matrix(
+            k_home, fine_bds, self.coarse_bds, pop_pyramid)
+        self.k_all = aggregate_contact_matrix(
+            k_all, fine_bds, self.coarse_bds, pop_pyramid)
+        self.k_ext = self.k_all - self.k_home
+
+        self.k_home = left_expander.dot(self.k_home.dot(right_expander))
+        self.k_all = left_expander.dot(self.k_all.dot(right_expander))
+        self.k_ext = left_expander.dot(self.k_ext.dot(right_expander))
+
+        self.sus = spec['sus']
+        self.tau = spec['tau']
+
+        eigenvalue = max(eig(
+            self.sus * ((1/spec['gamma']) * (self.k_home + self.epsilon * self.k_ext) + \
+            (1/spec['alpha_2']) * (self.k_home + self.epsilon * self.k_ext) * self.tau)
+            )[0])
+
+        self.k_home = (spec['R0']/eigenvalue)*self.k_home
+        self.k_all = (spec['R0']/eigenvalue)*self.k_all
+        self.k_ext = (spec['R0']/eigenvalue)*self.k_ext
+
+        self.k_ext[2,:] = 0*self.k_ext[2,:]
+
+    @property
+    def alpha_1(self):
+        return self.spec['alpha_1']
+
+    @property
+    def alpha_2(self):
+        return self.spec['alpha_2']
+
+    @property
+    def gamma(self):
+        return self.spec['gamma']
+
+class CareHomeInput:
+    '''TODO: add docstring'''
+    def __init__(self, spec):
+        self.spec = deepcopy(spec)
+
+        self.k_home = array([[1,0,0],[0,0,0],[0,0,0]]) # Within-home contact matrix for patients and carers (full time and agency)
+        self.k_ext = array([[0,0,0],[0,0.01,0.01],[0.5,0.5,0.5]]) # Contact matrix with other care homes - agency staff may work more than one home
+
+        self.import_rate = array([0.5,0.5,0.5]) # Rate of contact with general outside population
+
+        self.sus = spec['sus']
+        self.tau = spec['tau']
+
+        eigenvalue = max(eig(
+            self.sus * ((1/spec['gamma']) * (self.k_home) + \
+            (1/spec['alpha_2']) * (self.k_home) * self.tau)
+            )[0])
+
+        # Scaling below means R0 is the one defined in specs
+        self.k_home = (spec['R_carehome']/eigenvalue)*self.k_home
+        self.k_ext = self.k_ext
+
+        self.mu = spec['mu']
+        self.mu_cov = spec['mu_cov']
+        self.b = spec['b']
+        self.epsilon = spec['epsilon']
+
+    @property
+    def alpha_1(self):
+        return self.spec['alpha_1']
+
+    @property
+    def alpha_2(self):
+        return self.spec['alpha_2']
 
     @property
     def gamma(self):

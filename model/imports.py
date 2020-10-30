@@ -70,3 +70,28 @@ class ExponentialImportModel(ImportModel):
 
     def undetected(self, t):
         return exp(self.r * t) * self.undet_profile
+
+class CareHomeImportModel(ImportModel):
+    def __init__(
+            self,
+            time,
+            prodromal_prev,
+            infected_prev):
+        self.prodromal_interpolant = interp1d(
+            time, prodromal_prev,
+            kind='nearest',
+            bounds_error=False,
+            fill_value='extrapolate',
+            assume_sorted=True)
+        self.infected_interpolant = interp1d(
+            time, infected_prev,
+            kind='nearest',
+            bounds_error=False,
+            fill_value='extrapolate',
+            assume_sorted=True)
+
+    def prodromal(self, t):
+        return self.prodromal_interpolant(t)
+
+    def infected(self, t):
+        return self.infected_interpolant(t)

@@ -7,6 +7,7 @@ from model.preprocessing import (
     TwoAgeModelInput, HouseholdPopulation, make_initial_condition)
 from model.specs import DEFAULT_SPEC
 from model.common import RateEquations
+from pickle import load, dump
 # pylint: disable=invalid-name
 
 model_input = TwoAgeModelInput(DEFAULT_SPEC)
@@ -41,3 +42,6 @@ print(
     'Simple model took ',
     simple_model_end-simple_model_start,
     ' seconds.')
+
+with open('simple.pkl','wb') as f:
+    dump((time,H,D,U),f)
