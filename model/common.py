@@ -44,8 +44,8 @@ def state_recursor(states,no_compartments,age_class,b_size,n_blocks,con_reps,c,x
 
 def build_states_recursively(total_size,no_compartments,classes_present,block_size,num_blocks,consecutive_repeats,composition):
     states = zeros((total_size, no_compartments*len(classes_present)), dtype=my_int)
-    k=0
     for age_class in range(len(classes_present)):
+        k = 0
         states, k = state_recursor(states,
                                 no_compartments,
                                 age_class,
@@ -377,77 +377,10 @@ def within_household_spread(
     tau = tau[classes_present]
     r_home = atleast_2d(diag(sus).dot(K_home))
 
-    system_sizes = array([
-        binom(composition[classes_present[i]] + 5 - 1, 5 - 1)
-        for i, _ in enumerate(classes_present)], dtype=my_int)
-
-    total_size = prod(system_sizes)
-
-    states = zeros((total_size, 5*len(classes_present)), dtype=my_int)
-    # Number of times you repeat states for each configuration
-    consecutive_repeats = concatenate((
-        ones(1, dtype=my_int), cumprod(system_sizes[:-1])))
-    block_size = consecutive_repeats * system_sizes
-    num_blocks = total_size // block_size
-
-    for i in range(len(classes_present)):
-        k = 0
-        c = composition[classes_present[i]]
-        for s in arange(c + 1):
-            for e in arange(c - s + 1):
-                for d in arange(c - s - e + 1):
-                    for u in arange(c - s - e - d + 1):
-                        for block in arange(num_blocks[i]):
-                            repeat_range = arange(
-                                block * block_size[i]
-                                + k * consecutive_repeats[i],
-                                block * block_size[i] +
-                                (k + 1) * consecutive_repeats[i])
-                            states[repeat_range, 5*i:5*(i+1)] = \
-                                ones(
-                                    (consecutive_repeats[i], 1),
-                                    dtype=my_int) \
-                                * array(
-                                    [s, e, d, u, c - s - e - d - u],
-                                    ndmin=2, dtype=my_int)
-                        k += 1
-    # Q_int=sparse(total_size, total_size)
+    states, total_size, reverse_prod, index_vector, rows = build_state_matrix(composition, classes_present, 5)
 
     d_pos = 2 + 5 * arange(len(classes_present))
     u_pos = 3 + 5 * arange(len(classes_present))
-
-    # Now construct a sparse vector which tells you which row a state appears
-    # from in the state array
-
-    # This loop tells us how many values each column of the state array can
-    # take
-    state_sizes = concatenate([
-        (composition[i] + 1) * ones(5, dtype=my_int) for i in classes_present])
-
-    # This vector stores the number of combinations you can get of all
-    # subsequent elements in the state array, i.e. reverse_prod(i) tells you
-    # how many arrangements you can get in states(:,i+1:end)
-    reverse_prod = array([0, *cumprod(state_sizes[:0:-1])])[::-1]
-
-    # We can then define index_vector look up the location of a state by
-    # weighting its elements using reverse_prod - this gives a unique mapping
-    # from the set of states to the integers. Because lots of combinations
-    # don't actually appear in the states array, we use a sparse array which
-    # will be much bigger than we actually require
-    rows = [
-        states[k, :].dot(reverse_prod) + states[k, -1]
-        for k in range(total_size)]
-    if min(rows) < 0:
-        print(
-            'Negative row indices found, proportional total',
-            sum(array(rows) < 0),
-            '/',
-            len(rows),
-            '=',
-            sum(array(rows) < 0) / len(rows))
-    index_vector = sparse((
-        arange(total_size),
-        (rows, [0]*total_size)))
 
     Q_int = sparse((total_size, total_size))
     inf_event_row = array([], dtype=my_int)
@@ -585,42 +518,7 @@ def within_household_SEDURQ(
     tau = tau[classes_present]
     r_home = atleast_2d(diag(sus).dot(K_home))
 
-    system_sizes = array([
-        binom(composition[classes_present[i]] + 6 - 1, 6 - 1)
-        for i, _ in enumerate(classes_present)], dtype=my_int)
-
-    total_size = prod(system_sizes)
-
-    states = zeros((total_size, 6*len(classes_present)), dtype=my_int)
-    # Number of times you repeat states for each configuration
-    consecutive_repeats = concatenate((
-        ones(1, dtype=my_int), cumprod(system_sizes[:-1])))
-    block_size = consecutive_repeats * system_sizes
-    num_blocks = total_size // block_size
-
-    for i in range(len(classes_present)):
-        k = 0
-        c = composition[classes_present[i]]
-        for s in arange(c + 1):
-            for e in arange(c - s + 1):
-                for d in arange(c - s - e + 1):
-                    for u in arange(c - s - e - d + 1):
-                        for r in arange(c - s - e - d - u + 1):
-                            for block in arange(num_blocks[i]):
-                                repeat_range = arange(
-                                    block * block_size[i]
-                                    + k * consecutive_repeats[i],
-                                    block * block_size[i] +
-                                    (k + 1) * consecutive_repeats[i])
-                                states[repeat_range, 6*i:6*(i+1)] = \
-                                    ones(
-                                        (consecutive_repeats[i], 1),
-                                        dtype=my_int) \
-                                    * array(
-                                        [s, e, d, u, r, c - s - e - d - u - r],
-                                        ndmin=2, dtype=my_int)
-                            k += 1
-    # Q_int=sparse(total_size, total_size)
+    states, total_size, reverse_prod, index_vector, rows = build_state_matrix(composition, classes_present, 6)
 
     d_pos = 2 + 6 * arange(len(classes_present))
     u_pos = 3 + 6 * arange(len(classes_present))
@@ -632,39 +530,6 @@ def within_household_SEDURQ(
         pdb.set_trace()
     adults_isolating = states[:,6*adult_bd+5::6].sum(axis=1) # Number of adults isolating by state
 
-    # Now construct a sparse vector which tells you which row a state appears
-    # from in the state array
-
-    # This loop tells us how many values each column of the state array can
-    # take
-    state_sizes = concatenate([
-        (composition[i] + 1) * ones(6, dtype=my_int) for i in classes_present])
-
-    # This vector stores the number of combinations you can get of all
-    # subsequent elements in the state array, i.e. reverse_prod(i) tells you
-    # how many arrangements you can get in states(:,i+1:end)
-    reverse_prod = array([0, *cumprod(state_sizes[:0:-1])])[::-1]
-
-    # We can then define index_vector look up the location of a state by
-    # weighting its elements using reverse_prod - this gives a unique mapping
-    # from the set of states to the integers. Because lots of combinations
-    # don't actually appear in the states array, we use a sparse array which
-    # will be much bigger than we actually require
-    rows = [
-        states[k, :].dot(reverse_prod) + states[k, -1]
-        for k in range(total_size)]
-    if min(rows) < 0:
-        print(
-            'Negative row indices found, proportional total',
-            sum(array(rows) < 0),
-            '/',
-            len(rows),
-            '=',
-            sum(array(rows) < 0) / len(rows))
-    # pdb.set_trace()
-    index_vector = sparse((
-        arange(total_size),
-        (rows, [0]*total_size)))
 
     Q_int = sparse((total_size, total_size))
     inf_event_row = array([], dtype=my_int)
@@ -859,42 +724,7 @@ def within_household_SEPIRQ(
     tau_Q = tau_Q[classes_present]
     r_home = atleast_2d(diag(sus).dot(K_home))
 
-    system_sizes = array([
-        binom(composition[classes_present[i]] + 6 - 1, 6 - 1)
-        for i, _ in enumerate(classes_present)], dtype=my_int)
-
-    total_size = prod(system_sizes)
-
-    states = zeros((total_size, 6*len(classes_present)), dtype=my_int)
-    # Number of times you repeat states for each configuration
-    consecutive_repeats = concatenate((
-        ones(1, dtype=my_int), cumprod(system_sizes[:-1])))
-    block_size = consecutive_repeats * system_sizes
-    num_blocks = total_size // block_size
-
-    for age_class in range(len(classes_present)):
-        k = 0
-        c = composition[classes_present[age_class]]
-        for s in arange(c + 1):
-            for e in arange(c - s + 1):
-                for p in arange(c - s - e + 1):
-                    for i in arange(c - s - e - p + 1):
-                        for r in arange(c - s - e - p - i + 1):
-                            for block in arange(num_blocks[age_class]):
-                                repeat_range = arange(
-                                    block * block_size[age_class]
-                                    + k * consecutive_repeats[age_class],
-                                    block * block_size[age_class] +
-                                    (k + 1) * consecutive_repeats[age_class])
-                                states[repeat_range, 6*age_class:6*(age_class+1)] = \
-                                    ones(
-                                        (consecutive_repeats[age_class], 1),
-                                        dtype=my_int) \
-                                    * array(
-                                        [s, e, p, i, r, c - s - e - p - i - r],
-                                        ndmin=2, dtype=my_int)
-                            k += 1
-    # Q_int=sparse(total_size, total_size)
+    states, total_size, reverse_prod, index_vector, rows = build_state_matrix(composition, classes_present, 6)
 
     p_pos = 2 + 6 * arange(len(classes_present))
     i_pos = 3 + 6 * arange(len(classes_present))
@@ -905,39 +735,6 @@ def within_household_SEPIRQ(
     if (iso_adjusted_comp<1).any():
         pdb.set_trace()
     adults_isolating = states[:,6*adult_bd+5::6].sum(axis=1) # Number of adults isolating by state
-
-    # Now construct a sparse vector which tells you which row a state appears
-    # from in the state array
-
-    # This loop tells us how many values each column of the state array can
-    # take
-    state_sizes = concatenate([
-        (composition[i] + 1) * ones(6, dtype=my_int) for i in classes_present])
-
-    # This vector stores the number of combinations you can get of all
-    # subsequent elements in the state array, i.e. reverse_prod(i) tells you
-    # how many arrangements you can get in states(:,i+1:end)
-    reverse_prod = array([0, *cumprod(state_sizes[:0:-1])])[::-1]
-
-    # We can then define index_vector look up the location of a state by
-    # weighting its elements using reverse_prod - this gives a unique mapping
-    # from the set of states to the integers. Because lots of combinations
-    # don't actually appear in the states array, we use a sparse array which
-    # will be much bigger than we actually require
-    rows = [
-        states[k, :].dot(reverse_prod) + states[k, -1]
-        for k in range(total_size)]
-    if min(rows) < 0:
-        print(
-            'Negative row indices found, proportional total',
-            sum(array(rows) < 0),
-            '/',
-            len(rows),
-            '=',
-            sum(array(rows) < 0) / len(rows))
-    index_vector = sparse((
-        arange(total_size),
-        (rows, [0]*total_size)))
 
     Q_int = sparse((total_size, total_size))
     inf_event_row = array([], dtype=my_int)

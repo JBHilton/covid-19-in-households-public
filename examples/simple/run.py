@@ -44,4 +44,4 @@ print(
     ' seconds.')
 
 with open('simple.pkl','wb') as f:
-    dump((time,H,D,U),f)
+    dump((time,H,D,U,model_input.coarse_bds),f)
