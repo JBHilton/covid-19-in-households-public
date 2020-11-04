@@ -6,7 +6,6 @@ from numpy import int64 as my_int
 from scipy.sparse import csc_matrix as sparse
 from scipy.special import binom
 from model.imports import NoImportModel, CareHomeImportModel
-import pdb
 
 def state_recursor(states,no_compartments,age_class,b_size,n_blocks,con_reps,c,x,depth,k):
     if depth<no_compartments-1:
@@ -971,7 +970,6 @@ class RateEquations:
     def __init__(self,
                  model_input,
                  household_population,
-                 importation_model=NoImportModel(),
                  epsilon=1.0,        # TODO: this needs a better name
                  no_compartments=5
                  ):
@@ -1001,7 +999,7 @@ class RateEquations:
         # class in each state
         self.states_undet_only = household_population.states[:, 3::no_compartments]
         self.epsilon = epsilon
-        self.importation_model = importation_model
+        self.import_model = model_input.import_model
 
     def __call__(self, t, H):
         '''hh_ODE_rates calculates the rates of the ODE system describing the
@@ -1044,12 +1042,12 @@ class RateEquations:
             diag(self.det_trans_matrix.dot(
                 self.epsilon * det_by_class.T
                 +
-                self.importation_model.detected(t))))
+                self.import_model.detected(t))))
         FOI_undet = self.states_sus_only.dot(
             diag(self.undet_trans_matrix.dot(
                 self.epsilon * undet_by_class.T
                 +
-                self.importation_model.undetected(t))))
+                self.import_model.undetected(t))))
 
         return FOI_det, FOI_undet
 
@@ -1061,7 +1059,7 @@ class SEPIRQRateEquations:
     def __init__(self,
                  model_input,
                  household_population,
-                 importation_model=NoImportModel()
+                 import_model=NoImportModel()
                  ):
 
         no_compartments=6
@@ -1092,7 +1090,7 @@ class SEPIRQRateEquations:
         self.states_rec_only = household_population.states[:, 4::no_compartments]
         self.states_inf_only = household_population.states[:, 3::no_compartments]
         self.epsilon = model_input.epsilon
-        self.importation_model = importation_model
+        self.import_model = import_model
 
         self.states_iso_only = household_population.states[:,5::no_compartments]
 
@@ -1159,12 +1157,12 @@ class SEPIRQRateEquations:
         FOI_pro = self.states_sus_only.dot(
             diag(self.pro_trans_matrix.dot(
                 self.epsilon * pro_by_class.T
-                + self.importation_model.detected(t))))
+                + self.import_model.detected(t))))
         # This stores the rates of generating an infected of each class in each state
         FOI_inf = self.states_sus_only.dot(
             diag(self.inf_trans_matrix.dot(
                 self.epsilon * inf_by_class.T
-                + self.importation_model.undetected(t))))
+                + self.import_model.undetected(t))))
 
         return FOI_pro, FOI_inf
 
@@ -1176,7 +1174,7 @@ class CareHomeRateEquations:
     def __init__(self,
                  model_input,
                  household_population,
-                 importation_model
+                 import_model
                  ):
 
         no_compartments=6
@@ -1200,7 +1198,7 @@ class CareHomeRateEquations:
         self.states_emp_only = household_population.states[:, 5::no_compartments]
 
         self.import_rate = model_input.import_rate
-        self.importation_model = importation_model
+        self.import_model = import_model
 
         self.epsilon = model_input.epsilon
 
@@ -1246,11 +1244,11 @@ class CareHomeRateEquations:
             diag(self.epsilon *
                 self.pro_trans_matrix.dot(pro_by_class.T)
                 + self.import_rate.dot(
-                self.importation_model.prodromal(t))))
+                self.import_model.prodromal(t))))
         FOI_inf = self.states_sus_only.dot(
             diag(self.epsilon *
                 self.inf_trans_matrix.dot(inf_by_class.T)
                 + self.import_rate.dot(
-                self.importation_model.infected(t))))
+                self.import_model.infected(t))))
 
         return FOI_pro, FOI_inf

@@ -47,7 +47,12 @@ VO_SPEC = {
         'sheet_name': 'Italy'
     },
     'pop_pyramid_file_name': 'inputs/Italy-2019.csv',
-    'rho_file_name': 'inputs/rho_estimate_cdc.csv'
+    'rho_file_name': 'inputs/rho_estimate_cdc.csv',
+    'external_importation': {
+        'type': 'exponential',
+        'exponent': 1.0e-2,
+        'alpha': 1.0e-2,
+    }
 }
 
 

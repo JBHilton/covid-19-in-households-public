@@ -3,3 +3,4 @@ __pycache__
 octave-workspace
 *.pkl
 *.spyproject
+output*.txt

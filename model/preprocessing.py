@@ -1,4 +1,5 @@
 '''Various functions and classes that help build the model'''
+from abc import ABC
 from copy import copy, deepcopy
 from numpy import (
         append, arange, around, array, cumsum, ones, ones_like, where,
@@ -10,6 +11,7 @@ from scipy.stats import binom
 from pandas import read_excel, read_csv
 from tqdm import tqdm
 from model.common import within_household_spread, sparse, my_int
+from model.imports import import_model_from_spec
 
 
 def initialise_carehome(
@@ -326,25 +328,38 @@ class ScaledDetModel:
 
 
 def det_from_spec(spec):
-    type_to_constructor = {
+    text_to_type = {
         'constant': ConstantDetModel,
         'scaled': ScaledDetModel,
     }
-    return type_to_constructor[spec['det_model']['type']](spec['det_model'])
+    return text_to_type[spec['det_model']['type']](spec['det_model'])
 
 
-class ModelInput:
-    '''TODO: add docstring'''
-    def __init__(self, spec):
+class ModelInput(ABC):
+    def __init__(self, spec, header=None):
         self.spec = deepcopy(spec)
-        k_home = read_excel(
+        self.k_home = read_excel(
             spec['k_home']['file_name'],
             sheet_name=spec['k_home']['sheet_name'],
-            header=None).to_numpy()
-        k_all = read_excel(
+            header=header).to_numpy()
+        self.k_all = read_excel(
             spec['k_all']['file_name'],
             sheet_name=spec['k_all']['sheet_name'],
-            header=None).to_numpy()
+            header=header).to_numpy()
+
+    @property
+    def alpha(self):
+        return self.spec['alpha']
+
+    @property
+    def gamma(self):
+        return self.spec['gamma']
+
+
+class StandardModelInput(ModelInput):
+    '''TODO: add docstring'''
+    def __init__(self, spec):
+        super().__init__(spec)
 
         # Because we want 80 to be included as well.
         fine_bds = arange(0, 81, 5)
@@ -355,9 +370,9 @@ class ModelInput:
         pop_pyramid = (pop_pyramid['F'] + pop_pyramid['M']).to_numpy()
 
         self.k_home = aggregate_contact_matrix(
-            k_home, fine_bds, self.coarse_bds, pop_pyramid)
+            self.k_home, fine_bds, self.coarse_bds, pop_pyramid)
         self.k_all = aggregate_contact_matrix(
-            k_all, fine_bds, self.coarse_bds, pop_pyramid)
+            self.k_all, fine_bds, self.coarse_bds, pop_pyramid)
         self.k_ext = self.k_all - self.k_home
 
         # This is in ten year blocks
@@ -381,26 +396,11 @@ class ModelInput:
         self.tau = spec['tau'] * ones(rho.shape)
         self.sigma = rho / self.det
 
-    @property
-    def alpha(self):
-        return self.spec['alpha']
 
-    @property
-    def gamma(self):
-        return self.spec['gamma']
-
-class TwoAgeModelInput:
+class TwoAgeModelInput(ModelInput):
     '''TODO: add docstring'''
     def __init__(self, spec):
-        self.spec = deepcopy(spec)
-        k_home = read_excel(
-            spec['k_home']['file_name'],
-            sheet_name=spec['k_home']['sheet_name'],
-            header=None).to_numpy()
-        k_all = read_excel(
-            spec['k_all']['file_name'],
-            sheet_name=spec['k_all']['sheet_name'],
-            header=None).to_numpy()
+        super().__init__(spec)
 
         fine_bds = arange(0, 81, 5)
         self.coarse_bds = array([0, 20])
@@ -412,9 +412,9 @@ class TwoAgeModelInput:
         pop_pyramid = (pop_pyramid['F'] + pop_pyramid['M']).to_numpy()
 
         self.k_home = aggregate_contact_matrix(
-            k_home, fine_bds, self.coarse_bds, pop_pyramid)
+            self.k_home, fine_bds, self.coarse_bds, pop_pyramid)
         self.k_all = aggregate_contact_matrix(
-            k_all, fine_bds, self.coarse_bds, pop_pyramid)
+            self.k_all, fine_bds, self.coarse_bds, pop_pyramid)
         self.k_ext = self.k_all - self.k_home
 
         # This is in ten year blocks
@@ -442,26 +442,11 @@ class TwoAgeModelInput:
         self.tau = spec['tau'] * ones(rho.shape)
         self.sigma = rho / self.det
 
-    @property
-    def alpha(self):
-        return self.spec['alpha']
 
-    @property
-    def gamma(self):
-        return self.spec['gamma']
-
-
-class VoInput:
+class VoInput(ModelInput):
     '''TODO: add docstring'''
     def __init__(self, spec):
-        self.spec = deepcopy(spec)
-        k_home = read_excel(
-            spec['k_home']['file_name'],
-            sheet_name=spec['k_home']['sheet_name']).to_numpy()
-        k_all = read_excel(
-            spec['k_all']['file_name'],
-            sheet_name=spec['k_all']['sheet_name']).to_numpy()
-
+        super().__init__(spec, header=0)
         fine_bds = arange(0, 96, 5)
         self.coarse_bds = arange(0, 96, 10)
 
@@ -471,7 +456,6 @@ class VoInput:
 
         '''We need to add an extra row to contact matrix to split 75+ class
         into 75-90 and 90+'''
-
         proportions_75_plus = append(
             pop_pyramid[15:18],
             sum(pop_pyramid[18:]))
@@ -485,8 +469,8 @@ class VoInput:
             zeros((16, 3))))
         postmultiplier[15, 15:] = proportions_75_plus
 
-        k_home = (premultiplier.dot(k_home)).dot(postmultiplier)
-        k_all = (premultiplier.dot(k_all)).dot(postmultiplier)
+        k_home = (premultiplier.dot(self.k_home)).dot(postmultiplier)
+        k_all = (premultiplier.dot(self.k_all)).dot(postmultiplier)
 
         self.k_home = aggregate_contact_matrix(
             k_home, fine_bds, self.coarse_bds, pop_pyramid)
@@ -515,14 +499,7 @@ class VoInput:
         self.det = det_model(rho)
         self.tau = spec['tau'] * ones(rho.shape)
         self.sigma = rho / self.det
-
-    @property
-    def alpha(self):
-        return self.spec['alpha']
-
-    @property
-    def gamma(self):
-        return self.spec['gamma']
+        self.import_model = import_model_from_spec(spec, self.det)
 
 
 class TwoAgeWithVulnerableInput:
@@ -598,14 +575,11 @@ class TwoAgeWithVulnerableInput:
     def alpha_2(self):
         return self.spec['alpha_2']
 
-    @property
-    def gamma(self):
-        return self.spec['gamma']
 
-
-class CareHomeInput:
+class CareHomeInput(ModelInput):
     '''TODO: add docstring'''
     def __init__(self, spec):
+        # We do not call super constructor as array are constructed manually.
         self.spec = deepcopy(spec)
 
         # Within-home contact matrix for patients and carers (full time and
@@ -652,7 +626,3 @@ class CareHomeInput:
     @property
     def alpha_2(self):
         return self.spec['alpha_2']
-
-    @property
-    def gamma(self):
-        return self.spec['gamma']

@@ -11,12 +11,12 @@ class MPLikelihoodCalculation(LikelihoodCalculation):
         super().__init__()
         self.no_of_workers = no_of_workers
 
-    def _process_households(self, model):
+    def _process_households(self):
         pool = Pool(self.no_of_workers)
         likelihoods = [
             value for value in tqdm(
                 pool.imap(
-                    model.compute_probability,
+                    self.compute_probability,
                     self.households),
                 desc='Calculating',
                 total=len(self.households))]
@@ -26,9 +26,10 @@ class MPLikelihoodCalculation(LikelihoodCalculation):
 
 
 if __name__ == '__main__':
-    calculator = MPLikelihoodCalculation(3)
+    calculator = MPLikelihoodCalculation(20)
     # These parameters worked much better for alpha alone
     # params = linspace(0.001, 0.015, 10)
     # For r
     likelihoods = [
         calculator(log(2)/tau) for tau in [2, 3, 7, 14, 21]]
+    print(likelihoods)
