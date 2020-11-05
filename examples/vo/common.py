@@ -191,9 +191,10 @@ class LikelihoodCalculation:
         self.t_end = self.t_first_test + 20.0
         self.epsilon = 0.0
 
-    def __call__(self, r):
+    def __call__(self, r, a):
         spec = deepcopy(VO_SPEC)
         spec['external_importation']['exponent'] = r
+        spec['external_importation']['alpha'] = a
         self.model_input = VoInput(spec)
         unfiltered_probabilities = self._process_households()
         probabilities = [
@@ -235,17 +236,6 @@ class LikelihoodCalculation:
             self.epsilon)
         return H0, rhs
 
-    def compute_solution(self, household, events=None):
-        H0, rhs = self._initialize(household)
-        solution = solve_ivp(
-            rhs,
-            (0.0, self.t_end),
-            H0,
-            events=events,
-            first_step=1e-9,
-            atol=1e-12)
-        return solution
-
     def _compute_probability_for_valid(self, household):
         H0, rhs = self._initialize(household)
         return household.get_test_probability(
@@ -253,5 +243,3 @@ class LikelihoodCalculation:
             H0,
             self.t_first_test,
             self.t_end)
-
-

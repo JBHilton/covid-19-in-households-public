@@ -51,7 +51,7 @@ VO_SPEC = {
     'external_importation': {
         'type': 'exponential',
         'exponent': 1.0e-2,
-        'alpha': 1.0e-2,
+        'alpha': 1.0e-5,
     }
 }
 
