@@ -5,9 +5,9 @@ from numpy import array
 DEFAULT_SPEC = {
     # Interpretable parameters:
     'R0': 2.4,                      # Reproduction number
-    'gamma': 0.5,                   # Mean infectious period
-    'alpha': 0.2,                   # Incubation period
-    'tau': 0.0,                     # Asymptomatic transmission intensity relative to symptomatic rate
+    'recovery_rate': 0.5,                   # Mean infectious period
+    'incubation_rate': 0.2,                   # Incubation period
+    'asymp_trans_scaling': 0.0,                     # Asymptomatic transmission intensity relative to symptomatic rate
     'det_model': {
         'type': 'scaled',           # 'constant' and 'scaled' are the two options
         'max_det_fraction': 0.9     # Cap for detected cases (90%)
@@ -31,13 +31,56 @@ DEFAULT_SPEC = {
 VO_SPEC = {
     # Interpretable parameters:
     'R0': 2.4,
-    'gamma': 0.5,
-    'alpha': 0.2,
-    'tau': 0.0,
-    'det_model': {
-        'type': 'scaled',
-        'max_det_fraction': 0.9     # Cap for detected cases (90%)
-    },
+    'incubation_rate': 1/1,
+    'recovery_rate': 1/9,
+    'asymp_trans_scaling': array([0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0]),
+    'detection_prob' : array([0.2,
+                        0.2,
+                        0.2,
+                        0.2,
+                        0.2,
+                        0.2,
+                        0.2,
+                        0.2,
+                        0.2,
+                        0.2,
+                        0.2,
+                        0.2,
+                        0.2,
+                        0.2,
+                        0.2,
+                        0.2]),
+    'sus' : array([1.0,
+                    1.0,
+                    1.0,
+                    1.0,
+                    1.0,
+                    1.0,
+                    1.0,
+                    1.0,
+                    1.0,
+                    1.0,
+                    1.0,
+                    1.0,
+                    1.0,
+                    1.0,
+                    1.0,
+                    1.0],),
     'k_home': {
         'file_name': 'inputs/MUestimates_home_1.xlsx',
         'sheet_name': 'Italy'
@@ -54,12 +97,12 @@ VO_SPEC = {
 SEPIRQ_SPEC = {
     # Interpretable parameters:
     'R0': 1.1,                      # Reproduction number
-    'gamma': 1/4,                   # Recovery rate
-    'alpha_1': 1/1,                   # E->P incubation rate
-    'alpha_2': 1/5,                   # P->I prodromal to symptomatic rate
-    'tau': array([0.5,0.5,0.5]),           # Prodromal transmission intensity relative to full inf transmission
+    'recovery_rate': 1/4,                   # Recovery rate
+    'incubation_rate': 1/1,                   # E->P incubation rate
+    'symp_onset_rate': 1/5,                   # P->I prodromal to symptomatic rate
+    'prodromal_trans_scaling': array([0.5,0.5,0.5]),           # Prodromal transmission intensity relative to full inf transmission
     'sus': array([1,1,1]),                 # Relative susceptibility by age/vulnerability class
-    'epsilon': 0.5,                  # Relative intensity of external compared to internal contacts
+    'external_trans_scaling': 0.5,                  # Relative intensity of external compared to internal contacts
     'vuln_prop': 2.2/56,            # Total proportion of adults who are shielding
     'k_home': {
         'file_name': 'inputs/MUestimates_home_2.xlsx',
@@ -75,13 +118,13 @@ SEPIRQ_SPEC = {
 CAREHOME_SPEC = {
    # Interpretable parameters:
     'R_carehome': 1.1,                      # Within-carehome reproduction number
-    'alpha_1': 1/1,                   # E->P incubation rate
-    'alpha_2': 1/5,                   # P->I prodromal to symptomatic rate
-    'gamma': 1/4,                   # Recovery rate
-    'tau': array([0.7,0.7,0.7]),           # Prodromal transmission intensity relative to full inf transmission
+    'incubation_rate': 1/1,                   # E->P incubation rate
+    'symp_onset_rate': 1/5,                   # P->I prodromal to symptomatic rate
+    'recovery_rate': 1/4,                   # Recovery rate
+    'prodromal_trans_scaling': array([0.7,0.7,0.7]),           # Prodromal transmission intensity relative to full inf transmission
     'sus': array([1,1,1]),                 # Relative susceptibility by age/vulnerability class
-    'mu': array([1/240,0,0]),                    # Rate of bed emptying
-    'mu_cov': array([(0.01)*(1/4),0,0]),        # Coronavirus death rate - death prob times time to death
-    'b': array([1/75, 0, 0]),                      # Rate of bed refilling - 1/(ave. days until refil)
-    'epsilon': 0                # Coupling strength between different care homes, between 0 and 1
+    'empty_rate': array([1/240,0,0]),                    # Rate of bed emptying
+    'covid_mortality_rate': array([(0.01)*(1/4),0,0]),        # Coronavirus death rate - death prob times time to death
+    'refill_rate': array([1/75, 0, 0]),                      # Rate of bed refilling - 1/(ave. days until refil)
+    'inter_home_coupling': 0                # Coupling strength between different care homes, between 0 and 1
 }

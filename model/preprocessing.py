@@ -347,22 +347,22 @@ class ModelInput:
             rho[aggregator],
             (arange(len(aggregator)), [0]*len(aggregator))))
 
-        rho = spec['gamma'] * spec['R0'] * aggregate_vector_quantities(
+        rho = spec['recovery_rate'] * spec['R0'] * aggregate_vector_quantities(
             rho, fine_bds, self.coarse_bds, pop_pyramid).toarray().squeeze()
 
         det_model = det_from_spec(self.spec)
         # self.det = (0.9/max(rho)) * rho
         self.det = det_model(rho)
-        self.tau = spec['tau'] * ones(rho.shape)
+        self.tau = spec['asymp_trans_scaling'] * ones(rho.shape)
         self.sigma = rho / self.det
 
     @property
     def alpha(self):
-        return self.spec['alpha']
+        return self.spec['incubation_rate']
 
     @property
     def gamma(self):
-        return self.spec['gamma']
+        return self.spec['recovery_rate']
 
 class TwoAgeModelInput:
     '''TODO: add docstring'''
@@ -408,22 +408,22 @@ class TwoAgeModelInput:
             rho[aggregator],
             (arange(len(aggregator)), [0]*len(aggregator))))
 
-        rho = spec['gamma'] * spec['R0'] * aggregate_vector_quantities(
+        rho = spec['recovery_rate'] * spec['R0'] * aggregate_vector_quantities(
             rho, fine_bds, self.coarse_bds, pop_pyramid).toarray().squeeze()
 
         det_model = det_from_spec(self.spec)
         # self.det = (0.9/max(rho)) * rho
         self.det = det_model(rho)
-        self.tau = spec['tau'] * ones(rho.shape)
+        self.tau = spec['asymp_trans_scaling'] * ones(rho.shape)
         self.sigma = rho / self.det
 
     @property
     def alpha(self):
-        return self.spec['alpha']
+        return self.spec['incubation_rate']
 
     @property
     def gamma(self):
-        return self.spec['gamma']
+        return self.spec['recovery_rate']
 
 class VoInput:
     '''TODO: add docstring'''
@@ -462,39 +462,38 @@ class VoInput:
             k_all, fine_bds, self.coarse_bds, pop_pyramid)
         self.k_ext = self.k_all - self.k_home
 
-        # This is in ten year blocks
-        rho = read_csv(
-            spec['rho_file_name'], header=None).to_numpy().flatten()
+        no_age_classes = self.k_home.shape
 
-        # This is in ten year blocks
-        # rho = read_csv(
-        #     'inputs/rho_estimate_cdc.csv', header=None).to_numpy().flatten()
-
-        while len(rho)<10:
-            rho = append(rho,rho[-1]) # this just adds extra classes to row, identitcal to the 75+ class
-
-        rho = spec['gamma'] * spec['R0'] * rho # In this example we are already dealing with 10 year classes so we don't need to aggregate
-
-        det_model = det_from_spec(self.spec)
-        # self.det = (0.9/max(rho)) * rho
-        self.det = det_model(rho)
-        self.tau = spec['tau'] * ones(rho.shape)
-        self.sigma = rho / self.det
+        self.det = aggregate_vector_quantities(
+            spec['detection_prob'],
+             fine_bds,
+              self.coarse_bds,
+               pop_pyramid).toarray().squeeze()
+        self.tau = aggregate_vector_quantities(
+            spec['asymp_trans_scaling'],
+             fine_bds,
+              self.coarse_bds,
+               pop_pyramid).toarray().squeeze()
+        self.sus = aggregate_vector_quantities(
+            spec['sus'],
+             fine_bds,
+              self.coarse_bds,
+               pop_pyramid).toarray().squeeze()
 
     @property
     def alpha(self):
-        return self.spec['alpha']
+        return self.spec['incubation_rate']
 
     @property
     def gamma(self):
-        return self.spec['gamma']
+        return self.spec['recovery_rate']
 
 class TwoAgeWithVulnerableInput:
     '''TODO: add docstring'''
     def __init__(self, spec):
         self.spec = deepcopy(spec)
 
-        self.epsilon = spec['epsilon']
+        self.epsilon = spec['external_trans_scaling']
 
         self.vuln_prop = spec['vuln_prop']
 
@@ -530,11 +529,11 @@ class TwoAgeWithVulnerableInput:
         self.k_ext = left_expander.dot(self.k_ext.dot(right_expander))
 
         self.sus = spec['sus']
-        self.tau = spec['tau']
+        self.tau = spec['prodromal_trans_scaling']
 
         eigenvalue = max(eig(
-            self.sus * ((1/spec['gamma']) * (self.k_home + self.epsilon * self.k_ext) + \
-            (1/spec['alpha_2']) * (self.k_home + self.epsilon * self.k_ext) * self.tau)
+            self.sus * ((1/spec['recovery_rate']) * (self.k_home + self.epsilon * self.k_ext) + \
+            (1/spec['symp_onset_rate']) * (self.k_home + self.epsilon * self.k_ext) * self.tau)
             )[0])
 
         self.k_home = (spec['R0']/eigenvalue)*self.k_home
@@ -545,15 +544,15 @@ class TwoAgeWithVulnerableInput:
 
     @property
     def alpha_1(self):
-        return self.spec['alpha_1']
+        return self.spec['incubation_rate']
 
     @property
     def alpha_2(self):
-        return self.spec['alpha_2']
+        return self.spec['symp_onset_rate']
 
     @property
     def gamma(self):
-        return self.spec['gamma']
+        return self.spec['recovery_rate']
 
 class CareHomeInput:
     '''TODO: add docstring'''
@@ -566,30 +565,30 @@ class CareHomeInput:
         self.import_rate = array([0.5,0.5,0.5]) # Rate of contact with general outside population
 
         self.sus = spec['sus']
-        self.tau = spec['tau']
+        self.tau = spec['prodromal_trans_scaling']
 
         eigenvalue = max(eig(
-            self.sus * ((1/spec['gamma']) * (self.k_home) + \
-            (1/spec['alpha_2']) * (self.k_home) * self.tau)
+            self.sus * ((1/spec['recovery_rate']) * (self.k_home) + \
+            (1/spec['symp_onset_rate']) * (self.k_home) * self.tau)
             )[0])
 
         # Scaling below means R0 is the one defined in specs
         self.k_home = (spec['R_carehome']/eigenvalue)*self.k_home
         self.k_ext = self.k_ext
 
-        self.mu = spec['mu']
-        self.mu_cov = spec['mu_cov']
-        self.b = spec['b']
-        self.epsilon = spec['epsilon']
+        self.mu = spec['empty_rate']
+        self.mu_cov = spec['covid_mortality_rate']
+        self.b = spec['refill_rate']
+        self.epsilon = spec['inter_home_coupling']
 
     @property
     def alpha_1(self):
-        return self.spec['alpha_1']
+        return self.spec['incubation_rate']
 
     @property
     def alpha_2(self):
-        return self.spec['alpha_2']
+        return self.spec['symp_onset_rate']
 
     @property
     def gamma(self):
-        return self.spec['gamma']
+        return self.spec['recovery_rate']
