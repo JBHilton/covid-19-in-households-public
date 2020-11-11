@@ -496,21 +496,24 @@ class VoInput:
 
         no_age_classes = self.k_home.shape
 
-        self.det = aggregate_vector_quantities(
-            spec['detection_prob'],
-             fine_bds,
-              self.coarse_bds,
-               pop_pyramid).toarray().squeeze()
-        self.tau = aggregate_vector_quantities(
-            spec['asymp_trans_scaling'],
-             fine_bds,
-              self.coarse_bds,
-               pop_pyramid).toarray().squeeze()
-        self.sus = aggregate_vector_quantities(
-            spec['sus'],
-             fine_bds,
-              self.coarse_bds,
-               pop_pyramid).toarray().squeeze()
+        # Now construct a matrix to map the age-stratified quantities from the
+        # specs to the age boundaries used in the model.
+        self.age_quant_bounds = spec['age_quant_bounds']
+        age_quant_map = []
+        for i in range(len(self.age_quant_bounds)):
+            max_now = where(self.coarse_bds>self.age_quant_bounds[i])[0][0]
+            # The additions in the expression below are list additions, not
+            # array additions. We convert to an array after construction
+            age_quant_map.append([0]*min_now +
+                                  [1]*(max_now - min_now) +
+                                  [0]*(no_age_classes-max_now))
+            min_now = max_now
+        age_quant_map.append([0]*min_now + [1]*(no_age_classes - min_now))
+        age_quant_map = array(vect_quant_map)
+
+        self.det = spec['symptom_prob'] * age_quant_map
+        self.tau = spec['asymp_trans_scaling'] * age_quant_map
+        self.sus = spec['sus'] * age_quant_map
 
 
     @property
