@@ -97,12 +97,13 @@ VO_SPEC = {
 SEPIRQ_SPEC = {
     # Interpretable parameters:
     'R0': 1.1,                      # Reproduction number
-    'recovery_rate': 1/4,                   # Recovery rate
-    'incubation_rate': 1/1,                   # E->P incubation rate
-    'symp_onset_rate': 1/5,                   # P->I prodromal to symptomatic rate
-    'prodromal_trans_scaling': array([0.5,0.5,0.5]),           # Prodromal transmission intensity relative to full inf transmission
-    'sus': array([1,1,1]),                 # Relative susceptibility by age/vulnerability class
-    'external_trans_scaling': 0.5,                  # Relative intensity of external compared to internal contacts
+    'recovery_rate': 1/4,           # Recovery rate
+    'incubation_rate': 1/1,         # E->P incubation rate
+    'symp_onset_rate': 1/5,         # P->I prodromal to symptomatic rate
+    'prodromal_trans_scaling':
+     array([0.5,0.5,0.5]),          # Prodromal transmission intensity relative to full inf transmission
+    'sus': array([1,1,1]),          # Relative susceptibility by age/vulnerability class
+    'external_trans_scaling': 0.5,  # Relative intensity of external compared to internal contacts
     'vuln_prop': 2.2/56,            # Total proportion of adults who are shielding
     'k_home': {
         'file_name': 'inputs/MUestimates_home_2.xlsx',
