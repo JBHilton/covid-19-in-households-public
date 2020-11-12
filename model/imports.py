@@ -1,7 +1,17 @@
 '''Class structure describing external importations'''
 from abc import ABC
-from numpy import exp
+from numpy import exp, ones
 from scipy.interpolate import interp1d
+
+def import_model_from_spec(spec, det):
+    text_to_type = {
+        'fixed': FixedImportModel,
+        'step': StepImportModel,
+        'exponential': ExponentialImportModel,
+        'care_home': CareHomeImportModel,
+    }
+    return text_to_type[spec['external_importation']['type']].make_from_spec(
+        spec['external_importation'], det)
 
 
 class ImportModel(ABC):
@@ -20,6 +30,10 @@ class NoImportModel(ImportModel):
     def undetected(self, t):
         return 0.0
 
+    @classmethod
+    def make_from_spec(cls, spec, det):
+        return cls()
+
 
 class FixedImportModel(ImportModel):
     def __init__(
@@ -35,6 +49,9 @@ class FixedImportModel(ImportModel):
     def undetected(self, t):
         return self.undetected_imports
 
+    @classmethod
+    def make_from_spec(cls, spec, det):
+        return cls()
 
 class StepImportModel(ImportModel):
     def __init__(
@@ -64,6 +81,14 @@ class ExponentialImportModel(ImportModel):
         self.r = r
         self.det_profile = det_profile
         self.undet_profile = undet_profile
+
+    @classmethod 
+    def make_from_spec(cls, spec, det):
+        r = float(spec['exponent'])
+        alpha = float(spec['alpha'])
+        det_profile = alpha * det
+        undet_profile = alpha * (ones((10,)) - det)
+        return cls(r, det_profile, undet_profile)
 
     def detected(self, t):
         return exp(self.r * t) * self.det_profile

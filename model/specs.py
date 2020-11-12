@@ -33,13 +33,15 @@ VO_SPEC = {
     'R0': 2.4,
     'incubation_rate': 1/1,
     'recovery_rate': 1/9,
-    'age_quant_bounds': array([20,60]), # Age bands used to stratify the vector parameters
+    # Age bands used to stratify the vector parameters
+    'age_quant_bounds': array([20,60]),
     'asymp_trans_scaling': array([1.0,
                                   1.0,
                                   1.0]),
     'symptom_prob' : array([0.2,
                             0.2,
                             0.2,]),
+    # Relative susceptibility
     'sus' : array([1.0,
                    1.0,
                    1.0],),
@@ -52,7 +54,14 @@ VO_SPEC = {
         'sheet_name': 'Italy'
     },
     'pop_pyramid_file_name': 'inputs/Italy-2019.csv',
-    'rho_file_name': 'inputs/rho_estimate_cdc.csv'
+    # TODO: Parameter below (rho) may be redundant
+    'rho_file_name': 'inputs/rho_estimate_cdc.csv',
+    'external_importation': {
+        'type': 'exponential',
+        'exponent': 1.0e-2,
+        # TODO: Parameter below (alpha) needs a better name
+        'alpha': 1.0e-5,
+    }
 }
 
 

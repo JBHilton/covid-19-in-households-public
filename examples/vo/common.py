@@ -1,4 +1,5 @@
 from os.path import isfile
+from copy import deepcopy
 from pickle import load, dump
 from numpy import (
         arange, array, histogram, isnan, log, ones, prod, where, zeros)
@@ -14,77 +15,6 @@ AGE_GROUPS = [
     '51-60', '61-70', '71-80', '81-90', '91+']
 HH_AGE_DICT = {
     ag: iag for iag, ag in enumerate(AGE_GROUPS)}
-
-
-class ModelEvaluator:
-    def __init__(self, model_input, r, epsilon=0.0):
-        self.t_first_test = 14
-        self.t_end = self.t_first_test + 20.0
-        self.model_input = model_input
-        self.r = r
-        self.epsilon = epsilon
-
-        # alpha = 0.006
-        alpha = 1e-5
-        det = model_input.det
-        det_profile = alpha * det
-        undet_profile = alpha * (ones((10,)) - det)
-        self.exponential_importation = ExponentialImportModel(
-            self.r, det_profile, undet_profile)
-
-    def compute_probability(self, household):
-        # There are a few huge households which we skip
-        household_is_acceptable = (
-            (household.composition.sum() < 8)
-            and
-            (household.composition.sum() == household.tests.shape[0]))
-        try:
-            if household_is_acceptable:
-                return self._compute_probability_for_valid(household)
-            else:
-                return None
-        except ValueError:
-            return None
-
-    def _initialize(self, household):
-        household_population = HouseholdPopulation(
-            array([household.composition]),
-            array([1.0]),
-            self.model_input,
-            print_progress=False)
-
-        H0 = zeros((household_population.system_sizes[0],))
-        states_sus_only = household_population.states[:, ::5]
-        fully_sus = where(
-            states_sus_only.sum(axis=1)
-            ==
-            household_population.states.sum(axis=1))[0]
-        H0[fully_sus] = 1
-        rhs = RateEquations(
-            self.model_input,
-            household_population,
-            self.exponential_importation,
-            self.epsilon)
-        return H0, rhs
-
-    def compute_solution(self, household, events=None):
-        H0, rhs = self._initialize(household)
-        solution = solve_ivp(
-            rhs,
-            (0.0, self.t_end),
-            H0,
-            events=events,
-            first_step=1e-9,
-            atol=1e-12)
-        return solution
-
-    def _compute_probability_for_valid(self, household):
-        H0, rhs = self._initialize(household)
-        return household.get_test_probability(
-            rhs,
-            H0,
-            self.t_first_test,
-            self.t_end)
 
 
 def get_symptoms_by_test(test, symptoms):
@@ -247,7 +177,7 @@ class LikelihoodCalculation:
                 ss = dfh.symptomatic.values
                 test[test == 'Neg'] = 0
                 test[test == 'Pos'] = 1
-                tests.append(tests.astype(float))
+                tests.append(test.astype(float))
                 ages.append(
                     array([HH_AGE_DICT[ag] for ag in age_groups]))
                 symptoms.append(ss)
@@ -257,11 +187,59 @@ class LikelihoodCalculation:
         self.households = [
             HouseholdTestData(a, s, t)
             for a, s, t in zip(ages, symptoms, tests)]
+        self.t_first_test = 14
+        self.t_end = self.t_first_test + 20.0
+        self.epsilon = 0.0
 
-    def __call__(self, r):
-        model = ModelEvaluator(VoInput(VO_SPEC), r)
-        unfiltered_probabilities = self._process_households(model)
+    def __call__(self, r, a):
+        spec = deepcopy(VO_SPEC)
+        spec['external_importation']['exponent'] = r
+        spec['external_importation']['alpha'] = a
+        self.model_input = VoInput(spec)
+        unfiltered_probabilities = self._process_households()
         probabilities = [
             prob for prob in unfiltered_probabilities
             if prob is not None]
         return sum(probabilities)
+
+    def compute_probability(self, household):
+        # There are a few huge households which we skip
+        household_is_acceptable = (
+            (household.composition.sum() < 8)
+            and
+            (household.composition.sum() == household.tests.shape[0]))
+        try:
+            if household_is_acceptable:
+                return self._compute_probability_for_valid(household)
+            else:
+                return None
+        except ValueError:
+            return None
+
+    def _initialize(self, household):
+        household_population = HouseholdPopulation(
+            array([household.composition]),
+            array([1.0]),
+            self.model_input,
+            print_progress=False)
+
+        H0 = zeros((household_population.system_sizes[0],))
+        states_sus_only = household_population.states[:, ::5]
+        fully_sus = where(
+            states_sus_only.sum(axis=1)
+            ==
+            household_population.states.sum(axis=1))[0]
+        H0[fully_sus] = 1
+        rhs = RateEquations(
+            self.model_input,
+            household_population,
+            self.epsilon)
+        return H0, rhs
+
+    def _compute_probability_for_valid(self, household):
+        H0, rhs = self._initialize(household)
+        return household.get_test_probability(
+            rhs,
+            H0,
+            self.t_first_test,
+            self.t_end)
