@@ -11,7 +11,7 @@ from scipy.stats import binom
 from pandas import read_excel, read_csv
 from tqdm import tqdm
 from model.common import within_household_spread, sparse, my_int
-from model.imports import import_model_from_spec
+from model.imports import import_model_from_spec, NoImportModel
 
 
 def initialise_carehome(
@@ -448,7 +448,7 @@ class TwoAgeModelInput(ModelInput):
         # self.det = (0.9/max(rho)) * rho
         self.det = det_model(rho)
         self.tau = spec['asymp_trans_scaling'] * ones(rho.shape)
-        self.sigma = rho / self.det
+        self.sus = rho / self.det
         self.import_model = NoImportModel()
 
     @property

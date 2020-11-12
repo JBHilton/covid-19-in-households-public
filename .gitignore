@@ -4,3 +4,4 @@ octave-workspace
 *.pkl
 *.spyproject
 output*.txt
+*.swp
