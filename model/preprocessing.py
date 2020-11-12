@@ -441,6 +441,7 @@ class TwoAgeModelInput(ModelInput):
         self.det = det_model(rho)
         self.tau = spec['tau'] * ones(rho.shape)
         self.sigma = rho / self.det
+        self.import_model = NoImportModel()
 
 
 class VoInput(ModelInput):

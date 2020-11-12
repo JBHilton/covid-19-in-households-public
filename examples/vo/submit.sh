@@ -7,6 +7,7 @@ bsub << EOF
 #BSUB -q tuleta
 #BSUB -oo output-parallel.txt
 #BSUB -W 4:00
+#BSUB -a "p8aff(1,1,,)"
 #BSUB -x
 
 export PYTHONPATH=\$(pwd)
