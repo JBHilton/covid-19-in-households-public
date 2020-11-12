@@ -495,26 +495,30 @@ class VoInput(ModelInput):
             k_all, fine_bds, self.coarse_bds, pop_pyramid)
         self.k_ext = self.k_all - self.k_home
 
-        no_age_classes = self.k_home.shape
+        no_age_classes = self.k_home.shape[0]
 
         # Now construct a matrix to map the age-stratified quantities from the
         # specs to the age boundaries used in the model.
         self.age_quant_bounds = spec['age_quant_bounds']
         age_quant_map = []
+        min_now = 0
         for i in range(len(self.age_quant_bounds)):
             max_now = where(self.coarse_bds>self.age_quant_bounds[i])[0][0]
             # The additions in the expression below are list additions, not
             # array additions. We convert to an array after construction
-            age_quant_map.append([0]*min_now +
-                                  [1]*(max_now - min_now) +
-                                  [0]*(no_age_classes-max_now))
+            age_quant_map.append(
+                [0] * min_now
+                + [1] * (max_now - min_now)
+                + [0] * (no_age_classes-max_now))
             min_now = max_now
         age_quant_map.append([0]*min_now + [1]*(no_age_classes - min_now))
-        age_quant_map = array(vect_quant_map)
+        age_quant_map = array(age_quant_map)
 
-        self.det = spec['symptom_prob'] * age_quant_map
-        self.tau = spec['asymp_trans_scaling'] * age_quant_map
-        self.sus = spec['sus'] * age_quant_map
+        self.det = array(spec['symptom_prob']).dot(age_quant_map)
+        self.tau = array(spec['asymp_trans_scaling']).dot(age_quant_map)
+        self.sus = array(spec['sus']).dot(age_quant_map) 
+
+        self.import_model = import_model_from_spec(spec, self.det)
 
     @property
     def alpha(self):

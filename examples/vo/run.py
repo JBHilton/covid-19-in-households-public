@@ -20,5 +20,5 @@ if __name__ == '__main__':
     # These parameters worked much better for alpha alone
     # params = linspace(0.001, 0.015, 10)
     likelihoods = [
-        calculator(log(2)/tau) for tau in [2, 3, 7, 14, 21]]
+        calculator(log(2)/tau, 1e-5) for tau in [2, 3, 7, 14, 21]]
     print(likelihoods)

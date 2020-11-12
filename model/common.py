@@ -360,7 +360,7 @@ def within_household_spread(
     composition[i] is the number of individuals in age-class i inside the
     household'''
 
-    sus = model_input.sigma
+    sus = model_input.sus
     det = model_input.det
     tau = model_input.tau
     K_home = model_input.k_home
@@ -980,10 +980,10 @@ class RateEquations:
         # To define external mixing we need to set up the transmission
         # matrices.
         # Scale rows of contact matrix by
-        self.det_trans_matrix = diag(model_input.sigma).dot(model_input.k_ext)
+        self.det_trans_matrix = diag(model_input.sus).dot(model_input.k_ext)
         # age-specific susceptibilities
         # Scale columns by asymptomatic reduction in transmission
-        self.undet_trans_matrix = diag(model_input.sigma).dot(
+        self.undet_trans_matrix = diag(model_input.sus).dot(
             model_input.k_ext.dot(diag(model_input.tau)))
         # This stores number in each age class by household
         self.composition_by_state = household_population.composition_by_state
