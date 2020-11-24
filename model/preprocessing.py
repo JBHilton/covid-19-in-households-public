@@ -212,6 +212,7 @@ class HouseholdPopulation:
             model_input,
             build_function=within_household_spread,
             no_compartments=5,
+            save_reverse_prod=False,
             print_progress=True):
         '''This builds internal mixing matrix for entire system of
         age-structured households.'''
@@ -253,10 +254,20 @@ class HouseholdPopulation:
 
         # Initialise matrix of internal process by doing the first block
         which_composition[:system_sizes[0]] = zeros(system_sizes[0], dtype=my_int)
-        Q_temp, states_temp, inf_event_row, inf_event_col, inf_event_class \
-            = build_function(
-                composition_list[0, :],
-                model_input)
+        if save_reverse_prod:
+            reverse_prod = []
+            index_vector = []
+            Q_temp, states_temp, inf_event_row, inf_event_col, inf_event_class, reverse_prod_temp, index_vector_temp \
+                = build_function(
+                    composition_list[0, :],
+                    model_input)
+            reverse_prod.append(reverse_prod_temp)
+            index_vector.append(index_vector_temp)
+        else:
+            Q_temp, states_temp, inf_event_row, inf_event_col, inf_event_class \
+                = build_function(
+                    composition_list[0, :],
+                    model_input)
         Q_int = sparse(Q_temp)
         class_list = where(classes_present[0, :])[0]
         for j in range(len(class_list)):
@@ -276,10 +287,19 @@ class HouseholdPopulation:
             # print('Processing {}/{}'.format(i, no_types))
             which_composition[cum_sizes[i-1]:cum_sizes[i]] = i * ones(
                 system_sizes[i], dtype=my_int)
-            Q_temp, states_temp, inf_temp_row, inf_temp_col, inf_temp_class \
-                = build_function(
-                    composition_list[i, :],
-                    model_input)
+            if save_reverse_prod:
+                Q_temp, states_temp, inf_temp_row, inf_temp_col, inf_temp_class, reverse_prod_temp, index_vector_temp \
+                    = build_function(
+                        composition_list[i, :],
+                        model_input)
+                reverse_prod.append(reverse_prod_temp)
+                index_vector_temp.data += cum_sizes[i-1]
+                index_vector.append(index_vector_temp)
+            else:
+                Q_temp, states_temp, inf_temp_row, inf_temp_col, inf_temp_class \
+                    = build_function(
+                        composition_list[i, :],
+                        model_input)
             Q_int = block_diag((Q_int, Q_temp), format='csc')
             Q_int.eliminate_zeros()
             class_list = where(classes_present[i,:])[0]
@@ -296,6 +316,9 @@ class HouseholdPopulation:
             inf_event_class = concatenate((inf_event_class, inf_temp_class))
 
         self.Q_int = Q_int
+        if save_reverse_prod:
+            self.reverse_prod = reverse_prod
+            self.index_vector = index_vector
         self.states = states
         self.which_composition = which_composition
         self.system_sizes = system_sizes
@@ -516,7 +539,7 @@ class VoInput(ModelInput):
 
         self.det = array(spec['symptom_prob']).dot(age_quant_map)
         self.tau = array(spec['asymp_trans_scaling']).dot(age_quant_map)
-        self.sus = array(spec['sus']).dot(age_quant_map) 
+        self.sus = array(spec['sus']).dot(age_quant_map)
 
         self.import_model = import_model_from_spec(spec, self.det)
 
