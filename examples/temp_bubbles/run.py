@@ -87,7 +87,7 @@ def simulate_merge(duration_list,switches,premerge_H0,t0,t_end):
         tspan = (t0, t0 + duration_list[switch])
         print('Integrating over merge period number',switch,'...')
         t_mer = time()
-        solution = solve_ivp(rhs_merged, tspan, H0/sum(H0), first_step=0.001)
+        solution = solve_ivp(rhs_merged, tspan, H0/sum(H0), first_step=0.001, atol=1e-16)
         print('Integration over merge period took',time()-t_mer,'seconds.')
         temp_time = solution.t
         temp_H = solution.y
@@ -172,6 +172,20 @@ output_data.baseline_H = hstack((baseline_H,solution.y))
 
 output_data.merge_t_5day, output_data.merge_H_5day, output_data.postmerge_t_5day, output_data.postmerge_H_5day = \
     simulate_merge([5],0,output_data.premerge_H[:,-1],merge_start, 455)
+
+H0_alt = pairwise_merged_initial_condition(output_data.premerge_H[:,-1],
+                            unmerged_population,
+                            merged_population,
+                            hh_dimension,
+                            pairings)
+tspan = (merge_start, merge_start + 5)
+solution = solve_ivp(rhs_merged, tspan, H0_alt, first_step=0.001)
+output_data.alt_time = solution.t
+output_data.alt_H = solution.y
+output_data.alt_I = (1/hh_to_merge) * output_data.alt_H.T.dot(
+    merged_population.states[:, 3] + merged_population.states[:,8])/ave_hh_size
+output_data.alt_R = (1/hh_to_merge) * output_data.alt_H.T.dot(
+    merged_population.states[:, 4] + merged_population.states[:,9])/ave_hh_size
 
 output_data.merge_S_5day = (1/hh_to_merge) * output_data.merge_H_5day.T.dot(
     merged_population.states[:, 0] + merged_population.states[:, 5])/ave_hh_size
