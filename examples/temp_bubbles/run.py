@@ -1,21 +1,17 @@
 '''This runs the UK-like model with a single set of parameters for 100 days
 '''
-from numpy import absolute, arange, array, atleast_2d, hstack, vstack, where, zeros
 from os.path import isfile
 from pickle import load, dump
+from numpy import arange, atleast_2d, hstack, where, zeros
 from pandas import read_csv
 from scipy.integrate import solve_ivp
 from time import time
-from model.common import my_int
-from model.preprocessing import (
-        ModelInput, HouseholdPopulation)
-from model.specs import DEFAULT_SPEC
-from examples.temp_bubbles.common import ( DataObject,
+from model.preprocessing import HouseholdPopulation
+from examples.temp_bubbles.common import (
+        DataObject,
         build_mixed_compositions, SINGLE_AGE_CLASS_SPEC, SingleClassInput,
-        MergedInput,merged_initial_condition, demerged_initial_condition,
-        build_mixed_compositions_pairwise, pairwise_merged_initial_condition,
-        pairwise_demerged_initial_condition,
-        make_initial_condition, within_household_SEPIR,RateEquations)
+        MergedInput, merged_initial_condition, demerged_initial_condition,
+        make_initial_condition, within_household_SEPIR, RateEquations)
 # pylint: disable=invalid-name
 
 comp_dist = read_csv(
@@ -24,16 +20,23 @@ comp_dist = read_csv(
 comp_dist = comp_dist[:5]
 comp_dist = comp_dist/sum(comp_dist)
 max_hh_size = len(comp_dist)
-composition_list = atleast_2d(arange(1,max_hh_size+1)).T
+composition_list = atleast_2d(arange(1, max_hh_size+1)).T
 
 unmerged_input = SingleClassInput(SINGLE_AGE_CLASS_SPEC)
 hh_to_merge = 2
 mixing_strength = 0.5
-merged_input = MergedInput(SINGLE_AGE_CLASS_SPEC,hh_to_merge,mixing_strength)
+merged_input = MergedInput(
+        SINGLE_AGE_CLASS_SPEC,
+        hh_to_merge,
+        mixing_strength)
 
 if isfile('bubble-vars.pkl') is True:
     with open('bubble-vars.pkl', 'rb') as f:
-        unmerged_population, merged_population, hh_dimension, max_hh_size, pairings = load(f)
+        unmerged_population, \
+            merged_population, \
+            hh_dimension, \
+            max_hh_size, \
+            pairings = load(f)
 else:
     # Household size distribution
     comp_dist = read_csv(
@@ -42,10 +45,15 @@ else:
     comp_dist = comp_dist[:5]
     comp_dist = comp_dist/sum(comp_dist)
     max_hh_size = len(comp_dist)
-    composition_list = atleast_2d(arange(1,max_hh_size+1)).T
+    composition_list = atleast_2d(arange(1, max_hh_size+1)).T
 
-    merged_comp_list, merged_comp_dist, hh_dimension, pairings, mc_index_vector, mc_reverse_prod = \
-     build_mixed_compositions(composition_list, comp_dist)
+    merged_comp_list, \
+        merged_comp_dist, \
+        hh_dimension, \
+        pairings, \
+        mc_index_vector, \
+        mc_reverse_prod = \
+        build_mixed_compositions(composition_list, comp_dist)
 
     # comp_dist = array(1)
     # composition_list = array(3, ndmin=2, dtype=my_int)
@@ -86,17 +94,26 @@ ave_hh_size = unmerged_population.composition_distribution.dot(atleast_2d(unmerg
 
 def simulate_merge(duration_list,switches,premerge_H0,t0,t_end):
     for switch in range(switches+1):
-        print('Initialising merge number',switch,'...')
-        H0 = merged_initial_condition(premerge_H0,
-                                    unmerged_population,
-                                    merged_population,
-                                    hh_dimension,
-                                    pairings)
+        print('Initialising merge number', switch,'...')
+        H0 = merged_initial_condition(
+            premerge_H0,
+            unmerged_population,
+            merged_population,
+            hh_dimension,
+            pairings)
         tspan = (t0, t0 + duration_list[switch])
-        print('Integrating over merge period number',switch,'...')
+        print('Integrating over merge period number', switch, '...')
         t_mer = time()
-        solution = solve_ivp(rhs_merged, tspan, H0/sum(H0), first_step=0.001, atol=1e-16)
-        print('Integration over merge period took',time()-t_mer,'seconds.')
+        solution = solve_ivp(
+            rhs_merged,
+            tspan,
+            H0/sum(H0),
+            first_step=0.001,
+            atol=1e-16)
+        print(
+            'Integration over merge period took',
+            time()-t_mer,
+            'seconds.')
         temp_time = solution.t
         temp_H = solution.y
         t0 = t0 + duration_list[switch]
@@ -147,7 +164,7 @@ solution = solve_ivp(rhs_unmerged, tspan, H0, first_step=0.001)
 baseline_time = solution.t
 baseline_H = solution.y
 
-print('Antiobdy prevalence on September 28th is',
+print('Antibody prevalence on September 28th is',
     baseline_H[:,-1].T.dot(unmerged_population.states[:,4])/ave_hh_size)
 
 rec_numbers = unmerged_population.states[:,4]
@@ -300,12 +317,17 @@ output_data.postmerge_R_switching = postmerge_R_switching
 # print(absolute(postmerge_time-postmerge_time_alt).max())
 # print(absolute(postmerge_H-postmerge_H_alt).max())
 
-output_data.baseline_S = output_data.baseline_H.T.dot(unmerged_population.states[:,0])/ave_hh_size
-output_data.baseline_E = output_data.baseline_H.T.dot(unmerged_population.states[:,1])/ave_hh_size
-output_data.baseline_P = output_data.baseline_H.T.dot(unmerged_population.states[:,2])/ave_hh_size
-output_data.baseline_I = output_data.baseline_H.T.dot(unmerged_population.states[:,3])/ave_hh_size
-output_data.baseline_R = output_data.baseline_H.T.dot(unmerged_population.states[:,4])/ave_hh_size
+#TODO: This looks like it needs to be a FOR loop
+output_data.baseline_S = output_data.baseline_H.T.dot(
+    unmerged_population.states[:, 0]) / ave_hh_size
+output_data.baseline_E = output_data.baseline_H.T.dot(
+    unmerged_population.states[:, 1]) / ave_hh_size
+output_data.baseline_P = output_data.baseline_H.T.dot(
+    unmerged_population.states[:, 2]) / ave_hh_size
+output_data.baseline_I = output_data.baseline_H.T.dot(
+    unmerged_population.states[:, 3]) / ave_hh_size
+output_data.baseline_R = output_data.baseline_H.T.dot(
+    unmerged_population.states[:, 4]) / ave_hh_size
 
 with open('switching_results.pkl', 'wb') as f:
-    dump(output_data,
-     f)
+    dump(output_data, f)

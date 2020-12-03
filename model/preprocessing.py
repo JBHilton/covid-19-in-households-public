@@ -257,14 +257,24 @@ class HouseholdPopulation:
         if save_reverse_prod:
             reverse_prod = []
             index_vector = []
-            Q_temp, states_temp, inf_event_row, inf_event_col, inf_event_class, reverse_prod_temp, index_vector_temp \
+            Q_temp, \
+                states_temp, \
+                inf_event_row, \
+                inf_event_col, \
+                inf_event_class, \
+                reverse_prod_temp, \
+                index_vector_temp \
                 = build_function(
                     composition_list[0, :],
                     model_input)
             reverse_prod.append(reverse_prod_temp)
             index_vector.append(index_vector_temp)
         else:
-            Q_temp, states_temp, inf_event_row, inf_event_col, inf_event_class \
+            Q_temp, \
+                states_temp, \
+                inf_event_row, \
+                inf_event_col, \
+                inf_event_class \
                 = build_function(
                     composition_list[0, :],
                     model_input)
@@ -283,12 +293,22 @@ class HouseholdPopulation:
             progress_bar = range(1, no_types)
         # NOTE: The way I do this loop is very wasteful, I'm making lots of
         # arrays which I'm overwriting with different sizes
+        temp_arrays = [Q_int]
+        inf_event_rows = [inf_event_row]
+        inf_event_cols = [inf_event_col]
+        inf_event_classes = [inf_event_class]
         for i in progress_bar:
             # print('Processing {}/{}'.format(i, no_types))
             which_composition[cum_sizes[i-1]:cum_sizes[i]] = i * ones(
                 system_sizes[i], dtype=my_int)
             if save_reverse_prod:
-                Q_temp, states_temp, inf_temp_row, inf_temp_col, inf_temp_class, reverse_prod_temp, index_vector_temp \
+                Q_temp, \
+                    states_temp, \
+                    inf_temp_row, \
+                    inf_temp_col, \
+                    inf_temp_class, \
+                    reverse_prod_temp, \
+                    index_vector_temp \
                     = build_function(
                         composition_list[i, :],
                         model_input)
@@ -296,26 +316,32 @@ class HouseholdPopulation:
                 index_vector_temp.data += cum_sizes[i-1]
                 index_vector.append(index_vector_temp)
             else:
-                Q_temp, states_temp, inf_temp_row, inf_temp_col, inf_temp_class \
+                Q_temp, \
+                    states_temp, \
+                    inf_temp_row, \
+                    inf_temp_col, \
+                    inf_temp_class \
                     = build_function(
                         composition_list[i, :],
                         model_input)
-            Q_int = block_diag((Q_int, Q_temp), format='csc')
-            Q_int.eliminate_zeros()
-            class_list = where(classes_present[i,:])[0]
+            temp_arrays.append(Q_temp)
+            class_list = where(classes_present[i, :])[0]
             for j in range(len(class_list)):
                 this_class = class_list[j]
                 states[
                     cum_sizes[i-1]:cum_sizes[i],
-                    no_compartments*this_class:no_compartments*(this_class+1)] = states_temp[:, no_compartments*j:no_compartments*(j+1)]
+                    no_compartments*this_class: no_compartments*(this_class+1)] = states_temp[:, no_compartments*j:no_compartments*(j+1)]
+            inf_event_rows.append(cum_sizes[i-1] + inf_temp_row)
+            inf_event_cols.append(cum_sizes[i-1] + inf_temp_col)
+            inf_event_classes.append(inf_temp_class)
 
-            inf_event_row = concatenate(
-                (inf_event_row, cum_sizes[i-1] + inf_temp_row))
-            inf_event_col = concatenate(
-                (inf_event_col, cum_sizes[i-1] + inf_temp_col))
-            inf_event_class = concatenate((inf_event_class, inf_temp_class))
-
+        Q_int = block_diag(temp_arrays, format='csc')
+        Q_int.eliminate_zeros()
         self.Q_int = Q_int
+        inf_event_row = concatenate(inf_event_rows)
+        inf_event_col = concatenate(inf_event_cols)
+        inf_event_class = concatenate(inf_event_classes)
+
         if save_reverse_prod:
             self.reverse_prod = reverse_prod
             self.index_vector = index_vector

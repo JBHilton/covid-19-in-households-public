@@ -1,6 +1,9 @@
+''' Common utilities for transient bubble calculation.
+'''
 from copy import deepcopy
 from numpy import (
-    append, arange, around, array, atleast_2d, concatenate, copy, cumprod, diag, hstack, isnan, ix_,
+    append, arange, around, array, atleast_2d, concatenate, copy, cumprod,
+    diag, hstack, isnan, ix_,
     ones, prod, shape, sum, where, zeros)
 from numpy import int64 as my_int
 from numpy import exp, log
@@ -8,21 +11,23 @@ import pdb
 from scipy.sparse import csc_matrix as sparse
 from scipy.stats import multinomial
 from model.preprocessing import ModelInput
-from model.common import build_state_matrix, build_external_import_matrix_SEPIRQ
+from model.common import (
+        build_state_matrix, build_external_import_matrix_SEPIRQ)
 from model.imports import NoImportModel
 
 
-def build_mixed_compositions_pairwise(composition_list,composition_distribution):
+def build_mixed_compositions_pairwise(
+        composition_list, composition_distribution):
 
     no_comps = composition_list.shape[0]
 
-    if composition_list.ndim==1:
+    if composition_list.ndim == 1:
         hh_dimension = 1
     else:
         hh_dimension = composition_list.shape[1]
 
-    mixed_comp_list = zeros((no_comps**2,2*hh_dimension),dtype=my_int)
-    mixed_comp_dist = zeros((no_comps**2,1))
+    mixed_comp_list = zeros((no_comps**2, 2*hh_dimension),dtype=my_int)
+    mixed_comp_dist = zeros((no_comps**2, 1))
 
     pairings = [[],[]]
 
