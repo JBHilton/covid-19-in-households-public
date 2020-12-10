@@ -68,19 +68,20 @@ else:
     unmerged_population = HouseholdPopulation(
         composition_list,
         comp_dist,
-        unmerged_input,
-        within_household_SEPIR,
-        5,
-        True)
+        model_input=unmerged_input,
+        build_function=within_household_SEPIR,
+        no_compartments=5,
+        save_reverse_prod=True)
     merged_population = HouseholdPopulation(
         merged_comp_list,
         merged_comp_dist,
-        merged_input,
-        within_household_SEPIR,
-        5,
-        True)
+        model_input=merged_input,
+        build_function=within_household_SEPIR,
+        no_compartments=5,
+        save_reverse_prod=True)
     with open('bubble-vars.pkl', 'wb') as f:
-        dump((unmerged_population,
+        dump((
+            unmerged_population,
             merged_population,
             hh_dimension,
             max_hh_size,
@@ -90,11 +91,13 @@ else:
 rhs_unmerged = RateEquations(unmerged_input, unmerged_population)
 rhs_merged = RateEquations(merged_input, merged_population)
 
-ave_hh_size = unmerged_population.composition_distribution.dot(atleast_2d(unmerged_population.composition_list))
+ave_hh_size = unmerged_population.composition_distribution.dot(atleast_2d(
+    unmerged_population.composition_list))
 
-def simulate_merge(duration_list,switches,premerge_H0,t0,t_end):
+
+def simulate_merge(duration_list, switches, premerge_H0, t0, t_end):
     for switch in range(switches+1):
-        print('Initialising merge number', switch,'...')
+        print('Initialising merge number', switch, '...')
         H0 = merged_initial_condition(
             premerge_H0,
             unmerged_population,
@@ -117,11 +120,12 @@ def simulate_merge(duration_list,switches,premerge_H0,t0,t_end):
         temp_time = solution.t
         temp_H = solution.y
         t0 = t0 + duration_list[switch]
-        premerge_H0 = demerged_initial_condition(temp_H[:,-1],
-                                                        unmerged_population,
-                                                        merged_population,
-                                                        hh_dimension,
-                                                        pairings)
+        premerge_H0 = demerged_initial_condition(
+            temp_H[:,-1],
+            unmerged_population,
+            merged_population,
+            hh_dimension,
+            pairings)
         if switch==0:
             merge_time = temp_time
             merge_H = temp_H
@@ -184,7 +188,7 @@ output_data.call_prev = baseline_H[:,-1].T.dot(unmerged_population.states[:,4])/
 tspan = (271.0, merge_start)
 solution = solve_ivp(rhs_unmerged, tspan, baseline_H[:,-1], first_step=0.001)
 baseline_time = hstack((baseline_time,solution.t))
-baseline_H = hstack((baseline_H,solution.y))
+baseline_H = hstack((baseline_H, solution.y))
 
 output_data.premerge_time = solution.t
 output_data.premerge_H = solution.y
@@ -209,14 +213,23 @@ output_data.baseline_H = hstack((baseline_H,solution.y))
 # merge_time = solution.t
 # merge_H = solution.y
 
-output_data.merge_t_5day, output_data.merge_H_5day, output_data.postmerge_t_5day, output_data.postmerge_H_5day = \
-    simulate_merge([5],0,output_data.premerge_H[:,-1],merge_start, 455)
+output_data.merge_t_5day, \
+    output_data.merge_H_5day, \
+    output_data.postmerge_t_5day, \
+    output_data.postmerge_H_5day = \
+    simulate_merge(
+        [5],
+        0,
+        output_data.premerge_H[:, -1],
+        merge_start,
+        455)
 
-H0_alt = merged_initial_condition(output_data.premerge_H[:,-1],
-                            unmerged_population,
-                            merged_population,
-                            hh_dimension,
-                            pairings)
+H0_alt = merged_initial_condition(
+    output_data.premerge_H[:, -1],
+    unmerged_population,
+    merged_population,
+    hh_dimension,
+    pairings)
 tspan = (merge_start, merge_start + 5)
 solution = solve_ivp(rhs_merged, tspan, H0_alt, first_step=0.001)
 output_data.alt_time = solution.t
@@ -260,7 +273,12 @@ postmerge_R_switching = []
 
 for days in range(5):
     merge_t_temp, merge_H_temp, postmerge_t_temp, postmerge_H_temp = \
-        simulate_merge((days+1)*[1],days,output_data.premerge_H[:,-1],merge_start, 455)
+        simulate_merge(
+            (days+1)*[1],
+            days,
+            output_data.premerge_H[:, -1],
+            merge_start,
+            455)
     merge_t_switching.append(merge_t_temp)
     merge_H_switching.append(merge_H_temp)
     postmerge_t_switching.append(postmerge_t_temp)

@@ -3,14 +3,16 @@ from abc import ABC
 from copy import copy, deepcopy
 from numpy import (
         append, arange, around, array, cumsum, ones, ones_like, where,
-        zeros, concatenate, vstack, identity, tile, hstack)
+        zeros, concatenate, vstack, identity, tile, hstack, prod, ix_,
+        atleast_2d, diag)
 from numpy.linalg import eig
 from scipy.sparse import block_diag
 from scipy.special import binom as binom_coeff
 from scipy.stats import binom
 from pandas import read_excel, read_csv
-from tqdm import tqdm
-from model.common import within_household_spread, sparse, my_int
+# from tqdm import tqdm
+from model.common import (
+        within_household_spread, sparse, my_int, build_state_matrix)
 from model.imports import import_model_from_spec, NoImportModel
 
 
@@ -204,6 +206,27 @@ def add_vulnerable_hh_members(
     return new_comp_list, new_comp_dist
 
 
+class HouseholdSubsystemSpec:
+    '''Class to store composition subsystem specification to avoid code
+    repetition'''
+    def __init__(self, composition, no_compartments):
+        self.composition = composition
+        self.classes_present = composition.ravel() > 0
+        self.class_indexes = where(self.classes_present)[0]
+        self.system_sizes = array([
+            binom_coeff(
+                composition[class_index] + no_compartments - 1,
+                no_compartments - 1)
+            for class_index in self.class_indexes], dtype=my_int)
+        self.system_sizes = self.system_sizes.ravel()
+        self.total_size = prod(self.system_sizes)
+        self.no_compartments = no_compartments
+
+    @property
+    def matrix_shape(self):
+        return (self.total_size, self.total_size)
+
+
 class HouseholdPopulation:
     def __init__(
             self,
@@ -219,6 +242,8 @@ class HouseholdPopulation:
 
         self.composition_list = composition_list
         self.composition_distribution = composition_distribution
+        self.model_input = model_input
+        self.no_compartments = no_compartments
 
         # If the compositions include household size at the beginning, we
         # throw it away here. While we would expect to see some households
@@ -233,125 +258,229 @@ class HouseholdPopulation:
 
         # This is an array of logicals telling you which classes are present in
         # each composition
-        classes_present = composition_list > 0
+        # classes_present = composition_list > 0
 
-        system_sizes = ones(no_types, dtype=my_int)
-        for i, _ in enumerate(system_sizes):
-            for j in where(classes_present[i, :])[0]:
-                system_sizes[i] *= binom_coeff(
-                    composition_list[i, j] + no_compartments - 1,
-                    no_compartments - 1)
-
+        household_subsystem_specs = [
+            HouseholdSubsystemSpec(c, no_compartments)
+            for c in composition_list]
         # This is useful for placing blocks of system states
-        cum_sizes = cumsum(system_sizes)
-        # Total size is sum of the sizes of each composition-system, because
-        # we are considering a single household which can be in any one
-        # composition
-        total_size = cum_sizes[-1]
-        # Stores list of (S,E,D,U,R)_a states for each composition
-        states = zeros((total_size, no_compartments * no_classes), dtype=my_int)
-        which_composition = zeros(total_size, dtype=my_int)
+        cum_sizes = cumsum(array(
+            [s.total_size for s in household_subsystem_specs]))
 
-        # Initialise matrix of internal process by doing the first block
-        which_composition[:system_sizes[0]] = zeros(system_sizes[0], dtype=my_int)
-        if save_reverse_prod:
-            reverse_prod = []
-            index_vector = []
-            Q_temp, \
-                states_temp, \
-                inf_event_row, \
-                inf_event_col, \
-                inf_event_class, \
-                reverse_prod_temp, \
-                index_vector_temp \
-                = build_function(
-                    composition_list[0, :],
-                    model_input)
-            reverse_prod.append(reverse_prod_temp)
-            index_vector.append(index_vector_temp)
-        else:
-            Q_temp, \
-                states_temp, \
-                inf_event_row, \
-                inf_event_col, \
-                inf_event_class \
-                = build_function(
-                    composition_list[0, :],
-                    model_input)
-        Q_int = sparse(Q_temp)
-        class_list = where(classes_present[0, :])[0]
-        for j in range(len(class_list)):
-            this_class = class_list[j]
-            states[:system_sizes[0], no_compartments*this_class:no_compartments*(this_class+1)] = \
-                states_temp[:, no_compartments*j:no_compartments*(j+1)]
+        # This is to remember mapping between states and household compositions
+        self.which_composition = concatenate([
+            i * ones(hsh.total_size, dtype=my_int)
+            for i, hsh in enumerate(household_subsystem_specs)])
 
-        if print_progress:
-            progress_bar = tqdm(
-                range(1, no_types),
-                desc='Building within-household transmission matrix')
-        else:
-            progress_bar = range(1, no_types)
-        # NOTE: The way I do this loop is very wasteful, I'm making lots of
-        # arrays which I'm overwriting with different sizes
-        temp_arrays = [Q_int]
-        inf_event_rows = [inf_event_row]
-        inf_event_cols = [inf_event_col]
-        inf_event_classes = [inf_event_class]
-        for i in progress_bar:
+        # List of tuples describing model parts which need to be assembled into
+        # a complete system. The derived classes will override the processing
+        # function below.
+        model_parts = [
+            self._create_subsystems(s)
+            for s in household_subsystem_specs]
+
+        # else:
+            # Q_temp, \
+                # states_temp, \
+                # inf_event_row, \
+                # inf_event_col, \
+                # inf_event_class \
+                # = build_function(
+                    # composition_list[0, :],
+                    # model_input)
+        # Q_int = sparse(Q_temp)
+
+        # if print_progress:
+            # progress_bar = tqdm(
+                # range(1, no_types),
+                # desc='Building within-household transmission matrix')
+        # else:
+            #progress_bar = range(1, no_types)
+        #for i in progress_bar:
             # print('Processing {}/{}'.format(i, no_types))
-            which_composition[cum_sizes[i-1]:cum_sizes[i]] = i * ones(
-                system_sizes[i], dtype=my_int)
-            if save_reverse_prod:
-                Q_temp, \
-                    states_temp, \
-                    inf_temp_row, \
-                    inf_temp_col, \
-                    inf_temp_class, \
-                    reverse_prod_temp, \
-                    index_vector_temp \
-                    = build_function(
-                        composition_list[i, :],
-                        model_input)
-                reverse_prod.append(reverse_prod_temp)
-                index_vector_temp.data += cum_sizes[i-1]
-                index_vector.append(index_vector_temp)
-            else:
-                Q_temp, \
-                    states_temp, \
-                    inf_temp_row, \
-                    inf_temp_col, \
-                    inf_temp_class \
-                    = build_function(
-                        composition_list[i, :],
-                        model_input)
-            temp_arrays.append(Q_temp)
-            class_list = where(classes_present[i, :])[0]
-            for j in range(len(class_list)):
-                this_class = class_list[j]
-                states[
-                    cum_sizes[i-1]:cum_sizes[i],
-                    no_compartments*this_class: no_compartments*(this_class+1)] = states_temp[:, no_compartments*j:no_compartments*(j+1)]
-            inf_event_rows.append(cum_sizes[i-1] + inf_temp_row)
-            inf_event_cols.append(cum_sizes[i-1] + inf_temp_col)
-            inf_event_classes.append(inf_temp_class)
+            #if save_reverse_prod:
+                #Q_temp, \
+                    #states_temp, \
+                    #inf_temp_row, \
+                    #inf_temp_col, \
+                    #inf_temp_class, \
+                    #reverse_prod_temp, \
+                    #index_vector_temp \
+                    #= build_function(
+                    #    composition_list[i, :],
+                    #    model_input)
+                #reverse_prod.append(reverse_prod_temp)
+                #index_vector_temp.data += cum_sizes[i-1]
+                #index_vector.append(index_vector_temp)
+            #else:
+                #Q_temp, \
+                    #states_temp, \
+                    #inf_temp_row, \
+                    #inf_temp_col, \
+                    #inf_temp_class \
+                    #= build_function(
+                    #    composition_list[i, :],
+                    #    model_input)
 
-        Q_int = block_diag(temp_arrays, format='csc')
-        Q_int.eliminate_zeros()
-        self.Q_int = Q_int
-        inf_event_row = concatenate(inf_event_rows)
-        inf_event_col = concatenate(inf_event_cols)
-        inf_event_class = concatenate(inf_event_classes)
+            # inf_event_rows.append(cum_sizes[i-1] + inf_temp_row)
+            # inf_event_cols.append(cum_sizes[i-1] + inf_temp_col)
 
-        if save_reverse_prod:
-            self.reverse_prod = reverse_prod
-            self.index_vector = index_vector
-        self.states = states
-        self.which_composition = which_composition
-        self.system_sizes = system_sizes
+        self.Q_int = block_diag([part[0] for part in  model_parts], format='csc')
+        self.Q_int.eliminate_zeros()
+        offsets = concatenate(([0], cum_sizes))
+        self.states = concatenate([part[1] for part in model_parts])
+        self.inf_event_row = concatenate([
+            part[2] + offsets[i]
+            for i, part in enumerate(model_parts)])
+        self.inf_event_col = concatenate([
+            part[3] + offsets[i]
+            for i, part in enumerate(model_parts)])
+        self.inf_event_class = concatenate([part[4] for part in model_parts])
+        self.reverse_prod = [part[5] for part in model_parts]
+        for i, parts in enumerate(model_parts):
+            model_parts[i][6].data += offsets[i]
+        self.index_vector = [part[6] for part in model_parts]
         self.cum_sizes = cum_sizes
-        self.inf_event_row = inf_event_row
-        self.inf_event_col = inf_event_col
-        self.inf_event_class = inf_event_class
+        self.system_sizes = array([
+            hsh.total_size
+            for hsh in household_subsystem_specs])
+
+    def _create_subsystems(self, household_spec):
+        '''This function processes a composition to create subsistems i.e.
+        matrices and vectors describing all possible epdiemiological states
+        for a given household composition
+        Assuming frequency-dependent homogeneous within-household mixing
+        composition[i] is the number of individuals in age-class i inside the
+        household'''
+
+        composition = household_spec.composition
+        sus = self.model_input.sus
+        tau = self.model_input.tau
+        K_home = self.model_input.k_home
+        alpha_1 = self.model_input.alpha_1
+        alpha_2 = self.model_input.alpha_2
+        gamma = self.model_input.gamma
+
+        no_compartments = self.no_compartments
+
+        # Set of individuals actually present here
+        # classes_present = where(composition.ravel() > 0)[0]
+        classes_idx = household_spec.class_indexes
+        K_home = K_home[ix_(classes_idx, classes_idx)]
+        sus = sus[classes_idx]
+        tau = tau[classes_idx]
+        r_home = atleast_2d(diag(sus).dot(K_home))
+
+        states, \
+            reverse_prod, \
+            index_vector, \
+            rows = build_state_matrix(household_spec)
+
+        p_pos = 2 + no_compartments * arange(len(classes_idx))
+        i_pos = 3 + no_compartments * arange(len(classes_idx))
+
+        Q_int = sparse(household_spec.matrix_shape)
+        inf_event_row = array([], dtype=my_int)
+        inf_event_col = array([], dtype=my_int)
+        inf_event_class = array([], dtype=my_int)
+
+        # Add events for each age class
+        for i in range(len(classes_idx)):
+            s_present = where(states[:, no_compartments*i] > 0)[0]
+            e_present = where(states[:, no_compartments*i+1] > 0)[0]
+            p_present = where(states[:, no_compartments*i+2] > 0)[0]
+            i_present = where(states[:, no_compartments*i+3] > 0)[0]
+
+            # First do infection events
+            inf_to = zeros(len(s_present), dtype=my_int)
+            inf_rate = zeros(len(s_present))
+            for k in range(len(s_present)):
+                old_state = copy(states[s_present[k], :])
+                # tau is prodromal reduction
+                inf_rate[k] = old_state[no_compartments*i] * (
+                    r_home[i, :].dot(
+                        (old_state[i_pos] / composition[classes_idx])
+                        + (
+                            old_state[p_pos] /
+                            composition[classes_idx]) * tau))
+                new_state = old_state.copy()
+                new_state[no_compartments*i] -= 1
+                new_state[no_compartments*i + 1] += 1
+                inf_to[k] = index_vector[
+                    new_state.dot(reverse_prod) + new_state[-1], 0]
+            Q_int += sparse(
+                (inf_rate, (s_present, inf_to)),
+                shape=household_spec.matrix_shape)
+            inf_event_row = concatenate((inf_event_row, s_present))
+            inf_event_col = concatenate((inf_event_col, inf_to))
+            inf_event_class = concatenate(
+                (inf_event_class, classes_idx[i]*ones((len(s_present)))))
+            # input('Press enter to continue')
+            # # disp('Infection events done')
+            # # Now do exposure to prodromal
+            inc_to = zeros(len(e_present), dtype=my_int)
+            inc_rate = zeros(len(e_present))
+            for k in range(len(e_present)):
+                # First do detected
+                old_state = copy(states[e_present[k], :])
+                inc_rate[k] = alpha_1 * old_state[no_compartments*i+1]
+                new_state = copy(old_state)
+                new_state[no_compartments*i + 1] -= 1
+                new_state[no_compartments*i + 2] += 1
+                inc_to[k] = index_vector[
+                    new_state.dot(reverse_prod) + new_state[-1], 0]
+
+            Q_int += sparse(
+                (inc_rate, (e_present, inc_to)),
+                shape=household_spec.matrix_shape)
+            # # disp('Incubaion events done')
+            # # Now do prodromal to infectious
+            dev_to = zeros(len(p_present), dtype=my_int)
+            dev_rate = zeros(len(p_present))
+            for k in range(len(p_present)):
+                # First do detected
+                old_state = copy(states[p_present[k], :])
+                dev_rate[k] = alpha_2 * old_state[no_compartments*i+2]
+                new_state = copy(old_state)
+                new_state[no_compartments*i + 2] -= 1
+                new_state[no_compartments*i + 3] += 1
+                dev_to[k] = index_vector[
+                    new_state.dot(reverse_prod) + new_state[-1], 0]
+
+            Q_int += sparse(
+                (dev_rate, (p_present, dev_to)),
+                shape=household_spec.matrix_shape)
+
+            # Now do recovery of detected cases
+            rec_to = zeros(len(i_present), dtype=my_int)
+            rec_rate = zeros(len(i_present))
+            for k in range(len(i_present)):
+                old_state = copy(states[i_present[k], :])
+                rec_rate[k] = gamma * old_state[no_compartments*i+3]
+                new_state = copy(old_state)
+                new_state[no_compartments*i+3] -= 1
+                new_state[no_compartments*i+4] += 1
+                rec_to[k] = index_vector[
+                    new_state.dot(reverse_prod) + new_state[-1], 0]
+            Q_int += sparse(
+                (rec_rate, (i_present, rec_to)),
+                shape=household_spec.matrix_shape)
+
+        S = Q_int.sum(axis=1).getA().squeeze()
+        Q_int += sparse((
+            -S,
+            (
+                arange(household_spec.total_size),
+                arange(household_spec.total_size)
+            )))
+        return tuple((
+            Q_int,
+            states,
+            array(inf_event_row, dtype=my_int, ndmin=1),
+            array(inf_event_col, dtype=my_int, ndmin=1),
+            array(inf_event_class, dtype=my_int, ndmin=1),
+            reverse_prod,
+            index_vector))
 
     @property
     def composition_by_state(self):
@@ -630,10 +759,11 @@ class TwoAgeWithVulnerableInput:
 
         eigenvalue = max(eig(
 
-            self.sus * ((1/spec['recovery_rate']) *
-             (self.k_home + self.epsilon * self.k_ext) + \
-            (1/spec['symp_onset_rate']) *
-            (self.k_home + self.epsilon * self.k_ext) * self.tau)
+            self.sus * (
+                (1.0/spec['recovery_rate'])
+                * (self.k_home + self.epsilon * self.k_ext)
+                + (1.0/spec['symp_onset_rate']) *
+                (self.k_home + self.epsilon * self.k_ext) * self.tau)
 
             )[0])
 

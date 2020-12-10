@@ -7,7 +7,6 @@ from numpy import (
     ones, prod, shape, sum, where, zeros)
 from numpy import int64 as my_int
 from numpy import exp, log
-import pdb
 from scipy.sparse import csc_matrix as sparse
 from scipy.stats import multinomial
 from model.preprocessing import ModelInput
@@ -166,51 +165,55 @@ def build_mixed_compositions(composition_list,
         (rows, [0]*no_mixed_comps)))
     return mixed_comp_list, mixed_comp_dist, hh_dimension, pairings, mixed_comp_index_vector, reverse_prod
 
-def my_multinomial(hist,n,p):
-    log_prob = sum(log(arange(1,n+1)))
+
+def my_multinomial(hist, n, p):
+    log_prob = sum(log(arange(1, n+1)))
     for i in range(len(hist)):
-        log_prob += hist[i] * log(p[i]) - sum(log(arange(1,hist[i]+1)))
+        log_prob += hist[i] * log(p[i]) - sum(log(arange(1, hist[i]+1)))
     return exp(log_prob)
 
-def merged_initial_condition(H_unmerged,
-                            unmerged_population,
-                            merged_population,
-                            hh_dimension,
-                            pairings,
-                            no_hh=2,
-                            no_compartments=5):
+
+def merged_initial_condition(
+        H_unmerged,
+        unmerged_population,
+        merged_population,
+        hh_dimension,
+        pairings,
+        no_hh=2,
+        no_compartments=5):
     H0_len = sum(merged_population.system_sizes)
     H0 = ones((H0_len,))
     reverse_prod = unmerged_population.reverse_prod
     index_vector_list = unmerged_population.index_vector
     which_composition = merged_population.which_composition
     merged_states = merged_population.states
-    unmerged_states = unmerged_population.states
 
     for i in range(H0_len):
         hist = zeros(len(H_unmerged,))
         for hh in range(no_hh):
             comp = pairings[hh][which_composition[i]]
-            state = merged_states[i,
-                hh * hh_dimension * no_compartments :
+            state = merged_states[
+                i,
+                hh * hh_dimension * no_compartments:
                 (hh+1) * hh_dimension * no_compartments]
             index_vector = index_vector_list[comp]
             index = index_vector[
                 state.dot(reverse_prod[comp]) + state[-1], 0]
             hist[index] += 1
         H0[i] = multinomial.pmf(hist, n=no_hh, p=H_unmerged)
-
     return H0
 
-def merged_initial_condition_alt(H_unmerged,
-                            unmerged_population,
-                            merged_population,
-                            hh_dimension,
-                            mixed_comp_index_vector,
-                            mixed_comp_reverse_prod,
-                            pairings,
-                            no_hh=2,
-                            no_compartments=5):
+
+def merged_initial_condition_alt(
+        H_unmerged,
+        unmerged_population,
+        merged_population,
+        hh_dimension,
+        mixed_comp_index_vector,
+        mixed_comp_reverse_prod,
+        pairings,
+        no_hh=2,
+        no_compartments=5):
     no_unmerged_states = sum(unmerged_population.system_sizes)
     H0_len = sum(merged_population.system_sizes)
     H0 = zeros((H0_len,))
@@ -446,6 +449,7 @@ class MergedSEIRInput(ModelInput):
     def gamma(self):
         return self.spec['recovery_rate']
 
+
 def make_initial_condition(
         household_population,
         rhs,
@@ -466,6 +470,7 @@ def make_initial_condition(
     H0[fully_sus] = (1.0 - prev * sum(x)) \
             * household_population.composition_distribution
     return H0
+
 
 def make_initial_condition_with_recovereds(
         household_population,
@@ -547,7 +552,8 @@ def within_household_SEPIR(
     tau = tau[classes_present]
     r_home = atleast_2d(diag(sus).dot(K_home))
 
-    states, total_size, reverse_prod, index_vector, rows = build_state_matrix(composition, classes_present, no_compartments)
+    states, total_size, reverse_prod, index_vector, rows = build_state_matrix(
+            composition, classes_present, no_compartments)
 
     p_pos = 2 + no_compartments * arange(len(classes_present))
     i_pos = 3 + no_compartments * arange(len(classes_present))
@@ -792,11 +798,10 @@ class RateEquations:
         '''hh_ODE_rates calculates the rates of the ODE system describing the
         household ODE model'''
         Q_ext_pro, Q_ext_inf = self.external_matrices(t, H)
-        if (H<0).any():
-            # pdb.set_trace()
-            H[where(H<0)[0]]=0
+        if (H < 0).any():
+            H[where(H < 0)[0]] = 0
         if isnan(H).any():
-            pdb.set_trace()
+            raise ValueError
         dH = (H.T * (self.Q_int + Q_ext_inf + Q_ext_pro)).T
         return dH
 
@@ -884,10 +889,9 @@ class SEIRRateEquations:
         dH_ext = H.T * Q_ext_inf
 
         if (H<0).any():
-            # pdb.set_trace()
             H[where(H<0)[0]]=0
         if isnan(H).any():
-            pdb.set_trace()
+            raise ValueError('NaNs inside the state vector')
         dH = (H.T * (self.Q_int + Q_ext_inf)).T
         return dH
 

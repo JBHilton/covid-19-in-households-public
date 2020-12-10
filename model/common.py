@@ -1,29 +1,43 @@
 '''Module for additional computations required by the model'''
 from numpy import (
     arange, array, atleast_2d, concatenate, copy, cumprod, diag, isnan, ix_,
-    ones, prod, shape, sum, where, zeros)
+    ones, shape, sum, where, zeros)
 from numpy import int64 as my_int
+import pdb
 from scipy.sparse import csc_matrix as sparse
-from scipy.special import binom
-from model.imports import NoImportModel, CareHomeImportModel
+from model.imports import NoImportModel
 
-def state_recursor(states,no_compartments,age_class,b_size,n_blocks,con_reps,c,x,depth,k):
-    if depth<no_compartments-1:
-        for x_i in arange(c + 1 - sum(x)):
-            x[0,depth] = x_i
-            x[0,depth+1:] = zeros((1,no_compartments-depth-1),dtype=my_int)
-            states, k = state_recursor(states,
-                                        no_compartments,
-                                        age_class,
-                                        b_size,
-                                        n_blocks,
-                                        con_reps,
-                                        c,
-                                        x,
-                                        depth+1,
-                                        k)
+
+def state_recursor(
+        states,
+        no_compartments,
+        age_class,
+        b_size,
+        n_blocks,
+        con_reps,
+        c,
+        x,
+        depth,
+        k):
+    if depth < no_compartments-1:
+        for x_i in arange(c + 1 - x.sum()):
+            x[0, depth] = x_i
+            x[0, depth+1:] = zeros(
+                (1, no_compartments-depth-1),
+                dtype=my_int)
+            states, k = state_recursor(
+                states,
+                no_compartments,
+                age_class,
+                b_size,
+                n_blocks,
+                con_reps,
+                c,
+                x,
+                depth+1,
+                k)
     else:
-        x[0,-1] = c - sum(x[0,:depth])
+        x[0, -1] = c - sum(x[0, :depth])
         for block in arange(n_blocks):
             repeat_range = arange(
                 block * b_size
@@ -41,68 +55,59 @@ def state_recursor(states,no_compartments,age_class,b_size,n_blocks,con_reps,c,x
         return states, k
     return states, k
 
-def build_states_recursively(total_size,no_compartments,classes_present,block_size,num_blocks,consecutive_repeats,composition):
-    states = zeros((total_size, no_compartments*len(classes_present)), dtype=my_int)
+
+def build_states_recursively(
+        total_size,
+        no_compartments,
+        classes_present,
+        block_size,
+        num_blocks,
+        consecutive_repeats,
+        composition):
+    states = zeros(
+        (total_size, no_compartments*len(classes_present)),
+        dtype=my_int)
     for age_class in range(len(classes_present)):
         k = 0
-        states, k = state_recursor(states,
-                                no_compartments,
-                                age_class,
-                                block_size[age_class],
-                                num_blocks[age_class],
-                                consecutive_repeats[age_class],
-                                composition[classes_present[age_class]],
-                                zeros([1,no_compartments],dtype=my_int),
-                                0,
-                                k)
-    return states,k
+        states, k = state_recursor(
+            states,
+            no_compartments,
+            age_class,
+            block_size[age_class],
+            num_blocks[age_class],
+            consecutive_repeats[age_class],
+            composition[classes_present[age_class]],
+            zeros([1, no_compartments], dtype=my_int),
+            0,
+            k)
+    return states, k
 
 
-def build_state_matrix(composition, classes_present, no_compartments):
-
-    system_sizes = array([
-        binom(composition[classes_present[i]] + no_compartments - 1, no_compartments - 1)
-        for i, _ in enumerate(classes_present)], dtype=my_int)
-
-    total_size = prod(system_sizes)
-
+def build_state_matrix(household_spec):
     # states = zeros((total_size, 6*len(classes_present)), dtype=my_int)
     # Number of times you repeat states for each configuration
     consecutive_repeats = concatenate((
-        ones(1, dtype=my_int), cumprod(system_sizes[:-1])))
-    block_size = consecutive_repeats * system_sizes
-    num_blocks = total_size // block_size
+        ones(1, dtype=my_int), cumprod(household_spec.system_sizes[:-1])))
+    block_size = consecutive_repeats * household_spec.system_sizes
+    num_blocks = household_spec.total_size // block_size
 
-    # for age_class in range(len(classes_present)):
-    #     k = 0
-    #     c = composition[classes_present[age_class]]
-    #     for x_1 in arange(c + 1):
-    #         for x_2 in arange(c - x_1 + 1):
-    #             for x_3 in arange(c - x_1 - x_2 + 1):
-    #                 for x_4 in arange(c - x_1 - x_2 - x_3 + 1):
-    #                     for x_5 in arange(c - x_1 - x_2 - x_3 - x_4 + 1):
-    #                         for block in arange(num_blocks[age_class]):
-    #                             repeat_range = arange(
-    #                                 block * block_size[age_class]
-    #                                 + k * consecutive_repeats[age_class],
-    #                                 block * block_size[age_class] +
-    #                                 (k + 1) * consecutive_repeats[age_class])
-    #                             states[repeat_range, 6*age_class:6*(age_class+1)] = \
-    #                                 ones(
-    #                                     (consecutive_repeats[age_class], 1),
-    #                                     dtype=my_int) \
-    #                                 * array(
-    #                                     [x_1, x_2, x_3, x_4, x_5, c - x_1 - x_2 - x_3 - x_4 - x_5],
-    #                                     ndmin=2, dtype=my_int)
-    #                         k += 1
-    states,k=build_states_recursively(total_size,no_compartments,classes_present,block_size,num_blocks,consecutive_repeats,composition)
+    states, k = build_states_recursively(
+        household_spec.total_size,
+        household_spec.no_compartments,
+        household_spec.class_indexes,
+        block_size,
+        num_blocks,
+        consecutive_repeats,
+        household_spec.composition)
     # Now construct a sparse vector which tells you which row a state appears
     # from in the state array
 
     # This loop tells us how many values each column of the state array can
     # take
     state_sizes = concatenate([
-        (composition[i] + 1) * ones(no_compartments, dtype=my_int) for i in classes_present])
+        (household_spec.composition[i] + 1)
+        * ones(household_spec.no_compartments, dtype=my_int)
+        for i in household_spec.class_indexes]).ravel()
 
     # This vector stores the number of combinations you can get of all
     # subsequent elements in the state array, i.e. reverse_prod(i) tells you
@@ -116,7 +121,7 @@ def build_state_matrix(composition, classes_present, no_compartments):
     # will be much bigger than we actually require
     rows = [
         states[k, :].dot(reverse_prod) + states[k, -1]
-        for k in range(total_size)]
+        for k in range(household_spec.total_size)]
 
     if min(rows) < 0:
         print(
@@ -126,12 +131,12 @@ def build_state_matrix(composition, classes_present, no_compartments):
             len(rows),
             '=',
             sum(array(rows) < 0) / len(rows))
-        pdb.set_trace()
     index_vector = sparse((
-        arange(total_size),
-        (rows, [0]*total_size)))
+        arange(household_spec.total_size),
+        (rows, [0]*household_spec.total_size)))
 
-    return states, total_size, reverse_prod, index_vector, rows
+    return states, reverse_prod, index_vector, rows
+
 
 def within_carehome_system(
         composition, model_input):
@@ -139,15 +144,15 @@ def within_carehome_system(
     composition[i] is the number of individuals in age-class i inside the
     household'''
 
-    sus = model_input.sus # susceptibility indexed by patients and carers
-    tau = model_input.tau # reduction in infectivity during prodrome
-    K_home = model_input.k_home # internal mixing matrix
-    alpha_1 = model_input.alpha_1 # E->P progression rate
-    alpha_2 = model_input.alpha_2 # P->I progression rate
-    gamma = model_input.gamma # Recovery (I->R) rate
-    mu_cov = model_input.mu_cov # Disease-specific mortality rate
-    mu = model_input.mu # Background bed clearance rate
-    b = model_input.b # Arrival rate into empty beds
+    sus = model_input.sus  # susceptibility indexed by patients and carers
+    tau = model_input.tau  # reduction in infectivity during prodrome
+    K_home = model_input.k_home  # internal mixing matrix
+    alpha_1 = model_input.alpha_1  # E->P progression rate
+    alpha_2 = model_input.alpha_2  # P->I progression rate
+    gamma = model_input.gamma  # Recovery (I->R) rate
+    mu_cov = model_input.mu_cov  # Disease-specific mortality rate
+    mu = model_input.mu  # Background bed clearance rate
+    b = model_input.b  # Arrival rate into empty beds
 
     # Set of individuals actually present here
     classes_present = where(composition.ravel() > 0)[0]
@@ -157,16 +162,20 @@ def within_carehome_system(
     tau = tau[classes_present]
     r_home = atleast_2d(diag(sus).dot(K_home))
 
-    states, total_size, reverse_prod, index_vector, rows = build_state_matrix(composition, classes_present, 6)
+    states, total_size, reverse_prod, index_vector, rows = build_state_matrix(
+        composition, classes_present, 6)
+    # Location of prodromals in state vector
+    p_pos = 2 + 6 * arange(len(classes_present))
+    # Location of infected in state vector
+    i_pos = 3 + 6 * arange(len(classes_present))
+    # Location of empty beds in state vector
+    d_pos = 5 + 6 * arange(len(classes_present))
 
-    p_pos = 2 + 6 * arange(len(classes_present)) # Location of prodromals in state vector
-    i_pos = 3 + 6 * arange(len(classes_present)) # Location of infected in state vector
-    d_pos = 5 + 6 * arange(len(classes_present)) # Location of empty beds in state vector
-
-    empty_adjusted_comp = composition[classes_present] - states[:,d_pos] # This is number of people actually present, given some beds are empty
-    empty_adjusted_comp[empty_adjusted_comp==0] = 1 # Replace zeros with ones - we only ever use this as a denominator whose numerator will be zero anyway if it should be zero
-    if (empty_adjusted_comp<1).any():
-        pdb.set_trace()
+    # This is number of people actually present, given some beds are empty
+    empty_adjusted_comp = composition[classes_present] - states[:, d_pos]
+    # Replace zeros with ones - we only ever use this as a denominator whose
+    # numerator will be zero anyway if it should be zero
+    empty_adjusted_comp[empty_adjusted_comp == 0] = 1
 
     Q_int = sparse((total_size, total_size))
     inf_event_row = array([], dtype=my_int)
@@ -188,10 +197,11 @@ def within_carehome_system(
         inf_rate = zeros(len(s_present))
         for k in range(len(s_present)):
             old_state = copy(states[s_present[k], :])
+            # tau is prodromal reduction in infectivity
             inf_rate[k] = old_state[6*i] * (
                 r_home[i, :].dot(
                     (old_state[i_pos] / empty_adjusted_comp[k])
-                    + (old_state[p_pos] / empty_adjusted_comp[k]) * tau )) # tau is prodromal reduction in infectivity
+                    + tau * (old_state[p_pos] / empty_adjusted_comp[k])))
             new_state = old_state.copy()
             new_state[6*i] -= 1
             new_state[6*i + 1] += 1
@@ -931,6 +941,7 @@ def build_external_import_matrix(
 
     return Q_ext_d, Q_ext_u
 
+
 def build_external_import_matrix_SEPIRQ(
         household_population, FOI_pro, FOI_inf):
     '''Gets sparse matrices containing rates of external infection in a
@@ -1005,9 +1016,9 @@ class RateEquations:
         '''hh_ODE_rates calculates the rates of the ODE system describing the
         household ODE model'''
         Q_ext_det, Q_ext_undet = self.external_matrices(t, H)
-        if (H<0).any():
+        if (H < 0).any():
             # pdb.set_trace()
-            H[where(H<0)[0]]=0
+            H[where(H < 0)[0]] = 0
         if isnan(H).any():
             pdb.set_trace()
         dH = (H.T * (self.Q_int + Q_ext_det + Q_ext_undet)).T
@@ -1143,28 +1154,34 @@ class SEPIRQRateEquations:
         else:
             # Average prodromal infected by household in each class
             pro_by_class = zeros(shape(denom))
-            pro_by_class[denom>0] = (
+            pro_by_class[denom > 0] = (
                 (H[where(self.no_isos)[0]].T.dot(self.states_pro_only[ix_(where(self.no_isos)[0],denom>0)]) +
                 (1 - self.iso_prob)*H[where(self.isos_present)[0]].T.dot(self.states_pro_only[ix_(where(self.isos_present)[0],denom>0)]))
-                / denom[denom>0]).squeeze()
+                / denom[denom > 0]).squeeze()
             # Average full infectious infected by household in each class
             inf_by_class = zeros(shape(denom))
-            inf_by_class[denom>0] = (
-                (H[where(self.no_isos)[0]].T.dot(self.states_inf_only[ix_(where(self.no_isos)[0],denom>0)]) +
-                (1 - self.iso_prob)*H[where(self.isos_present)[0]].T.dot(self.states_inf_only[ix_(where(self.isos_present)[0],denom>0)]))
-                / denom[denom>0]).squeeze()
-        # This stores the rates of generating an infected of each class in each state
+            inf_by_class[denom > 0] = ((
+                H[where(self.no_isos)[0]].T.dot(
+                    self.states_inf_only[ix_(where(self.no_isos)[0],denom > 0)])
+                + (1.0 - self.iso_prob)
+                * H[where(self.isos_present)[0]].T.dot(
+                    self.states_inf_only[ix_(where(self.isos_present)[0],denom > 0)]))
+                / denom[denom > 0]).squeeze()
+        # This stores the rates of generating an infected of each class in each
+        # state
         FOI_pro = self.states_sus_only.dot(
             diag(self.pro_trans_matrix.dot(
                 self.epsilon * pro_by_class.T
                 + self.import_model.detected(t))))
-        # This stores the rates of generating an infected of each class in each state
+        # This stores the rates of generating an infected of each class in each
+        # state
         FOI_inf = self.states_sus_only.dot(
             diag(self.inf_trans_matrix.dot(
                 self.epsilon * inf_by_class.T
                 + self.import_model.undetected(t))))
 
         return FOI_pro, FOI_inf
+
 
 class CareHomeRateEquations:
     '''This class represents a functor for evaluating the rate equations for
