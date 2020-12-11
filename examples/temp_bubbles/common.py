@@ -1,11 +1,12 @@
 from copy import deepcopy
 from numpy import (
-    append, arange, around, array, atleast_2d, concatenate, copy, cumprod, diag, hstack, isnan, ix_,
-    ones, prod, shape, sum, where, zeros)
+    append, arange, around, array, atleast_2d, concatenate, copy, cumprod, cumsum, delete, diag, hstack, isnan, ix_,
+    ones, prod, shape, sum, hstack, unique, where, zeros)
 from numpy import int64 as my_int
 from numpy import exp, log
 import pdb
 from scipy.sparse import csc_matrix as sparse
+from scipy.special import factorial
 from scipy.stats import multinomial
 from model.preprocessing import ModelInput
 from model.common import build_state_matrix, build_external_import_matrix_SEPIRQ
@@ -43,6 +44,95 @@ def build_mixed_compositions_pairwise(composition_list,composition_distribution)
 
     return mixed_comp_list, mixed_comp_dist, hh_dimension, pairings
 
+def build_mixed_compositions_threewise(composition_list,
+                                        composition_distribution,
+                                        max_size):
+
+    no_comps = composition_list.shape[0]
+
+    if composition_list.ndim==1:
+        hh_dimension = 1
+    else:
+        hh_dimension = composition_list.shape[1]
+
+    mixed_comp_list = []
+
+    pairings = [[],[],[]]
+
+    total_prob_1 = zeros((no_comps,))
+    total_prob_2 = zeros((no_comps, no_comps)) # total_prob_2[i,j] stores summed probability of all possible third elements if first two are i,j
+
+    for hh1 in range(no_comps):
+        hh2_max = min(no_comps, int(0.5 * (max_size - (hh1+1))))
+        total_prob_1[hh1] = sum(composition_distribution[:hh2_max])
+        for hh2 in range(no_comps):
+            hh3_max = min(no_comps, max_size - (hh1+1) - (hh2+1))
+            total_prob_2[hh1, hh2] = sum(composition_distribution[:hh3_max])
+            if (hh2>=hh1) and (hh2<hh2_max):
+                for hh3 in range(hh2, hh3_max):
+
+                    pairings[0].append(hh1)
+                    pairings[1].append(hh2)
+                    pairings[2].append(hh3)
+
+                    this_merged_comp = zeros((3*hh_dimension,))
+                    this_merged_comp[:hh_dimension] = \
+                     composition_list[hh1,]
+                    this_merged_comp[hh_dimension:2*hh_dimension] = \
+                     composition_list[hh2,]
+                    this_merged_comp[2*hh_dimension:] = \
+                     composition_list[hh3,]
+
+                    mixed_comp_list.append(this_merged_comp)
+
+            #     total_prob_2[hh1, hh2] += composition_distribution[hh3]
+            # total_prob_1[hh1] += composition_distribution[hh2]
+
+    def mixed_comp_term(p0,p1,p2):
+        hh2_max = min(no_comps, max_size - (p0 + 1) - 1)
+        hh3_max = min(no_comps, max_size - (p0 + 1) - (p1 + 1))
+        return composition_distribution[p0] * \
+                    (composition_distribution[p1] /
+                    sum(composition_distribution[:hh2_max])) * \
+                    (composition_distribution[p2] /
+                    sum(composition_distribution[:hh3_max]))
+
+    no_merged_comps = len(mixed_comp_list)
+    mixed_comp_list = array(mixed_comp_list, dtype=my_int)
+    pairings = array(pairings, dtype=my_int).T
+    mixed_comp_dist = zeros((no_merged_comps,))
+    for mc in range(no_merged_comps):
+        p_unique = unique(pairings[mc, :])
+        if len(p_unique)==1:
+            mixed_comp_dist[mc] = mixed_comp_term(p_unique[0],p_unique[0],p_unique[0])
+        elif len(p_unique)==2:
+            if len(where(pairings[mc,:]==p_unique[0])[0])==2:
+                pair0 = p_unique[0]
+                pair1 = p_unique[1]
+            else:
+                pair0 = p_unique[1]
+                pair1 = p_unique[0]
+            mixed_comp_dist[mc] = mixed_comp_term(pair0, pair0, pair1) + \
+                                        mixed_comp_term(pair0, pair1, pair0) + \
+                                        mixed_comp_term(pair1, pair0, pair0)
+        else:
+            pair0 = p_unique[0]
+            pair1 = p_unique[1]
+            pair2 = p_unique[2]
+            mixed_comp_dist[mc] = mixed_comp_term(pair0,pair1,pair2) + \
+                                    mixed_comp_term(pair0, pair2, pair1) + \
+                                    mixed_comp_term(pair1, pair0, pair2) + \
+                                    mixed_comp_term(pair1, pair2, pair0) + \
+                                    mixed_comp_term(pair2, pair0, pair1) + \
+                                    mixed_comp_term(pair2, pair1, pair0)
+        # if len(unique(pairings[mc,:]))==2:
+        #     mixed_comp_dist[mc] = 3 * mixed_comp_dist[mc]
+        # elif len(unique(pairings[mc,:]))==3:
+        #     mixed_comp_dist[mc] = 6 * mixed_comp_dist[mc]
+
+    return mixed_comp_list, mixed_comp_dist, hh_dimension, pairings
+
+
 def pairwise_merged_initial_condition(H_unmerged,
                             unmerged_population,
                             merged_population,
@@ -71,6 +161,29 @@ def pairwise_merged_initial_condition(H_unmerged,
         H0[i] = H_unmerged[index_0] * H_unmerged[index_1]
 
     return H0
+
+def initialise_merged_system_threewise(H0_unmerged,
+                            unmerged_population,
+                            merged_population,
+                            state_match,):
+
+    wc_um = unmerged_population.which_composition
+    wc_m = merged_population.which_composition
+    cd_um = unmerged_population.composition_distribution
+    cd_m = merged_population.composition_distribution
+    no_merged_states = len(wc_m)
+    H0_merged = zeros((no_merged_states,))
+    for state_no in range(no_merged_states):
+        this_H0_merged = cd_m[wc_m[state_no]] * \
+                        prod(H0_unmerged[state_match[state_no, :]]) / \
+                        prod(cd_um[wc_um[state_match[state_no, :]]])
+        # for hh in range(3):
+        #     this_H0_merged = this_H0_merged * \
+        #                         H0_unmerged[state_match[state_no, hh]] / \
+        #                         cd_um[wc_um[state_match[state_no, hh]]]
+        H0_merged[state_no] = this_H0_merged
+
+    return H0_merged
 
 def pairwise_demerged_initial_condition(H_merged,
                             unmerged_population,
@@ -124,6 +237,7 @@ def build_mixed_compositions(composition_list,
     pairings = []
     for pairing_index in range(no_hh):
         pairings.append([])
+    coeff = [] # This stores number of appearances each combination would make in a "full" merged list
 
 
     def comp_iterator(depth, no_hh):
@@ -132,24 +246,27 @@ def build_mixed_compositions(composition_list,
                 hhi[depth] = i
                 comp_iterator(depth+1, no_hh)
         else:
-            if sum(hhi) <= max_size:
-                index = 0
-                for hh in range(no_hh):
-                    index +=  hhi[hh] * no_comps**(no_hh - 1 - hh)
-                    pairings[hh].append(hhi[hh])
-                this_mix_comp = zeros((no_hh*hh_dimension,))
-                hist = zeros((no_comps,))
-                for hh in range(no_hh):
-                    this_mix_comp[hh*hh_dimension:(hh+1)*hh_dimension] = \
-                     composition_list[hhi[hh],]
-                    hist[hhi[hh]] += 1
-                this_mix_prob = multinomial.pmf(hist, n=no_hh, p=composition_distribution)
-                mixed_comp_list.append(this_mix_comp)
-                mixed_comp_dist.append(this_mix_prob)
+            index = 0
+            for hh in range(no_hh):
+                index +=  hhi[hh] * no_comps**(no_hh - 1 - hh)
+                pairings[hh].append(hhi[hh])
+            this_mix_comp = zeros((no_hh*hh_dimension,))
+            hist = zeros((no_comps,))
+            for hh in range(no_hh):
+                this_mix_comp[hh*hh_dimension:(hh+1)*hh_dimension] = \
+                 composition_list[hhi[hh],]
+                hist[hhi[hh]] += 1
+            this_mix_prob = multinomial.pmf(hist, n=no_hh, p=composition_distribution)
+            mixed_comp_list.append(this_mix_comp)
+            mixed_comp_dist.append(this_mix_prob)
+            coeff.append(factorial(no_hh)/prod(factorial(hist)))
 
     comp_iterator(0, no_hh)
     mixed_comp_list = array(mixed_comp_list, dtype=my_int)
     mixed_comp_dist = array(mixed_comp_dist)
+    coeff = array(coeff)
+    pairings = array(pairings).T
+    print('Before checking for big households, sum(dist)=',sum(mixed_comp_dist))
 
     reverse_prod = hstack(([0], no_comps**arange(1,no_hh)))
     no_mixed_comps = len(mixed_comp_dist)
@@ -158,8 +275,103 @@ def build_mixed_compositions(composition_list,
         for k in range(no_mixed_comps)]
     mixed_comp_index_vector = sparse((
         arange(no_mixed_comps),
-        (rows, [0]*no_mixed_comps)))
-    return mixed_comp_list, mixed_comp_dist, hh_dimension, pairings, mixed_comp_index_vector, reverse_prod
+        (rows, [0]*no_mixed_comps)), dtype=my_int)
+
+    mixed_sizes = mixed_comp_list.sum(axis=1)
+    large_merges = where(mixed_sizes>max_size)[0]
+
+    ref_dist = deepcopy(mixed_comp_dist)
+
+    for merge_no in large_merges:
+        this_prob = mixed_comp_dist[merge_no]
+        this_comp = mixed_comp_list[merge_no,:]
+        current_size = mixed_sizes[merge_no]
+        while current_size > max_size:
+            this_comp[this_comp.argmax()] -=1
+            current_size -=1
+        new_comp_loc = mixed_comp_index_vector[
+            this_comp.dot(reverse_prod) + this_comp[0],0]
+        mixed_comp_dist[new_comp_loc] += this_prob
+
+    print('After checking for big households, sum(dist)=',sum(mixed_comp_dist))
+
+    comp_scaler = mixed_comp_dist / ref_dist # Stores level of inflation of probability caused by adding prob of compositions with size>max to ones with size<=max
+
+    print(large_merges)
+    print('Before deletion mixed_comp_list.shape=',mixed_comp_list.shape)
+    mixed_comp_list = delete(mixed_comp_list, large_merges, axis=0)
+    print('After deletion mixed_comp_list.shape=',mixed_comp_list.shape)
+    print('Before deletion mixed_comp_dist.shape=',mixed_comp_dist.shape)
+    mixed_comp_dist = delete(mixed_comp_dist, large_merges, axis=0)
+    print('After deletion mixed_comp_dist.shape=',mixed_comp_dist.shape)
+    print('Before deletion coeff.shape=',coeff.shape)
+    coeff = delete(coeff, large_merges, axis=0)
+    print('After deletion coeff.shape=',coeff.shape)
+    print('Before deletion pairings.shape=',pairings.shape)
+    pairings = delete(pairings, large_merges, axis=0)
+    print('After deletion pairings.shape=',pairings.shape)
+    print('Before deletion comp_scaler.shape=',comp_scaler.shape)
+    comp_scaler = delete(comp_scaler, large_merges, axis=0)
+    print('After deletion comp_scaler.shape=',comp_scaler.shape)
+
+
+    return mixed_comp_list, mixed_comp_dist, hh_dimension, pairings, mixed_comp_index_vector, reverse_prod, coeff, comp_scaler
+
+def match_merged_states_to_unmerged(unmerged_population,
+                                    merged_population,
+                                    pairings,
+                                    no_hh,
+                                    no_compartments):
+
+    rp_um = unmerged_population.reverse_prod
+    rp_m = merged_population.reverse_prod
+    iv_um = unmerged_population.index_vector
+    iv_m = merged_population.index_vector
+    states_um = unmerged_population.states
+    states_m = merged_population.states
+    wc_m = merged_population.which_composition
+
+    # pdb.set_trace()
+    # iv_shifter = hstack((array(0),cumsum(unmerged_population.system_sizes))) # This shifts the index vectors so that they give you indices in the  full state list rather than in the individual matrix blocks
+
+    state_match = zeros((len(wc_m),no_hh), dtype=my_int)
+
+    for state_no in range(len(wc_m)):
+        merged_comp = wc_m[state_no]
+        for hh in range(no_hh):
+            unmerged_comp = pairings[merged_comp, hh]
+            this_iv = iv_um[unmerged_comp]
+            this_state = states_m[
+                state_no, hh * no_compartments:(hh+1) * no_compartments]
+            index = this_iv[
+                this_state.dot(rp_um[unmerged_comp]) + this_state[-1], 0]
+            state_match[state_no, hh] = index
+
+    return state_match
+
+def initialise_merged_system(H0_unmerged,
+                            merged_population,
+                            state_match,
+                            coeff,
+                            comp_scaler,
+                            no_hh):
+
+    wc_m = merged_population.which_composition
+    no_merged_states = len(wc_m)
+    H0_merged = zeros((no_merged_states,))
+    for state_no in range(no_merged_states):
+        log_H0_merged = 0
+        for hh in range(no_hh):
+            # print(hh)
+            # print(state_no)
+            # print(state_match[state_no, hh])
+            log_H0_merged += log(H0_unmerged[state_match[state_no, hh]])
+        H0_merged[state_no] = coeff[wc_m[state_no]] * \
+                              comp_scaler[wc_m[state_no]] * \
+                              exp(log_H0_merged)
+
+    return H0_merged
+
 
 def my_multinomial(hist,n,p):
     log_prob = sum(log(arange(1,n+1)))
@@ -243,29 +455,6 @@ def merged_initial_condition_alt(H_unmerged,
 
     state_iterator(0,no_hh)
 
-    #
-    # unique_mergers = []
-    # unique_comps = []
-    #
-    # for i in range(H0_len):
-    #     hist = zeros(len(H_unmerged,))
-    #     ordered_merge = []
-    #     for hh in range(no_hh):
-    #         comp = pairings[hh][which_composition[i]]
-    #         state = merged_states[i,
-    #             hh * hh_dimension * no_compartments :
-    #             (hh+1) * hh_dimension * no_compartments]
-    #         index_vector = index_vector_list[comp]
-    #         index = index_vector[
-    #             state.dot(reverse_prod[comp]) + state[-1], 0]
-    #         hist[index] += 1
-    #         ordered_merge.append(index)
-    #     # print(comp_count)
-    #     ordered_merge.sort()
-    #     if ordered_merge not in unique_mergers:
-    #         H0[i] = multinomial.pmf(hist, n=no_hh, p=H_unmerged)
-    #         unique_mergers.append(ordered_merge)
-
     return H0
 
 def demerged_initial_condition(H_merged,
@@ -285,7 +474,7 @@ def demerged_initial_condition(H_merged,
 
     for i in range(len(H_merged)):
         for hh in range(no_hh):
-            comp = pairings[hh][which_composition[i]]
+            comp = pairings[which_composition[i], hh]
             state = merged_states[i,
                 hh * hh_dimension * no_compartments :
                 (hh+1) * hh_dimension * no_compartments]
@@ -319,11 +508,12 @@ SINGLE_AGE_CLASS_SPEC = {
 
 SINGLE_AGE_CLASS_SEIR_SPEC = {
     # Interpretable parameters:
-    'R_int': 1.1,                      # Within-household reproduction ratio
+    'R_int': 1.2,                      # Within-household reproduction ratio
     'recovery_rate': 1/8,           # Recovery rate
     'incubation_rate': 1/1,         # E->P incubation rate
     'sus': array([1]),          # Relative susceptibility by age/vulnerability class
     'external_trans_scaling': 1.5 * 1/24,  # Relative intensity of external compared to internal contacts
+    'density_exponent': 1,
     # We don't actually use these two mixing matrices, but we need them to make the abstract base class work
     'k_home': {
         'file_name': 'inputs/MUestimates_home_2.xlsx',
@@ -370,7 +560,8 @@ class SingleClassSEIRInput(ModelInput):
 
         self.k_home = array(
             spec['R_int'] *
-            spec['recovery_rate'],
+            spec['recovery_rate'] *
+            (1 - spec['external_trans_scaling']),
             ndmin=2)
 
         self.k_ext = array(
@@ -380,6 +571,7 @@ class SingleClassSEIRInput(ModelInput):
             ndmin=2)
         self.sus = spec['sus']
         self.import_model = NoImportModel()
+        self.density_expo = spec['density_exponent']
 
     @property
     def alpha_1(self):
@@ -420,10 +612,8 @@ class MergedSEIRInput(ModelInput):
         super().__init__(spec)
 
         same_hh_trans = spec['R_int'] * \
-                        spec['recovery_rate']
-        guest_trans = spec['R_int'] * \
-                    spec['recovery_rate'] * \
-                    spec['external_trans_scaling'] / (1 + spec['external_trans_scaling'])
+                        spec['recovery_rate'] *\
+                        (1 - spec['external_trans_scaling'])
         self.k_home = \
             diag((1-guest_trans_scaling) * same_hh_trans * ones((no_hh,))) + \
                     guest_trans_scaling * same_hh_trans * ones((no_hh,no_hh))
@@ -432,6 +622,7 @@ class MergedSEIRInput(ModelInput):
             spec['external_trans_scaling'] * ones((no_hh,no_hh))
         self.sus = spec['sus'] * ones((no_hh,))
         self.import_model = NoImportModel()
+        self.density_expo = spec['density_exponent']
 
     @property
     def alpha_1(self):
@@ -465,9 +656,9 @@ def make_initial_condition(
 def make_initial_condition_with_recovereds(
         household_population,
         rhs,
-        prev=1.0e-4,
-        seroprev=6e-2,
-        AR=0.78):
+        prev=1.0e-2,
+        seroprev=5.6e-2,
+        AR=1.0):
     '''TODO: docstring'''
     fully_sus = where(
         rhs.states_sus_only.sum(axis=1)
@@ -654,6 +845,7 @@ def within_household_SEIR(
     K_home = model_input.k_home
     alpha_1 = model_input.alpha_1
     gamma = model_input.gamma
+    density_expo = model_input.density_expo
 
     no_compartments = 4
 
@@ -685,7 +877,7 @@ def within_household_SEIR(
             old_state = copy(states[s_present[k], :])
             inf_rate[k] = old_state[no_compartments*i] * (
                 r_home[i, :].dot(
-                    old_state[i_pos] / composition[classes_present])) # tau is prodromal reduction
+                    old_state[i_pos] / composition[classes_present] ** density_expo)) # tau is prodromal reduction
             new_state = old_state.copy()
             new_state[no_compartments*i] -= 1
             new_state[no_compartments*i + 1] += 1
@@ -780,6 +972,7 @@ class RateEquations:
         # 4:5:end gives columns corresponding to undetected cases in each age
         # class in each state
         self.states_inf_only = household_population.states[:, 3::no_compartments]
+        self.states_rec_only = household_population.states[:, 4::no_compartments]
         self.epsilon = epsilon
         self.import_model = model_input.import_model
 
