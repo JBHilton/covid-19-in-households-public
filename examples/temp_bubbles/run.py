@@ -11,7 +11,7 @@ from examples.temp_bubbles.common import (
         DataObject,
         build_mixed_compositions, SINGLE_AGE_CLASS_SPEC, SingleClassInput,
         MergedInput, merged_initial_condition, demerged_initial_condition,
-        make_initial_condition, within_household_SEPIR, RateEquations)
+        make_initial_condition, SEPIRHouseholdPopulationReversed, RateEquations)
 # pylint: disable=invalid-name
 
 comp_dist = read_csv(
@@ -65,20 +65,14 @@ else:
     # pairings = [[0],[0],[0]]
 
     # With the parameters chosen, we calculate Q_int:
-    unmerged_population = HouseholdPopulation(
+    unmerged_population = SEPIRHouseholdPopulationReversed(
         composition_list,
         comp_dist,
-        model_input=unmerged_input,
-        build_function=within_household_SEPIR,
-        no_compartments=5,
-        save_reverse_prod=True)
-    merged_population = HouseholdPopulation(
+        model_input=unmerged_input)
+    merged_population = SEPIRHouseholdPopulationReversed(
         merged_comp_list,
         merged_comp_dist,
-        model_input=merged_input,
-        build_function=within_household_SEPIR,
-        no_compartments=5,
-        save_reverse_prod=True)
+        model_input=merged_input)
     with open('bubble-vars.pkl', 'wb') as f:
         dump((
             unmerged_population,
@@ -150,14 +144,16 @@ def simulate_merge(duration_list, switches, premerge_H0, t0, t_end):
     return merge_time, merge_H, postmerge_time, postmerge_H
 
 
-
-output_data = DataObject(0) # Define data as object with attributed
+# Define data as object with attributed
+output_data = DataObject(0)
 
 merge_start = 359.0
 merge_duration = 5.0
 postmerge_dur = 90
 
-print(( unmerged_input.k_home + unmerged_input.k_ext ) / unmerged_input.gamma)
+print(
+    (unmerged_input.k_home + unmerged_input.k_ext)
+    / unmerged_input.gamma)
 
 print('Initialising pre-merge period...')
 H0 = make_initial_condition(unmerged_population, rhs_unmerged)
@@ -168,20 +164,26 @@ solution = solve_ivp(rhs_unmerged, tspan, H0, first_step=0.001)
 baseline_time = solution.t
 baseline_H = solution.y
 
-print('Antibody prevalence on September 28th is',
-    baseline_H[:,-1].T.dot(unmerged_population.states[:,4])/ave_hh_size)
+print(
+    'Antibody prevalence on September 28th is',
+    baseline_H[:, -1].T.dot(
+        unmerged_population.states[:, 4]) / ave_hh_size)
 
-rec_numbers = unmerged_population.states[:,4]
-visited = where(rec_numbers>0)[0]
+rec_numbers = unmerged_population.states[:, 4]
+visited = where(rec_numbers > 0)[0]
 
 attack_rate = zeros((len(visited),))
 for i in range(len(visited)):
-    attack_rate[i] = rec_numbers[visited[i]] / composition_list[unmerged_population.which_composition[visited[i]]]
+    attack_rate[i] = \
+        rec_numbers[visited[i]] \
+        / composition_list[unmerged_population.which_composition[visited[i]]]
 
-
-print('Household attack rate by September 28th is',
+print(
+    'Household attack rate by September 28th is',
     baseline_H[visited,-1].T.dot(attack_rate) / sum(baseline_H[visited,-1]))
-print('Proportion of households visited is',sum(baseline_H[visited,-1]))
+print(
+    'Proportion of households visited is',
+    sum(baseline_H[visited, -1]))
 
 output_data.call_prev = baseline_H[:,-1].T.dot(unmerged_population.states[:,4])/ave_hh_size
 

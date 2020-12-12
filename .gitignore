@@ -5,3 +5,4 @@ octave-workspace
 *.spyproject
 output*.txt
 *.swp
+*.png

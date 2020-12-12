@@ -1,15 +1,14 @@
 ''' Common utilities for transient bubble calculation.
 '''
-from copy import deepcopy
 from numpy import (
-    append, arange, around, array, atleast_2d, concatenate, copy, cumprod,
+    append, arange, around, array, atleast_2d, concatenate, copy,
     diag, hstack, isnan, ix_,
-    ones, prod, shape, sum, where, zeros)
+    ones, shape, sum, where, zeros)
 from numpy import int64 as my_int
 from numpy import exp, log
 from scipy.sparse import csc_matrix as sparse
 from scipy.stats import multinomial
-from model.preprocessing import ModelInput
+from model.preprocessing import ModelInput, HouseholdPopulation
 from model.common import (
         build_state_matrix, build_external_import_matrix_SEPIRQ)
 from model.imports import NoImportModel
@@ -25,10 +24,10 @@ def build_mixed_compositions_pairwise(
     else:
         hh_dimension = composition_list.shape[1]
 
-    mixed_comp_list = zeros((no_comps**2, 2*hh_dimension),dtype=my_int)
+    mixed_comp_list = zeros((no_comps**2, 2*hh_dimension), dtype=my_int)
     mixed_comp_dist = zeros((no_comps**2, 1))
 
-    pairings = [[],[]]
+    pairings = [[], []]
 
     for hh1 in range(no_comps):
         for hh2 in range(no_comps):
@@ -59,13 +58,12 @@ def pairwise_merged_initial_condition(H_unmerged,
     index_vector_list = unmerged_population.index_vector
     which_composition = merged_population.which_composition
     merged_states = merged_population.states
-    unmerged_states = unmerged_population.states
 
     for i in range(H0_len):
         comp_0 = pairings[0][which_composition[i]]
         comp_1 = pairings[1][which_composition[i]]
-        state_0 = merged_states[i,:no_compartments]
-        state_1 = merged_states[i,no_compartments:]
+        state_0 = merged_states[i, :no_compartments]
+        state_1 = merged_states[i, no_compartments:]
         index_vector_0 = index_vector_list[comp_0]
         index_vector_1 = index_vector_list[comp_1]
         index_0 = index_vector_0[
@@ -76,25 +74,26 @@ def pairwise_merged_initial_condition(H_unmerged,
 
     return H0
 
-def pairwise_demerged_initial_condition(H_merged,
-                            unmerged_population,
-                            merged_population,
-                            hh_dimension,
-                            pairings,
-                            no_compartments = 5):
+
+def pairwise_demerged_initial_condition(
+        H_merged,
+        unmerged_population,
+        merged_population,
+        hh_dimension,
+        pairings,
+        no_compartments=5):
     H0_len = sum(unmerged_population.system_sizes)
     H0 = zeros((H0_len,))
     reverse_prod = unmerged_population.reverse_prod
     index_vector_list = unmerged_population.index_vector
     which_composition = merged_population.which_composition
     merged_states = merged_population.states
-    unmerged_states = unmerged_population.states
 
     for i in range(len(H_merged)):
         comp_0 = pairings[0][which_composition[i]]
         comp_1 = pairings[1][which_composition[i]]
-        state_0 = merged_states[i,:no_compartments]
-        state_1 = merged_states[i,no_compartments:]
+        state_0 = merged_states[i, :no_compartments]
+        state_1 = merged_states[i, no_compartments:]
         index_vector_0 = index_vector_list[comp_0]
         index_vector_1 = index_vector_list[comp_1]
         index_0 = index_vector_0[
@@ -107,14 +106,15 @@ def pairwise_demerged_initial_condition(H_merged,
     return H0
 
 
-def build_mixed_compositions(composition_list,
-                            composition_distribution,
-                            no_hh=2,
-                            max_size = 12):
+def build_mixed_compositions(
+        composition_list,
+        composition_distribution,
+        no_hh=2,
+        max_size=12):
 
     no_comps = composition_list.shape[0]
 
-    if composition_list.ndim==1:
+    if composition_list.ndim == 1:
         hh_dimension = 1
     else:
         hh_dimension = composition_list.shape[1]
@@ -129,23 +129,22 @@ def build_mixed_compositions(composition_list,
     for pairing_index in range(no_hh):
         pairings.append([])
 
-
     def comp_iterator(depth, no_hh):
-        if depth<no_hh:
-            for i in range(hhi[depth-1],no_comps):
+        if depth < no_hh:
+            for i in range(hhi[depth-1], no_comps):
                 hhi[depth] = i
                 comp_iterator(depth+1, no_hh)
         else:
             if sum(hhi) <= max_size:
                 index = 0
                 for hh in range(no_hh):
-                    index +=  hhi[hh] * no_comps**(no_hh - 1 - hh)
+                    index += hhi[hh] * no_comps**(no_hh - 1 - hh)
                     pairings[hh].append(hhi[hh])
                 this_mix_comp = zeros((no_hh*hh_dimension,))
                 hist = zeros((no_comps,))
                 for hh in range(no_hh):
                     this_mix_comp[hh*hh_dimension:(hh+1)*hh_dimension] = \
-                     composition_list[hhi[hh],]
+                        composition_list[hhi[hh],]  # TODO: This is looking dodgy
                     hist[hhi[hh]] += 1
                 this_mix_prob = multinomial.pmf(hist, n=no_hh, p=composition_distribution)
                 mixed_comp_list.append(this_mix_comp)
@@ -530,230 +529,279 @@ def make_initial_condition_with_recovereds(
 
     return H0
 
-def within_household_SEPIR(
-        composition, model_input):
-    '''Assuming frequency-dependent homogeneous within-household mixing
-    composition[i] is the number of individuals in age-class i inside the
-    household'''
 
-    sus = model_input.sus
-    tau = model_input.tau
-    K_home = model_input.k_home
-    alpha_1 = model_input.alpha_1
-    alpha_2 = model_input.alpha_2
-    gamma = model_input.gamma
+class SEPIRHouseholdPopulationReversed(HouseholdPopulation):
+    def __init__(
+            self,
+            composition_list,
+            composition_distribution,
+            model_input,
+            print_progress=True):
+        super().__init__(
+            composition_list,
+            composition_distribution,
+            model_input,
+            no_compartments=5,
+            print_progress=print_progress)
 
-    no_compartments = 5
+    def _create_subsystems(self, household_spec):
+        '''Assuming frequency-dependent homogeneous within-household mixing
+        composition[i] is the number of individuals in age-class i inside the
+        household'''
 
-    # Set of individuals actually present here
-    classes_present = where(composition.ravel() > 0)[0]
-    K_home = K_home[ix_(classes_present, classes_present)]
-    sus = sus[classes_present]
-    tau = tau[classes_present]
-    r_home = atleast_2d(diag(sus).dot(K_home))
+        composition = household_spec.composition
+        sus = self.model_input.sus
+        tau = self.model_input.tau
+        K_home = self.model_input.k_home
+        alpha_1 = self.model_input.alpha_1
+        alpha_2 = self.model_input.alpha_2
+        gamma = self.model_input.gamma
 
-    states, total_size, reverse_prod, index_vector, rows = build_state_matrix(
-            composition, classes_present, no_compartments)
+        no_compartments = self.num_of_epidemiological_compartments
 
-    p_pos = 2 + no_compartments * arange(len(classes_present))
-    i_pos = 3 + no_compartments * arange(len(classes_present))
+        # Set of individuals actually present here
+        # classes_present = where(composition.ravel() > 0)[0]
+        classes_idx = household_spec.class_indexes
+        K_home = K_home[ix_(classes_idx, classes_idx)]
+        sus = sus[classes_idx]
+        tau = tau[classes_idx]
+        r_home = atleast_2d(diag(sus).dot(K_home))
 
-    Q_int = sparse((total_size, total_size))
-    inf_event_row = array([], dtype=my_int)
-    inf_event_col = array([], dtype=my_int)
-    inf_event_class = array([], dtype=my_int)
+        states, \
+            reverse_prod, \
+            index_vector, \
+            rows = build_state_matrix(household_spec)
 
-    # Add events for each age class
-    for i in range(len(classes_present)):
-        s_present = where(states[:, no_compartments*i] > 0)[0]
-        e_present = where(states[:, no_compartments*i+1] > 0)[0]
-        p_present = where(states[:, no_compartments*i+2] > 0)[0]
-        i_present = where(states[:, no_compartments*i+3] > 0)[0]
+        p_pos = 2 + no_compartments * arange(len(classes_idx))
+        i_pos = 3 + no_compartments * arange(len(classes_idx))
 
-        # First do infection events
-        inf_to = zeros(len(s_present), dtype=my_int)
-        inf_rate = zeros(len(s_present))
-        for k in range(len(s_present)):
-            old_state = copy(states[s_present[k], :])
-            inf_rate[k] = old_state[no_compartments*i] * (
-                r_home[i, :].dot(
-                    (old_state[i_pos] / composition[classes_present])
-                    + (old_state[p_pos] / composition[classes_present]) * tau)) # tau is prodromal reduction
-            new_state = old_state.copy()
-            new_state[no_compartments*i] -= 1
-            new_state[no_compartments*i + 1] += 1
-            inf_to[k] = index_vector[
-                new_state.dot(reverse_prod) + new_state[-1], 0]
-        Q_int += sparse(
-            (inf_rate, (s_present, inf_to)),
-            shape=(total_size, total_size))
-        inf_event_row = concatenate((inf_event_row, s_present))
-        inf_event_col = concatenate((inf_event_col, inf_to))
-        inf_event_class = concatenate(
-            (inf_event_class, classes_present[i]*ones((len(s_present)))))
-        # input('Press enter to continue')
-        # # disp('Infection events done')
-        # # Now do exposure to prodromal
-        inc_to = zeros(len(e_present), dtype=my_int)
-        inc_rate = zeros(len(e_present))
-        for k in range(len(e_present)):
-            # First do detected
-            old_state = copy(states[e_present[k], :])
-            inc_rate[k] = alpha_1 * old_state[no_compartments*i+1]
-            new_state = copy(old_state)
-            new_state[no_compartments*i + 1] -= 1
-            new_state[no_compartments*i + 2] += 1
-            inc_to[k] = index_vector[
-                new_state.dot(reverse_prod) + new_state[-1], 0]
+        Q_int = sparse(household_spec.matrix_shape)
+        inf_event_row = array([], dtype=my_int)
+        inf_event_col = array([], dtype=my_int)
+        inf_event_class = array([], dtype=my_int)
 
-        Q_int += sparse(
-            (inc_rate, (e_present, inc_to)),
-            shape=(total_size, total_size))
-        # # disp('Incubaion events done')
-        # # Now do prodromal to infectious
-        dev_to = zeros(len(p_present), dtype=my_int)
-        dev_rate = zeros(len(p_present))
-        for k in range(len(p_present)):
-            # First do detected
-            old_state = copy(states[p_present[k], :])
-            dev_rate[k] = alpha_2 * old_state[no_compartments*i+2]
-            new_state = copy(old_state)
-            new_state[no_compartments*i + 2] -= 1
-            new_state[no_compartments*i + 3] += 1
-            dev_to[k] = index_vector[
-                new_state.dot(reverse_prod) + new_state[-1], 0]
+        # Add events for each age class
+        for i in range(len(classes_idx)):
+            s_present = where(states[:, no_compartments*i] > 0)[0]
+            e_present = where(states[:, no_compartments*i+1] > 0)[0]
+            p_present = where(states[:, no_compartments*i+2] > 0)[0]
+            i_present = where(states[:, no_compartments*i+3] > 0)[0]
 
-        Q_int += sparse(
-            (dev_rate, (p_present, dev_to)),
-            shape=(total_size, total_size))
+            # First do infection events
+            inf_to = zeros(len(s_present), dtype=my_int)
+            inf_rate = zeros(len(s_present))
+            for k in range(len(s_present)):
+                old_state = copy(states[s_present[k], :])
+                # tau is prodromal reduction
+                inf_rate[k] = old_state[no_compartments*i] * (
+                    r_home[i, :].dot(
+                        (old_state[i_pos] / composition[classes_idx])
+                        + (
+                            old_state[p_pos] /
+                            composition[classes_idx]) * tau))
+                new_state = old_state.copy()
+                new_state[no_compartments*i] -= 1
+                new_state[no_compartments*i + 1] += 1
+                inf_to[k] = index_vector[
+                    new_state.dot(reverse_prod) + new_state[-1], 0]
+            Q_int += sparse(
+                (inf_rate, (s_present, inf_to)),
+                shape=household_spec.matrix_shape)
+            inf_event_row = concatenate((inf_event_row, s_present))
+            inf_event_col = concatenate((inf_event_col, inf_to))
+            inf_event_class = concatenate(
+                (inf_event_class, classes_idx[i]*ones((len(s_present)))))
+            # input('Press enter to continue')
+            # # disp('Infection events done')
+            # # Now do exposure to prodromal
+            inc_to = zeros(len(e_present), dtype=my_int)
+            inc_rate = zeros(len(e_present))
+            for k in range(len(e_present)):
+                # First do detected
+                old_state = copy(states[e_present[k], :])
+                inc_rate[k] = alpha_1 * old_state[no_compartments*i+1]
+                new_state = copy(old_state)
+                new_state[no_compartments*i + 1] -= 1
+                new_state[no_compartments*i + 2] += 1
+                inc_to[k] = index_vector[
+                    new_state.dot(reverse_prod) + new_state[-1], 0]
 
-        # Now do recovery of detected cases
-        rec_to = zeros(len(i_present), dtype=my_int)
-        rec_rate = zeros(len(i_present))
-        for k in range(len(i_present)):
-            old_state = copy(states[i_present[k], :])
-            rec_rate[k] = gamma * old_state[no_compartments*i+3]
-            new_state = copy(old_state)
-            new_state[no_compartments*i+3] -= 1
-            new_state[no_compartments*i+4] += 1
-            rec_to[k] = index_vector[
-                new_state.dot(reverse_prod) + new_state[-1], 0]
-        Q_int += sparse(
-            (rec_rate, (i_present, rec_to)),
-            shape=(total_size, total_size))
-        # disp('Recovery events from detecteds done')
+            Q_int += sparse(
+                (inc_rate, (e_present, inc_to)),
+                shape=household_spec.matrix_shape)
+            # # disp('Incubaion events done')
+            # # Now do prodromal to infectious
+            dev_to = zeros(len(p_present), dtype=my_int)
+            dev_rate = zeros(len(p_present))
+            for k in range(len(p_present)):
+                # First do detected
+                old_state = copy(states[p_present[k], :])
+                dev_rate[k] = alpha_2 * old_state[no_compartments*i+2]
+                new_state = copy(old_state)
+                new_state[no_compartments*i + 2] -= 1
+                new_state[no_compartments*i + 3] += 1
+                dev_to[k] = index_vector[
+                    new_state.dot(reverse_prod) + new_state[-1], 0]
 
+            Q_int += sparse(
+                (dev_rate, (p_present, dev_to)),
+                shape=household_spec.matrix_shape)
 
-    S = Q_int.sum(axis=1).getA().squeeze()
-    Q_int += sparse((
-        -S, (arange(total_size), arange(total_size))))
-    return \
-        Q_int, states, \
-        array(inf_event_row, dtype=my_int, ndmin=1), \
-        array(inf_event_col, dtype=my_int, ndmin=1), \
-        array(inf_event_class, dtype=my_int, ndmin=1), \
-        reverse_prod, \
-        index_vector
+            # Now do recovery of detected cases
+            rec_to = zeros(len(i_present), dtype=my_int)
+            rec_rate = zeros(len(i_present))
+            for k in range(len(i_present)):
+                old_state = copy(states[i_present[k], :])
+                rec_rate[k] = gamma * old_state[no_compartments*i+3]
+                new_state = copy(old_state)
+                new_state[no_compartments*i+3] -= 1
+                new_state[no_compartments*i+4] += 1
+                rec_to[k] = index_vector[
+                    new_state.dot(reverse_prod) + new_state[-1], 0]
+            Q_int += sparse(
+                (rec_rate, (i_present, rec_to)),
+                shape=household_spec.matrix_shape)
 
-def within_household_SEIR(
-        composition, model_input):
-    '''Assuming frequency-dependent homogeneous within-household mixing
-    composition[i] is the number of individuals in age-class i inside the
-    household'''
-
-    sus = model_input.sus
-    K_home = model_input.k_home
-    alpha_1 = model_input.alpha_1
-    gamma = model_input.gamma
-
-    no_compartments = 4
-
-    # Set of individuals actually present here
-    classes_present = where(composition.ravel() > 0)[0]
-    K_home = K_home[ix_(classes_present, classes_present)]
-    sus = sus[classes_present]
-    r_home = atleast_2d(diag(sus).dot(K_home))
-
-    states, total_size, reverse_prod, index_vector, rows = build_state_matrix(composition, classes_present, no_compartments)
-
-    i_pos = 2 + no_compartments * arange(len(classes_present))
-
-    Q_int = sparse((total_size, total_size))
-    inf_event_row = array([], dtype=my_int)
-    inf_event_col = array([], dtype=my_int)
-    inf_event_class = array([], dtype=my_int)
-
-    # Add events for each age class
-    for i in range(len(classes_present)):
-        s_present = where(states[:, no_compartments*i] > 0)[0]
-        e_present = where(states[:, no_compartments*i+1] > 0)[0]
-        i_present = where(states[:, no_compartments*i+2] > 0)[0]
-
-        # First do infection events
-        inf_to = zeros(len(s_present), dtype=my_int)
-        inf_rate = zeros(len(s_present))
-        for k in range(len(s_present)):
-            old_state = copy(states[s_present[k], :])
-            inf_rate[k] = old_state[no_compartments*i] * (
-                r_home[i, :].dot(
-                    old_state[i_pos] / composition[classes_present])) # tau is prodromal reduction
-            new_state = old_state.copy()
-            new_state[no_compartments*i] -= 1
-            new_state[no_compartments*i + 1] += 1
-            inf_to[k] = index_vector[
-                new_state.dot(reverse_prod) + new_state[-1], 0]
-        Q_int += sparse(
-            (inf_rate, (s_present, inf_to)),
-            shape=(total_size, total_size))
-        inf_event_row = concatenate((inf_event_row, s_present))
-        inf_event_col = concatenate((inf_event_col, inf_to))
-        inf_event_class = concatenate(
-            (inf_event_class, classes_present[i]*ones((len(s_present)))))
-        # input('Press enter to continue')
-        # # disp('Infection events done')
-        # # Now do exposure to prodromal
-        inc_to = zeros(len(e_present), dtype=my_int)
-        inc_rate = zeros(len(e_present))
-        for k in range(len(e_present)):
-            # First do detected
-            old_state = copy(states[e_present[k], :])
-            inc_rate[k] = alpha_1 * old_state[no_compartments*i+1]
-            new_state = copy(old_state)
-            new_state[no_compartments*i + 1] -= 1
-            new_state[no_compartments*i + 2] += 1
-            inc_to[k] = index_vector[
-                new_state.dot(reverse_prod) + new_state[-1], 0]
-        Q_int += sparse(
-            (inc_rate, (e_present, inc_to)),
-            shape=(total_size, total_size))
-
-        # Now do recovery of detected cases
-        rec_to = zeros(len(i_present), dtype=my_int)
-        rec_rate = zeros(len(i_present))
-        for k in range(len(i_present)):
-            old_state = copy(states[i_present[k], :])
-            rec_rate[k] = gamma * old_state[no_compartments*i+2]
-            new_state = copy(old_state)
-            new_state[no_compartments*i+2] -= 1
-            new_state[no_compartments*i+3] += 1
-            rec_to[k] = index_vector[
-                new_state.dot(reverse_prod) + new_state[-1], 0]
-        Q_int += sparse(
-            (rec_rate, (i_present, rec_to)),
-            shape=(total_size, total_size))
-        # disp('Recovery events from detecteds done')
+        S = Q_int.sum(axis=1).getA().squeeze()
+        Q_int += sparse((
+            -S,
+            (
+                arange(household_spec.total_size),
+                arange(household_spec.total_size)
+            )))
+        return tuple((
+            Q_int,
+            states,
+            array(inf_event_row, dtype=my_int, ndmin=1),
+            array(inf_event_col, dtype=my_int, ndmin=1),
+            array(inf_event_class, dtype=my_int, ndmin=1),
+            reverse_prod,
+            index_vector))
 
 
-    S = Q_int.sum(axis=1).getA().squeeze()
-    Q_int += sparse((
-        -S, (arange(total_size), arange(total_size))))
-    return \
-        Q_int, states, \
-        array(inf_event_row, dtype=my_int, ndmin=1), \
-        array(inf_event_col, dtype=my_int, ndmin=1), \
-        array(inf_event_class, dtype=my_int, ndmin=1), \
-        reverse_prod, \
-        index_vector
+class SEIRHouseholdPopulationReversed:
+    def __init__(
+            self,
+            composition_list,
+            composition_distribution,
+            model_input,
+            print_progress=True):
+
+        super().__init__(
+            composition_list,
+            composition_distribution,
+            model_input,
+            no_compartments=4,
+            print_progress=print_progress)
+
+    def _create_subsystems(self, household_spec):
+        '''Assuming frequency-dependent homogeneous within-household mixing
+        composition[i] is the number of individuals in age-class i inside the
+        household'''
+
+        sus = self.model_input.sus
+        K_home = self.model_input.k_home
+        alpha_1 = self.model_input.alpha_1
+        gamma = self.model_input.gamma
+
+        no_compartments = self.num_of_epidemiological_compartments
+
+        # Set of individuals actually present here
+        classes_idx = household_spec.class_indexes
+        K_home = K_home[ix_(classes_idx, classes_idx)]
+        sus = sus[classes_idx]
+        r_home = atleast_2d(diag(sus).dot(K_home))
+
+        states, \
+            reverse_prod, \
+            index_vector, \
+            rows = build_state_matrix(household_spec)
+
+        i_pos = 2 + no_compartments * arange(len(classes_idx))
+
+        Q_int = sparse(household_spec.matrix_shape)
+        inf_event_row = array([], dtype=my_int)
+        inf_event_col = array([], dtype=my_int)
+        inf_event_class = array([], dtype=my_int)
+
+        # Add events for each age class
+        for i in range(len(classes_idx)):
+            s_present = where(states[:, no_compartments*i] > 0)[0]
+            e_present = where(states[:, no_compartments*i+1] > 0)[0]
+            i_present = where(states[:, no_compartments*i+2] > 0)[0]
+
+            # First do infection events
+            inf_to = zeros(len(s_present), dtype=my_int)
+            inf_rate = zeros(len(s_present))
+            for k in range(len(s_present)):
+                old_state = copy(states[s_present[k], :])
+                # tau is prodromal reduction
+                inf_rate[k] = old_state[no_compartments*i] * (
+                    r_home[i, :].dot(
+                        old_state[i_pos]
+                        / household_spec.composition[classes_idx]))
+                new_state = old_state.copy()
+                new_state[no_compartments*i] -= 1
+                new_state[no_compartments*i + 1] += 1
+                inf_to[k] = index_vector[
+                    new_state.dot(reverse_prod) + new_state[-1], 0]
+            Q_int += sparse(
+                (inf_rate, (s_present, inf_to)),
+                shape=household_spec.matrix_shape)
+            inf_event_row = concatenate((inf_event_row, s_present))
+            inf_event_col = concatenate((inf_event_col, inf_to))
+            inf_event_class = concatenate(
+                (inf_event_class, classes_idx[i]*ones((len(s_present)))))
+            # input('Press enter to continue')
+            # # disp('Infection events done')
+            # # Now do exposure to prodromal
+            inc_to = zeros(len(e_present), dtype=my_int)
+            inc_rate = zeros(len(e_present))
+            for k in range(len(e_present)):
+                # First do detected
+                old_state = copy(states[e_present[k], :])
+                inc_rate[k] = alpha_1 * old_state[no_compartments*i+1]
+                new_state = copy(old_state)
+                new_state[no_compartments*i + 1] -= 1
+                new_state[no_compartments*i + 2] += 1
+                inc_to[k] = index_vector[
+                    new_state.dot(reverse_prod) + new_state[-1], 0]
+            Q_int += sparse(
+                (inc_rate, (e_present, inc_to)),
+                shape=household_spec.matrix_shape)
+
+            # Now do recovery of detected cases
+            rec_to = zeros(len(i_present), dtype=my_int)
+            rec_rate = zeros(len(i_present))
+            for k in range(len(i_present)):
+                old_state = copy(states[i_present[k], :])
+                rec_rate[k] = gamma * old_state[no_compartments*i+2]
+                new_state = copy(old_state)
+                new_state[no_compartments*i+2] -= 1
+                new_state[no_compartments*i+3] += 1
+                rec_to[k] = index_vector[
+                    new_state.dot(reverse_prod) + new_state[-1], 0]
+            Q_int += sparse(
+                (rec_rate, (i_present, rec_to)),
+                shape=household_spec.matrix_shape)
+            # disp('Recovery events from detecteds done')
+
+        S = Q_int.sum(axis=1).getA().squeeze()
+        Q_int += sparse((
+            -S,
+            (
+                arange(household_spec.total_size),
+                arange(household_spec.total_size)
+            )))
+        return tuple((
+            Q_int,
+            states,
+            array(inf_event_row, dtype=my_int, ndmin=1),
+            array(inf_event_col, dtype=my_int, ndmin=1),
+            array(inf_event_class, dtype=my_int, ndmin=1),
+            reverse_prod,
+            index_vector))
+
 
 class RateEquations:
     '''This class represents a functor for evaluating the rate equations for

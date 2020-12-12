@@ -84,7 +84,6 @@ def build_states_recursively(
 
 
 def build_state_matrix(household_spec):
-    # states = zeros((total_size, 6*len(classes_present)), dtype=my_int)
     # Number of times you repeat states for each configuration
     consecutive_repeats = concatenate((
         ones(1, dtype=my_int), cumprod(household_spec.system_sizes[:-1])))
@@ -982,8 +981,7 @@ class RateEquations:
                  model_input,
                  household_population,
                  epsilon=1.0,        # TODO: this needs a better name
-                 no_compartments=5
-                 ):
+                 no_compartments=5):
 
         self.household_population = household_population
         self.epsilon = epsilon
@@ -1061,6 +1059,7 @@ class RateEquations:
                 self.import_model.undetected(t))))
 
         return FOI_det, FOI_undet
+
 
 class SEPIRQRateEquations:
     '''This class represents a functor for evaluating the rate equations for

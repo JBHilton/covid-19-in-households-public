@@ -1,22 +1,25 @@
 '''This runs the UK-like model with a single set of parameters for 100 days
 '''
-from numpy import absolute, arange, array, atleast_2d, hstack, true_divide, vstack, where, zeros
+from numpy import (
+        absolute, arange, array, atleast_2d, hstack, true_divide, vstack,
+        where, zeros)
 from os.path import isfile
 from pickle import load, dump
 from pandas import read_csv
 from scipy.integrate import solve_ivp
 from time import time
-from model.common import my_int
-from model.preprocessing import (
-        ModelInput, HouseholdPopulation)
-from model.specs import DEFAULT_SPEC
-from examples.temp_bubbles.common import ( DataObject,
-        build_mixed_compositions, SINGLE_AGE_CLASS_SEIR_SPEC, SingleClassSEIRInput,
-        MergedSEIRInput, merged_initial_condition, merged_initial_condition_alt, demerged_initial_condition,
-        build_mixed_compositions_pairwise, pairwise_merged_initial_condition,
-        pairwise_demerged_initial_condition,
-        make_initial_condition_with_recovereds, within_household_SEPIR,RateEquations,
-        within_household_SEIR, SEIRRateEquations)
+from model.preprocessing import HouseholdPopulation
+from examples.temp_bubbles.common import (
+        DataObject,
+        build_mixed_compositions,
+        SINGLE_AGE_CLASS_SEIR_SPEC,
+        SingleClassSEIRInput,
+        MergedSEIRInput,
+        merged_initial_condition_alt,
+        demerged_initial_condition,
+        make_initial_condition_with_recovereds,
+        SEIRHouseholdPopulationReversed,
+        SEIRRateEquations)
 # pylint: disable=invalid-name
 
 unmerged_input = SingleClassSEIRInput(SINGLE_AGE_CLASS_SEIR_SPEC)
@@ -37,13 +40,11 @@ if isfile('bubble-vars-3-12.pkl') is True:
     with open('bubble-vars-3-12.pkl', 'rb') as f:
         unmerged_population, merged_population, hh_dimension, max_hh_size, pairings, mc_index_vector, mc_reverse_prod = load(f)
 else:
-    unmerged_population = HouseholdPopulation(
+    unmerged_population = SEIRHouseholdPopulationReversed(
        composition_list,
        comp_dist,
        unmerged_input,
-       within_household_SEIR,
-       4,
-       True)
+       print_progress=True)
 
     merged_comp_list, merged_comp_dist, hh_dimension, pairings, mc_index_vector, mc_reverse_prod = \
       build_mixed_compositions(composition_list, comp_dist, 3, 10)
