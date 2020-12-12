@@ -9,6 +9,7 @@ before_install:
 - python --version
 - pip install -U pip
 - pip install -U pytest
+- pip install xlrd==1.2.0
 - pip install codecov
 
 install:
