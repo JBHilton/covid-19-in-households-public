@@ -290,7 +290,7 @@ class HouseholdPopulation(ABC):
             [part[0] for part in model_parts],
             format='csc')
         self.Q_int.eliminate_zeros()
-        offsets = concatenate(([0], cum_sizes))
+        self.offsets = concatenate(([0], cum_sizes))
         self.states = zeros((
             total_size,
             self.num_of_epidemiological_compartments * self.no_risk_groups))
@@ -299,7 +299,7 @@ class HouseholdPopulation(ABC):
             class_list = household_subsystem_specs[i].class_indexes
             for j in range(len(class_list)):
                 this_class = class_list[j]
-                row_idx = slice(offsets[i], offsets[i+1])
+                row_idx = slice(self.offsets[i], self.offsets[i+1])
                 dst_col_idx = slice(
                     self.num_of_epidemiological_compartments*this_class,
                     self.num_of_epidemiological_compartments*(this_class+1))
@@ -308,10 +308,10 @@ class HouseholdPopulation(ABC):
                     self.num_of_epidemiological_compartments*(j+1))
                 self.states[row_idx, dst_col_idx] = part[1][:, src_col_idx]
         self.inf_event_row = concatenate([
-            part[2] + offsets[i]
+            part[2] + self.offsets[i]
             for i, part in enumerate(model_parts)])
         self.inf_event_col = concatenate([
-            part[3] + offsets[i]
+            part[3] + self.offsets[i]
             for i, part in enumerate(model_parts)])
         self.inf_event_class = concatenate([part[4] for part in model_parts])
         self.cum_sizes = cum_sizes

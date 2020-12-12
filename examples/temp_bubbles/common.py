@@ -678,6 +678,15 @@ class SEPIRHouseholdPopulationReversed(HouseholdPopulation):
             reverse_prod,
             index_vector))
 
+    def _assemble_system(self, household_subsystem_specs, model_parts):
+        super()._assemble_system(
+            household_subsystem_specs,
+            model_parts)
+        self.reverse_prod = [part[5] for part in model_parts]
+        for i, parts in enumerate(model_parts):
+            model_parts[i][6].data += self.offsets[i]
+        self.index_vector = [part[6] for part in model_parts]
+
 
 class SEIRHouseholdPopulationReversed:
     def __init__(
