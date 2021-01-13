@@ -18,7 +18,8 @@ from model.imports import NoImportModel
 
 SEPIR_SPEC = {
     # Interpretable parameters:
-    'AR': 0.45,                      # Reproduction number
+    'AR': 0.45,                     # Secondary attack probability
+    'R*': 1.1,                      # Reproduction number
     'recovery_rate': 1/4,           # Recovery rate
     'incubation_rate': 1/5,         # E->P incubation rate
     'symp_onset_rate': 1/3,         # P->I prodromal to symptomatic rate
@@ -92,8 +93,16 @@ class SEPIRInput(ModelInput):
             (self.k_home ) * self.tau)
 
             )[0]))
-        self.k_ext = R_int * self.k_ext / home_eig
+        self.k_ext = (spec['R*']/(2.3*spec['AR'])) * self.k_ext / ext_eig
         print('External eigenvalue is',max(eig(
+
+            self.sus * ((1/spec['recovery_rate']) *
+             (self.k_ext) + \
+            (1/spec['symp_onset_rate']) *
+            (self.k_ext ) * self.tau)
+
+            )[0]))
+        print('Estimated R* is',2.3*spec['AR']*max(eig(
 
             self.sus * ((1/spec['recovery_rate']) *
              (self.k_ext) + \
@@ -127,12 +136,13 @@ def make_initial_condition_with_recovereds(
         rhs.states_sus_only.sum(axis=1)
         ==
         household_population.states.sum(axis=1))[0]
-    already_visited = where(
-        (rhs.states_rec_only.sum(axis=1)
-            == around(AR*household_population.states.sum(axis=1)).astype(int)
-            & ((rhs.states_sus_only + rhs.states_rec_only).sum(axis=1)
-                == household_population.states.sum(axis=1)))
-        & ((rhs.states_rec_only).sum(axis=1) > 0))[0]
+    if seroprev>0:
+        already_visited = where(
+            (rhs.states_rec_only.sum(axis=1)
+                == around(AR*household_population.states.sum(axis=1)).astype(int)
+                & ((rhs.states_sus_only + rhs.states_rec_only).sum(axis=1)
+                    == household_population.states.sum(axis=1)))
+            & ((rhs.states_rec_only).sum(axis=1) > 0))[0]
     # This last condition is needed to make sure we don't include any fully
     # susceptible states
     i_is_one = where(
@@ -155,21 +165,23 @@ def make_initial_condition_with_recovereds(
             * household_population.composition_distribution[
                 household_population.which_composition[state]])
         # base_comp_dist[household_population.which_composition[state]]-=x[-1]
-    visited_comps = household_population.which_composition[already_visited]
-    y = array([])
-    for state in already_visited:
-        y = append(
-            y,
-            (1/len(
-                visited_comps
-                == household_population.which_composition[state]))
-            * household_population.composition_distribution[
-                household_population.which_composition[state]])
+    if seroprev>0:
+        visited_comps = household_population.which_composition[already_visited]
+        y = array([])
+        for state in already_visited:
+            y = append(
+                y,
+                (1/len(
+                    visited_comps
+                    == household_population.which_composition[state]))
+                * household_population.composition_distribution[
+                    household_population.which_composition[state]])
         # base_comp_dist[household_population.which_composition[state]]-=y[-1]
     # y = household_population.composition_distribution[
     #     household_population.which_composition[already_visited]]
     H0[i_is_one] = ave_hh_size*(prev/sum(x)) * x
-    H0[already_visited] = ave_hh_size*((seroprev/AR)/sum(y)) * y
+    if seroprev>0:
+        H0[already_visited] = ave_hh_size*((seroprev/AR)/sum(y)) * y
     H0[fully_sus] = (1-sum(H0)) * household_population.composition_distribution
 
     return H0

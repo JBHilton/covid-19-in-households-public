@@ -4,7 +4,7 @@ between-household transmission by doing a 2D parameter sweep'''
 from os.path import isfile
 from pickle import load, dump
 from copy import deepcopy
-from numpy import arange, array, exp, log
+from numpy import arange, array, exp, log, sum
 from numpy.linalg import eig
 from numpy.random import rand
 from pandas import read_csv
@@ -36,7 +36,7 @@ comp_dist = read_csv(
     header=0).to_numpy().squeeze()
 
 prev=1.0e-2 # Starting prevalence
-antibody_prev=5.6e-2 # Starting antibody prev/immunity
+antibody_prev=0 # Starting antibody prev/immunity
 AR=1.0 # Starting attack ratio - visited households are fully recovered
 
 # internal_mix_range = array([0.0,0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8,0.9])
@@ -44,8 +44,8 @@ AR=1.0 # Starting attack ratio - visited households are fully recovered
 
 AR_range = array([0.15,0.3,0.45])
 
-internal_mix_range = arange(0.0,1.0,0.1)
-external_mix_range = arange(0.0,1.0,0.1)
+internal_mix_range = arange(0.0,1.0,0.05)
+external_mix_range = arange(0.0,1.0,0.05)
 
 AR_len = len(AR_range)
 internal_mix_len = len(internal_mix_range)
@@ -53,18 +53,18 @@ external_mix_len = len(external_mix_range)
 
 for i in range(AR_len):
 
-    filename_stem_i = 'mix_sweep_results_' + str(i)
+    filename_stem_i = 'mix_sweep_results_AR' + str(AR_range[i])
 
     spec = deepcopy(basic_spec)
     spec['AR'] = AR_range[i]
 
     for j in range(internal_mix_len):
 
-        filename_stem_j = filename_stem_i + str(j)
+        filename_stem_j = filename_stem_i + '_intred' + str(internal_mix_range[j])
 
         for k in range(external_mix_len):
 
-            filename = filename_stem_j + str(k)
+            filename = filename_stem_j + '_extred' + str(external_mix_range[k])
 
             iter_start = get_time()
 
@@ -79,7 +79,7 @@ for i in range(AR_len):
 
             H0 = make_initial_condition_with_recovereds(household_population, rhs, prev, antibody_prev, AR)
 
-            no_days = 30
+            no_days = 100
             tspan = (0.0, no_days)
             solution = solve_ivp(rhs, tspan, H0, first_step=0.001, atol=1e-16)
             iter_end = get_time()
@@ -87,6 +87,14 @@ for i in range(AR_len):
             results = DataObject(0)
             results.t = solution.t
             results.H = solution.y
+
+            ave_hh_size = household_population.composition_distribution.dot(sum(household_population.composition_list, axis=1))
+
+            results.I = (results.H.T.dot(household_population.states[:, 3::5])).sum(axis=1)/ave_hh_size
+            results.R = (results.H.T.dot(household_population.states[:, 4::5])).sum(axis=1)/ave_hh_size
+
+            print(max(results.I))
+            print(results.R[-1])
 
             with open(filename + '.pkl', 'wb') as f:
                 dump((AR_range[i], household_population, results),
