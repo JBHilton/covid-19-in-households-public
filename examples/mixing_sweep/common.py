@@ -93,7 +93,8 @@ class SEPIRInput(ModelInput):
             (self.k_home ) * self.tau)
 
             )[0]))
-        self.k_ext = (spec['R*']/(2.3*spec['AR'])) * self.k_ext / ext_eig
+        external_scale = min((spec['R*']/(2.3*spec['AR'])),2-R_int)
+        self.k_ext = external_scale * self.k_ext / ext_eig
         print('External eigenvalue is',max(eig(
 
             self.sus * ((1/spec['recovery_rate']) *

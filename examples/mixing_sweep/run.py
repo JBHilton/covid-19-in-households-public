@@ -44,8 +44,8 @@ AR=1.0 # Starting attack ratio - visited households are fully recovered
 
 AR_range = array([0.15,0.3,0.45])
 
-internal_mix_range = arange(0.0,1.0,0.05)
-external_mix_range = arange(0.0,1.0,0.05)
+internal_mix_range = arange(0.0,1.0,0.25)
+external_mix_range = arange(0.0,1.0,0.25)
 
 AR_len = len(AR_range)
 internal_mix_len = len(internal_mix_range)
