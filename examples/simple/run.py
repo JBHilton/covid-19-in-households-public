@@ -19,7 +19,7 @@ composition_list = array(
 comp_dist = array([0.2, 0.2, 0.1, 0.1, 0.1,  0.1])
 
 household_population = HouseholdPopulation(
-    composition_list, comp_dist, model_input)
+    composition_list, comp_dist, 'SEDUR', model_input)
 
 rhs = RateEquations(
     model_input,

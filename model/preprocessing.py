@@ -14,6 +14,7 @@ from tqdm import tqdm
 from model.common import (
         within_household_spread, sparse, my_int, build_state_matrix)
 from model.imports import import_model_from_spec, NoImportModel
+from model.subsystems import subsystem_key
 
 
 def initialise_carehome(
@@ -234,16 +235,17 @@ class HouseholdPopulation(ABC):
             self,
             composition_list,
             composition_distribution,
+            compartmental_structure,
             model_input,
-            no_compartments=5,
             print_progress=True):
         '''This builds internal mixing matrix for entire system of
         age-structured households.'''
 
         self.composition_list = composition_list
         self.composition_distribution = composition_distribution
+        self.subsystem_function = subsystem_key[compartmental_structure][0]
+        self.num_of_epidemiological_compartments = subsystem_key[compartmental_structure][1]
         self.model_input = model_input
-        self.num_of_epidemiological_compartments = no_compartments
 
         # If the compositions include household size at the beginning, we
         # throw it away here. While we would expect to see some households
@@ -258,7 +260,7 @@ class HouseholdPopulation(ABC):
         self.no_compositions, self.no_risk_groups = composition_list.shape
 
         household_subsystem_specs = [
-            HouseholdSubsystemSpec(c, no_compartments)
+            HouseholdSubsystemSpec(c, self.num_of_epidemiological_compartments)
             for c in composition_list]
 
         # This is to remember mapping between states and household compositions
@@ -276,7 +278,7 @@ class HouseholdPopulation(ABC):
         else:
             progress_bar = household_subsystem_specs
         model_parts = [
-            self._create_subsystems(s)
+            self.subsystem_function(self,s)
             for s in progress_bar]
 
         self._assemble_system(household_subsystem_specs, model_parts)
@@ -318,149 +320,6 @@ class HouseholdPopulation(ABC):
         self.system_sizes = array([
             hsh.total_size
             for hsh in household_subsystem_specs])
-
-    def _create_subsystems(self, household_spec):
-        '''This function processes a composition to create subsistems i.e.
-        matrices and vectors describing all possible epdiemiological states
-        for a given household composition
-        Assuming frequency-dependent homogeneous within-household mixing
-        composition[i] is the number of individuals in age-class i inside the
-        household'''
-
-        composition = household_spec.composition
-        sus = self.model_input.sus
-        det = self.model_input.det
-        tau = self.model_input.tau
-        K_home = self.model_input.k_home
-        alpha = self.model_input.alpha
-        gamma = self.model_input.gamma
-
-        # Set of individuals actually present here
-        class_idx = household_spec.class_indexes
-
-        K_home = K_home[ix_(class_idx, class_idx)]
-        sus = sus[class_idx]
-        det = det[class_idx]
-        tau = tau[class_idx]
-        r_home = atleast_2d(diag(sus).dot(K_home))
-
-        states, \
-            reverse_prod, \
-            index_vector, \
-            rows = build_state_matrix(household_spec)
-
-        d_pos = 2 + 5 * arange(len(class_idx))
-        u_pos = 3 + 5 * arange(len(class_idx))
-
-        Q_int = sparse(household_spec.matrix_shape)
-        inf_event_row = array([], dtype=my_int)
-        inf_event_col = array([], dtype=my_int)
-        inf_event_class = array([], dtype=my_int)
-
-        # Add events for each age class
-        for i in range(len(class_idx)):
-            s_present = where(states[:, 5*i] > 0)[0]
-            e_present = where(states[:, 5*i+1] > 0)[0]
-            d_present = where(states[:, 5*i+2] > 0)[0]
-            u_present = where(states[:, 5*i+3] > 0)[0]
-
-            # First do infection events
-            inf_to = zeros(len(s_present), dtype=my_int)
-            inf_rate = zeros(len(s_present))
-            for k in range(len(s_present)):
-                old_state = copy(states[s_present[k], :])
-                inf_rate[k] = old_state[5*i] * (
-                    r_home[i, :].dot(
-                        (old_state[d_pos] / composition[class_idx])
-                        + tau
-                        * (old_state[u_pos] / composition[class_idx])))
-                new_state = old_state.copy()
-                new_state[5*i] -= 1
-                new_state[5*i + 1] += 1
-                inf_to[k] = index_vector[
-                    new_state.dot(reverse_prod) + new_state[-1], 0]
-            Q_int += sparse(
-                (inf_rate, (s_present, inf_to)),
-                shape=household_spec.matrix_shape)
-            inf_event_row = concatenate((inf_event_row, s_present))
-            inf_event_col = concatenate((inf_event_col, inf_to))
-            inf_event_class = concatenate(
-                (inf_event_class, class_idx[i]*ones((len(s_present)))))
-            # input('Press enter to continue')
-            # # disp('Infection events done')
-            # # Now do exposure to detected or undetected
-            det_to = zeros(len(e_present), dtype=my_int)
-            det_rate = zeros(len(e_present))
-            undet_to = zeros(len(e_present), dtype=my_int)
-            undet_rate = zeros(len(e_present))
-            for k in range(len(e_present)):
-                # First do detected
-                old_state = copy(states[e_present[k], :])
-                det_rate[k] = det[i] * alpha * old_state[5*i+1]
-                new_state = copy(old_state)
-                new_state[5*i + 1] -= 1
-                new_state[5*i + 2] += 1
-                det_to[k] = index_vector[
-                    new_state.dot(reverse_prod) + new_state[-1], 0]
-                # First do undetectednt(k),:)
-                undet_rate[k] = (1.0 - det[i]) * alpha * old_state[5*i+1]
-                new_state = copy(old_state)
-                new_state[5*i + 1] -= 1
-                new_state[5*i + 3] += 1
-                undet_to[k] = index_vector[
-                    new_state.dot(reverse_prod) + new_state[-1], 0]
-
-            Q_int += sparse(
-                (det_rate, (e_present, det_to)),
-                shape=household_spec.matrix_shape)
-            Q_int += sparse(
-                (undet_rate, (e_present, undet_to)),
-                shape=household_spec.matrix_shape)
-            # # disp('Incubaion events done')
-
-            # Now do recovery of detected cases
-            rec_to = zeros(len(d_present), dtype=my_int)
-            rec_rate = zeros(len(d_present))
-            for k in range(len(d_present)):
-                old_state = copy(states[d_present[k], :])
-                rec_rate[k] = gamma * old_state[5*i+2]
-                new_state = copy(old_state)
-                new_state[5*i+2] -= 1
-                new_state[5*i+4] += 1
-                rec_to[k] = index_vector[
-                    new_state.dot(reverse_prod) + new_state[-1], 0]
-            Q_int += sparse(
-                (rec_rate, (d_present, rec_to)),
-                shape=household_spec.matrix_shape)
-            # disp('Recovery events from detecteds done')
-            # Now do recovery of undetected cases
-            rec_to = zeros(len(u_present), dtype=my_int)
-            rec_rate = zeros(len(u_present))
-            for k in range(len(u_present)):
-                old_state = copy(states[u_present[k], :])
-                rec_rate[k] = gamma*old_state[5*i+3]
-                new_state = copy(old_state)
-                new_state[5*i+3] -= 1
-                new_state[5*i+4] += 1
-                rec_to[k] = index_vector[
-                    new_state.dot(reverse_prod) + new_state[-1], 0]
-            Q_int += sparse(
-                (rec_rate, (u_present, rec_to)),
-                shape=household_spec.matrix_shape)
-            # disp('Recovery events from undetecteds done')
-
-        S = Q_int.sum(axis=1).getA().squeeze()
-        Q_int += sparse((
-            -S, (
-                arange(household_spec.total_size),
-                arange(household_spec.total_size)
-            )))
-        return tuple((
-            Q_int,
-            states,
-            array(inf_event_row, dtype=my_int, ndmin=1),
-            array(inf_event_col, dtype=my_int, ndmin=1),
-            array(inf_event_class, dtype=my_int, ndmin=1)))
 
     @property
     def composition_by_state(self):
@@ -553,7 +412,7 @@ class StandardModelInput(ModelInput):
         # self.det = (0.9/max(rho)) * rho
         self.det = det_model(rho)
         self.tau = spec['asymp_trans_scaling'] * ones(rho.shape)
-        self.sigma = rho / self.det
+        self.sus = rho / self.det
 
     @property
     def alpha(self):
