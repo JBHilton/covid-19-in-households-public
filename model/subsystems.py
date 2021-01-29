@@ -6,10 +6,139 @@ these are used to create some functions for implementing common comprtmental
 
 from copy import copy, deepcopy
 from numpy import (
-        append, arange, around, array, cumsum, ones, ones_like, where,
+        append, arange, around, array, cumprod, cumsum, ones, ones_like, sum, where,
         zeros, concatenate, vstack, identity, tile, hstack, prod, ix_,
         atleast_2d, diag)
-from model.common import build_state_matrix, my_int, sparse, zeros
+from numpy import int64 as my_int
+from scipy.sparse import csc_matrix as sparse
+
+def state_recursor(
+        states,
+        no_compartments,
+        age_class,
+        b_size,
+        n_blocks,
+        con_reps,
+        c,
+        x,
+        depth,
+        k):
+    if depth < no_compartments-1:
+        for x_i in arange(c + 1 - x.sum()):
+            x[0, depth] = x_i
+            x[0, depth+1:] = zeros(
+                (1, no_compartments-depth-1),
+                dtype=my_int)
+            states, k = state_recursor(
+                states,
+                no_compartments,
+                age_class,
+                b_size,
+                n_blocks,
+                con_reps,
+                c,
+                x,
+                depth+1,
+                k)
+    else:
+        x[0, -1] = c - sum(x[0, :depth])
+        for block in arange(n_blocks):
+            repeat_range = arange(
+                block * b_size
+                + k * con_reps,
+                block * b_size +
+                (k + 1) * con_reps)
+            states[repeat_range, no_compartments*age_class:no_compartments*(age_class+1)] = \
+                ones(
+                    (con_reps, 1),
+                    dtype=my_int) \
+                * array(
+                    x,
+                    ndmin=2, dtype=my_int)
+        k += 1
+        return states, k
+    return states, k
+
+
+def build_states_recursively(
+        total_size,
+        no_compartments,
+        classes_present,
+        block_size,
+        num_blocks,
+        consecutive_repeats,
+        composition):
+    states = zeros(
+        (total_size, no_compartments*len(classes_present)),
+        dtype=my_int)
+    for age_class in range(len(classes_present)):
+        k = 0
+        states, k = state_recursor(
+            states,
+            no_compartments,
+            age_class,
+            block_size[age_class],
+            num_blocks[age_class],
+            consecutive_repeats[age_class],
+            composition[classes_present[age_class]],
+            zeros([1, no_compartments], dtype=my_int),
+            0,
+            k)
+    return states, k
+
+
+def build_state_matrix(household_spec):
+    # Number of times you repeat states for each configuration
+    consecutive_repeats = concatenate((
+        ones(1, dtype=my_int), cumprod(household_spec.system_sizes[:-1])))
+    block_size = consecutive_repeats * household_spec.system_sizes
+    num_blocks = household_spec.total_size // block_size
+
+    states, k = build_states_recursively(
+        household_spec.total_size,
+        household_spec.no_compartments,
+        household_spec.class_indexes,
+        block_size,
+        num_blocks,
+        consecutive_repeats,
+        household_spec.composition)
+    # Now construct a sparse vector which tells you which row a state appears
+    # from in the state array
+
+    # This loop tells us how many values each column of the state array can
+    # take
+    state_sizes = concatenate([
+        (household_spec.composition[i] + 1)
+        * ones(household_spec.no_compartments, dtype=my_int)
+        for i in household_spec.class_indexes]).ravel()
+
+    # This vector stores the number of combinations you can get of all
+    # subsequent elements in the state array, i.e. reverse_prod(i) tells you
+    # how many arrangements you can get in states(:,i+1:end)
+    reverse_prod = array([0, *cumprod(state_sizes[:0:-1])])[::-1]
+
+    # We can then define index_vector look up the location of a state by
+    # weighting its elements using reverse_prod - this gives a unique mapping
+    # from the set of states to the integers. Because lots of combinations
+    # don't actually appear in the states array, we use a sparse array which
+    # will be much bigger than we actually require
+    rows = [
+        states[k, :].dot(reverse_prod) + states[k, -1]
+        for k in range(household_spec.total_size)]
+
+    if min(rows) < 0:
+        print(
+            'Negative row indices found, proportional total',
+            sum(array(rows) < 0),
+            '/',
+            len(rows),
+            '=',
+            sum(array(rows) < 0) / len(rows))
+    index_vector = sparse((
+        arange(household_spec.total_size),
+        (rows, [0]*household_spec.total_size)))
+
+    return states, reverse_prod, index_vector, rows
 
 def inf_events(from_compartment,
                 to_compartment,

@@ -22,6 +22,7 @@ household_population = HouseholdPopulation(
     composition_list, comp_dist, 'SEDUR', model_input)
 
 rhs = RateEquations(
+    'SEDUR',
     model_input,
     household_population)
 
