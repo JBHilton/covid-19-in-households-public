@@ -700,7 +700,7 @@ def build_external_import_matrix(
 
     for FOI in FOI_list:
         vals = FOI[row, inf_class]
-        Q_ext += sparse(vals, (row, col), shape = matrix_shape)
+        Q_ext += sparse((vals, (row, col)), shape = matrix_shape)
 
     diagonal_idexes = (arange(total_size), arange(total_size))
     S = Q_ext.sum(axis=1).getA().squeeze()
@@ -763,8 +763,10 @@ class RateEquations:
         self.no_inf_compartments = model_input.no_inf_compartments
         self.inf_compartment_list = model_input.inf_compartment_list
         self.ext_matrix_list = []
+        self.inf_by_state_list = []
         for ic in range(self.no_inf_compartments):
             self.ext_matrix_list.append(diag(model_input.sus).dot(model_input.k_ext).dot(model_input.inf_scales[ic]))
+            self.inf_by_state_list.append(household_population.states[:, self.inf_compartment_list[ic]::self.no_compartments])
 
     def __call__(self, t, H):
         '''hh_ODE_rates calculates the rates of the ODE system describing the
@@ -793,10 +795,10 @@ class RateEquations:
         FOI_list = []
 
         for ic in range(self.no_inf_compartments):
-            states_inf_only =  household_population.states[:, self.inf_compartment_list[ic]::self.no_compartments]
+            states_inf_only =  self.inf_by_state_list[ic]
             inf_by_class = zeros(shape(denom))
             inf_by_class[denom > 0] = (
-                H.t.dot(states_inf_only)[denom > 0]
+                H.T.dot(states_inf_only)[denom > 0]
                 / denom[denom > 0]).squeeze()
             FOI_list.append(self.states_sus_only.dot(
                     self.ext_matrix_list[ic].dot(

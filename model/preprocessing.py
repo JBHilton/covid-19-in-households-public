@@ -443,6 +443,8 @@ class TwoAgeModelInput(ModelInput):
             self.k_all, fine_bds, self.coarse_bds, pop_pyramid)
         self.k_ext = self.k_all - self.k_home
 
+        self.density_expo = 1
+
         # This is in ten year blocks
         rho = read_csv(
             spec['rho_file_name'], header=None).to_numpy().flatten()

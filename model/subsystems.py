@@ -145,6 +145,7 @@ def inf_events(from_compartment,
                 inf_compartment_list,
                 inf_scales,
                 r_home,
+                density_expo,
                 no_compartments,
                 composition,
                 states,
@@ -171,7 +172,7 @@ def inf_events(from_compartment,
             old_infs = 0
             for ic in range(no_inf_compartments):
                 old_infs += inf_scales[ic] * (old_state[inf_compartment_list[ic] + no_compartments * arange(len(class_idx))] /
-                                                composition[class_idx])
+                                                (composition[class_idx]**density_expo))
             inf_rate[k] = old_state[no_compartments*i] * (
                 r_home[i, :].dot( old_infs ))
             new_state = old_state.copy()
@@ -272,6 +273,7 @@ def _sir_subsystem(self, household_spec):
     sus = self.model_input.sus
     K_home = self.model_input.k_home
     gamma = self.model_input.gamma
+    density_expo = self.model_input.density_expo
 
     # Set of individuals actually present here
     class_idx = household_spec.class_indexes
@@ -295,6 +297,7 @@ def _sir_subsystem(self, household_spec):
                 [i_comp],
                 [1],
                 r_home,
+                density_expo,
                 3,
                 composition,
                 states,
@@ -346,6 +349,7 @@ def _seir_subsystem(self, household_spec):
     K_home = self.model_input.k_home
     alpha = self.model_input.alpha
     gamma = self.model_input.gamma
+    density_expo = self.model_input.density_expo
 
     # Set of individuals actually present here
     class_idx = household_spec.class_indexes
@@ -369,6 +373,7 @@ def _seir_subsystem(self, household_spec):
                 [i_comp],
                 [1],
                 r_home,
+                density_expo,
                 4,
                 composition,
                 states,
@@ -432,6 +437,7 @@ def _sepir_subsystem(self, household_spec):
     alpha_1 = self.model_input.alpha_1
     alpha_2 = self.model_input.alpha_2
     gamma = self.model_input.gamma
+    density_expo = self.model_input.density_expo
 
     # Set of individuals actually present here
     class_idx = household_spec.class_indexes
@@ -455,6 +461,7 @@ def _sepir_subsystem(self, household_spec):
                 [p_comp, i_comp],
                 [tau, 1],
                 r_home,
+                density_expo,
                 5,
                 composition,
                 states,
@@ -529,6 +536,7 @@ def _sedur_subsystem(self, household_spec):
     K_home = self.model_input.k_home
     alpha = self.model_input.alpha
     gamma = self.model_input.gamma
+    density_expo = self.model_input.density_expo
 
     # Set of individuals actually present here
     class_idx = household_spec.class_indexes
@@ -565,6 +573,7 @@ def _sedur_subsystem(self, household_spec):
                 [d_comp,u_comp],
                 [1,tau],
                 r_home,
+                density_expo,
                 5,
                 composition,
                 states,
