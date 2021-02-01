@@ -760,8 +760,8 @@ class RateEquations:
         self.s_present = where(self.states_sus_only.sum(axis=1) > 0)[0]
         self.epsilon = epsilon
         self.import_model = model_input.import_model
-        self.no_inf_compartments = model_input.no_inf_compartments
-        self.inf_compartment_list = model_input.inf_compartment_list
+        self.inf_compartment_list = subsystem_key[compartmental_structure][2]
+        self.no_inf_compartments = len(self.inf_compartment_list)
         self.ext_matrix_list = []
         self.inf_by_state_list = []
         for ic in range(self.no_inf_compartments):
@@ -805,6 +805,41 @@ class RateEquations:
                     self.epsilon * inf_by_class.T)))
 
         return FOI_list
+
+class SIRRateEquations(RateEquations):
+    @property
+    def states_inf_only(self):
+        return self.household_population.states[:, 1::self.no_compartments]
+    @property
+    def states_rec_only(self):
+        return self.household_population.states[:, 2::self.no_compartments]
+
+class SEIRRateEquations(RateEquations):
+    @property
+    def states_inf_only(self):
+        return self.household_population.states[:, 2::self.no_compartments]
+    @property
+    def states_rec_only(self):
+        return self.household_population.states[:, 3::self.no_compartments]
+
+class SEPIRRateEquations(RateEquations):
+    @property
+    def states_inf_only(self):
+        return self.household_population.states[:, 3::self.no_compartments]
+    @property
+    def states_rec_only(self):
+        return self.household_population.states[:, 4::self.no_compartments]
+
+class SEDURRateEquations(RateEquations):
+    @property
+    def states_det_only(self):
+        return self.household_population.states[:, 2::self.no_compartments]
+    @property
+    def states_undet_only(self):
+        return self.household_population.states[:, 3::self.no_compartments]
+    @property
+    def states_rec_only(self):
+        return self.household_population.states[:, 4::self.no_compartments]
 
 
 class SEPIRQRateEquations:

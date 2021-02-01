@@ -471,7 +471,7 @@ class TwoAgeModelInput(ModelInput):
         self.sus = rho / self.det
         self.import_model = NoImportModel()
 
-        self.inf_scales = [[1,1],[self.tau,self.tau]]
+        self.inf_scales = [[1,1],self.tau]
 
         self.inf_compartment_list = [1]
         self.no_inf_compartments = len(self.inf_compartment_list)

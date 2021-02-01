@@ -630,10 +630,12 @@ def _sedur_subsystem(self, household_spec):
         array(inf_event_class, dtype=my_int, ndmin=1)))
 
 
+''' Entries in the subsystem key are in the following order: 1, list of cont
+'''
 
 subsystem_key = {
-'SIR' : [_sir_subsystem,3],
-'SEIR' : [_seir_subsystem,4],
-'SEPIR' : [_sepir_subsystem,5],
-'SEDUR' : [_sedur_subsystem,5],
+'SIR' : [_sir_subsystem, 3, [1]],
+'SEIR' : [_seir_subsystem, 4, [2]],
+'SEPIR' : [_sepir_subsystem,5, [2,3]],
+'SEDUR' : [_sedur_subsystem,5, [2,3]],
 }
