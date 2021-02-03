@@ -6,7 +6,7 @@ from numpy import int64 as my_int
 import pdb
 from scipy.sparse import csc_matrix as sparse
 from model.imports import NoImportModel
-
+from model.subsystems import subsystem_key
 
 def state_recursor(
         states,
@@ -685,7 +685,7 @@ def within_household_SEPIRQ(
         array(inf_event_class, dtype=my_int, ndmin=1)
 
 def build_external_import_matrix(
-        household_population, FOI_det, FOI_undet):
+        household_population, FOI_list):
     '''Gets sparse matrices containing rates of external infection in a
     household of a given type'''
 
@@ -694,25 +694,19 @@ def build_external_import_matrix(
     inf_class = household_population.inf_event_class
     total_size = len(household_population.which_composition)
 
-    # Figure out which class gets infected in this transition
-    d_vals = FOI_det[row, inf_class]
-    u_vals = FOI_undet[row, inf_class]
-
     matrix_shape = (total_size, total_size)
-    Q_ext_d = sparse(
-        (d_vals, (row, col)),
-        shape=matrix_shape)
-    Q_ext_u = sparse(
-        (u_vals, (row, col)),
-        shape=matrix_shape)
+
+    Q_ext = sparse(matrix_shape,)
+
+    for FOI in FOI_list:
+        vals = FOI[row, inf_class]
+        Q_ext += sparse((vals, (row, col)), shape = matrix_shape)
 
     diagonal_idexes = (arange(total_size), arange(total_size))
-    S = Q_ext_d.sum(axis=1).getA().squeeze()
-    Q_ext_d += sparse((-S, diagonal_idexes))
-    S = Q_ext_u.sum(axis=1).getA().squeeze()
-    Q_ext_u += sparse((-S, diagonal_idexes))
+    S = Q_ext.sum(axis=1).getA().squeeze()
+    Q_ext += sparse((-S, diagonal_idexes))
 
-    return Q_ext_d, Q_ext_u
+    return Q_ext
 
 
 def build_external_import_matrix_SEPIRQ(
@@ -752,87 +746,100 @@ class RateEquations:
     state of the class contains all essential variables'''
     # pylint: disable=invalid-name
     def __init__(self,
+                 compartmental_structure,
                  model_input,
                  household_population,
-                 epsilon=1.0,        # TODO: this needs a better name
-                 no_compartments=5):
+                 epsilon=1.0):
 
+        self.no_compartments = subsystem_key[compartmental_structure][1]
         self.household_population = household_population
         self.epsilon = epsilon
         self.Q_int = household_population.Q_int
-        # To define external mixing we need to set up the transmission
-        # matrices.
-        # Scale rows of contact matrix by
-        self.det_trans_matrix = diag(model_input.sus).dot(model_input.k_ext)
-        # age-specific susceptibilities
-        # Scale columns by asymptomatic reduction in transmission
-        self.undet_trans_matrix = diag(model_input.sus).dot(
-            model_input.k_ext.dot(diag(model_input.tau)))
-        # This stores number in each age class by household
         self.composition_by_state = household_population.composition_by_state
-        # ::5 gives columns corresponding to susceptible cases in each age
-        # class in each state
-        self.states_sus_only = household_population.states[:, ::no_compartments]
-
+        self.states_sus_only = household_population.states[:, ::self.no_compartments]
         self.s_present = where(self.states_sus_only.sum(axis=1) > 0)[0]
-        # 2::5 gives columns corresponding to detected cases in each age class
-        # in each state
-        self.states_det_only = household_population.states[:, 2::no_compartments]
-        # 4:5:end gives columns corresponding to undetected cases in each age
-        # class in each state
-        self.states_undet_only = household_population.states[:, 3::no_compartments]
         self.epsilon = epsilon
         self.import_model = model_input.import_model
+        self.inf_compartment_list = subsystem_key[compartmental_structure][2]
+        self.no_inf_compartments = len(self.inf_compartment_list)
+        self.ext_matrix_list = []
+        self.inf_by_state_list = []
+        for ic in range(self.no_inf_compartments):
+            self.ext_matrix_list.append(diag(model_input.sus).dot(model_input.k_ext).dot(diag(model_input.inf_scales[ic])))
+            self.inf_by_state_list.append(household_population.states[:, self.inf_compartment_list[ic]::self.no_compartments])
 
     def __call__(self, t, H):
         '''hh_ODE_rates calculates the rates of the ODE system describing the
         household ODE model'''
-        Q_ext_det, Q_ext_undet = self.external_matrices(t, H)
+        Q_ext = self.external_matrices(t, H)
         if (H < 0).any():
             # pdb.set_trace()
             H[where(H < 0)[0]] = 0
         if isnan(H).any():
             pdb.set_trace()
-        dH = (H.T * (self.Q_int + Q_ext_det + Q_ext_undet)).T
+        dH = (H.T * (self.Q_int + Q_ext)).T
         return dH
 
     def external_matrices(self, t, H):
-        FOI_det, FOI_undet = self.get_FOI_by_class(t, H)
+        FOI_list = self.get_FOI_by_class(t, H)
         return build_external_import_matrix(
             self.household_population,
-            FOI_det,
-            FOI_undet)
+            FOI_list)
 
     def get_FOI_by_class(self, t, H):
         '''This calculates the age-stratified force-of-infection (FOI) on each
         household composition'''
         # Average number of each class by household
         denom = H.T.dot(self.composition_by_state)
-        # Average detected infected by household in each class
-        det_by_class = zeros(shape(denom))
-        # Only want to do states with positive denominator
-        det_by_class[denom > 0] = (
-            H.T.dot(self.states_det_only)[denom > 0]
-            / denom[denom > 0]).squeeze()
-        # Average undetected infected by household in each class
-        undet_by_class = zeros(shape(denom))
-        undet_by_class[denom > 0] = (
-            H.T.dot(self.states_undet_only)[denom > 0]
-            / denom[denom > 0]).squeeze()
-        # This stores the rates of generating an infected of each class in
-        # each state
-        FOI_det = self.states_sus_only.dot(
-            diag(self.det_trans_matrix.dot(
-                self.epsilon * det_by_class.T
-                +
-                self.import_model.detected(t))))
-        FOI_undet = self.states_sus_only.dot(
-            diag(self.undet_trans_matrix.dot(
-                self.epsilon * undet_by_class.T
-                +
-                self.import_model.undetected(t))))
 
-        return FOI_det, FOI_undet
+        FOI_list = []
+
+        for ic in range(self.no_inf_compartments):
+            states_inf_only =  self.inf_by_state_list[ic]
+            inf_by_class = zeros(shape(denom))
+            inf_by_class[denom > 0] = (
+                H.T.dot(states_inf_only)[denom > 0]
+                / denom[denom > 0]).squeeze()
+            FOI_list.append(self.states_sus_only.dot(
+                    diag(self.ext_matrix_list[ic].dot(
+                    self.epsilon * inf_by_class.T))))
+
+        return FOI_list
+
+class SIRRateEquations(RateEquations):
+    @property
+    def states_inf_only(self):
+        return self.household_population.states[:, 1::self.no_compartments]
+    @property
+    def states_rec_only(self):
+        return self.household_population.states[:, 2::self.no_compartments]
+
+class SEIRRateEquations(RateEquations):
+    @property
+    def states_inf_only(self):
+        return self.household_population.states[:, 2::self.no_compartments]
+    @property
+    def states_rec_only(self):
+        return self.household_population.states[:, 3::self.no_compartments]
+
+class SEPIRRateEquations(RateEquations):
+    @property
+    def states_inf_only(self):
+        return self.household_population.states[:, 3::self.no_compartments]
+    @property
+    def states_rec_only(self):
+        return self.household_population.states[:, 4::self.no_compartments]
+
+class SEDURRateEquations(RateEquations):
+    @property
+    def states_det_only(self):
+        return self.household_population.states[:, 2::self.no_compartments]
+    @property
+    def states_undet_only(self):
+        return self.household_population.states[:, 3::self.no_compartments]
+    @property
+    def states_rec_only(self):
+        return self.household_population.states[:, 4::self.no_compartments]
 
 
 class SEPIRQRateEquations:

@@ -6,16 +6,146 @@ these are used to create some functions for implementing common comprtmental
 
 from copy import copy, deepcopy
 from numpy import (
-        append, arange, around, array, cumsum, ones, ones_like, where,
+        append, arange, around, array, cumprod, cumsum, ones, ones_like, sum, where,
         zeros, concatenate, vstack, identity, tile, hstack, prod, ix_,
         atleast_2d, diag)
-from model.common import build_state_matrix, my_int, sparse, zeros
+from numpy import int64 as my_int
+from scipy.sparse import csc_matrix as sparse
+
+def state_recursor(
+        states,
+        no_compartments,
+        age_class,
+        b_size,
+        n_blocks,
+        con_reps,
+        c,
+        x,
+        depth,
+        k):
+    if depth < no_compartments-1:
+        for x_i in arange(c + 1 - x.sum()):
+            x[0, depth] = x_i
+            x[0, depth+1:] = zeros(
+                (1, no_compartments-depth-1),
+                dtype=my_int)
+            states, k = state_recursor(
+                states,
+                no_compartments,
+                age_class,
+                b_size,
+                n_blocks,
+                con_reps,
+                c,
+                x,
+                depth+1,
+                k)
+    else:
+        x[0, -1] = c - sum(x[0, :depth])
+        for block in arange(n_blocks):
+            repeat_range = arange(
+                block * b_size
+                + k * con_reps,
+                block * b_size +
+                (k + 1) * con_reps)
+            states[repeat_range, no_compartments*age_class:no_compartments*(age_class+1)] = \
+                ones(
+                    (con_reps, 1),
+                    dtype=my_int) \
+                * array(
+                    x,
+                    ndmin=2, dtype=my_int)
+        k += 1
+        return states, k
+    return states, k
+
+
+def build_states_recursively(
+        total_size,
+        no_compartments,
+        classes_present,
+        block_size,
+        num_blocks,
+        consecutive_repeats,
+        composition):
+    states = zeros(
+        (total_size, no_compartments*len(classes_present)),
+        dtype=my_int)
+    for age_class in range(len(classes_present)):
+        k = 0
+        states, k = state_recursor(
+            states,
+            no_compartments,
+            age_class,
+            block_size[age_class],
+            num_blocks[age_class],
+            consecutive_repeats[age_class],
+            composition[classes_present[age_class]],
+            zeros([1, no_compartments], dtype=my_int),
+            0,
+            k)
+    return states, k
+
+
+def build_state_matrix(household_spec):
+    # Number of times you repeat states for each configuration
+    consecutive_repeats = concatenate((
+        ones(1, dtype=my_int), cumprod(household_spec.system_sizes[:-1])))
+    block_size = consecutive_repeats * household_spec.system_sizes
+    num_blocks = household_spec.total_size // block_size
+
+    states, k = build_states_recursively(
+        household_spec.total_size,
+        household_spec.no_compartments,
+        household_spec.class_indexes,
+        block_size,
+        num_blocks,
+        consecutive_repeats,
+        household_spec.composition)
+    # Now construct a sparse vector which tells you which row a state appears
+    # from in the state array
+
+    # This loop tells us how many values each column of the state array can
+    # take
+    state_sizes = concatenate([
+        (household_spec.composition[i] + 1)
+        * ones(household_spec.no_compartments, dtype=my_int)
+        for i in household_spec.class_indexes]).ravel()
+
+    # This vector stores the number of combinations you can get of all
+    # subsequent elements in the state array, i.e. reverse_prod(i) tells you
+    # how many arrangements you can get in states(:,i+1:end)
+    reverse_prod = array([0, *cumprod(state_sizes[:0:-1])])[::-1]
+
+    # We can then define index_vector look up the location of a state by
+    # weighting its elements using reverse_prod - this gives a unique mapping
+    # from the set of states to the integers. Because lots of combinations
+    # don't actually appear in the states array, we use a sparse array which
+    # will be much bigger than we actually require
+    rows = [
+        states[k, :].dot(reverse_prod) + states[k, -1]
+        for k in range(household_spec.total_size)]
+
+    if min(rows) < 0:
+        print(
+            'Negative row indices found, proportional total',
+            sum(array(rows) < 0),
+            '/',
+            len(rows),
+            '=',
+            sum(array(rows) < 0) / len(rows))
+    index_vector = sparse((
+        arange(household_spec.total_size),
+        (rows, [0]*household_spec.total_size)))
+
+    return states, reverse_prod, index_vector, rows
 
 def inf_events(from_compartment,
                 to_compartment,
                 inf_compartment_list,
                 inf_scales,
                 r_home,
+                density_expo,
                 no_compartments,
                 composition,
                 states,
@@ -39,10 +169,10 @@ def inf_events(from_compartment,
         inf_rate = zeros(len(from_present))
         for k in range(len(from_present)):
             old_state = copy(states[from_present[k], :])
-            old_infs = 0
+            old_infs = zeros(len(class_idx))
             for ic in range(no_inf_compartments):
-                old_infs += inf_scales[ic] * (old_state[inf_compartment_list[ic] + no_compartments * arange(len(class_idx))] /
-                                                composition[class_idx])
+                old_infs += (old_state[inf_compartment_list[ic] + no_compartments * arange(len(class_idx))] /
+                                                (composition[class_idx]**density_expo)) * inf_scales[ic]
             inf_rate[k] = old_state[no_compartments*i] * (
                 r_home[i, :].dot( old_infs ))
             new_state = old_state.copy()
@@ -143,6 +273,7 @@ def _sir_subsystem(self, household_spec):
     sus = self.model_input.sus
     K_home = self.model_input.k_home
     gamma = self.model_input.gamma
+    density_expo = self.model_input.density_expo
 
     # Set of individuals actually present here
     class_idx = household_spec.class_indexes
@@ -166,6 +297,7 @@ def _sir_subsystem(self, household_spec):
                 [i_comp],
                 [1],
                 r_home,
+                density_expo,
                 3,
                 composition,
                 states,
@@ -217,6 +349,7 @@ def _seir_subsystem(self, household_spec):
     K_home = self.model_input.k_home
     alpha = self.model_input.alpha
     gamma = self.model_input.gamma
+    density_expo = self.model_input.density_expo
 
     # Set of individuals actually present here
     class_idx = household_spec.class_indexes
@@ -240,6 +373,7 @@ def _seir_subsystem(self, household_spec):
                 [i_comp],
                 [1],
                 r_home,
+                density_expo,
                 4,
                 composition,
                 states,
@@ -303,6 +437,7 @@ def _sepir_subsystem(self, household_spec):
     alpha_1 = self.model_input.alpha_1
     alpha_2 = self.model_input.alpha_2
     gamma = self.model_input.gamma
+    density_expo = self.model_input.density_expo
 
     # Set of individuals actually present here
     class_idx = household_spec.class_indexes
@@ -326,6 +461,7 @@ def _sepir_subsystem(self, household_spec):
                 [p_comp, i_comp],
                 [tau, 1],
                 r_home,
+                density_expo,
                 5,
                 composition,
                 states,
@@ -400,6 +536,7 @@ def _sedur_subsystem(self, household_spec):
     K_home = self.model_input.k_home
     alpha = self.model_input.alpha
     gamma = self.model_input.gamma
+    density_expo = self.model_input.density_expo
 
     # Set of individuals actually present here
     class_idx = household_spec.class_indexes
@@ -421,21 +558,12 @@ def _sedur_subsystem(self, household_spec):
     inf_event_class = array([], dtype=my_int)
 
 
-    Q_int = progression_events(d_comp,
-        r_comp,
-        gamma,
-        5,
-        states,
-        index_vector,
-        reverse_prod,
-        class_idx,
-        matrix_shape,
-        Q_int)
     Q_int, inf_event_row, inf_event_col, inf_event_class = inf_events(s_comp,
                 e_comp,
                 [d_comp,u_comp],
                 [1,tau],
                 r_home,
+                density_expo,
                 5,
                 composition,
                 states,
@@ -447,16 +575,6 @@ def _sedur_subsystem(self, household_spec):
                 inf_event_row,
                 inf_event_col,
                 inf_event_class)
-    Q_int = progression_events(u_comp,
-        r_comp,
-        gamma,
-        5,
-        states,
-        index_vector,
-        reverse_prod,
-        class_idx,
-        matrix_shape,
-        Q_int)
     Q_int = stratified_progression_events(e_comp,
                     d_comp,
                     alpha*det,
@@ -477,6 +595,26 @@ def _sedur_subsystem(self, household_spec):
                     class_idx,
                     matrix_shape,
                     Q_int)
+    Q_int = progression_events(d_comp,
+        r_comp,
+        gamma,
+        5,
+        states,
+        index_vector,
+        reverse_prod,
+        class_idx,
+        matrix_shape,
+        Q_int)
+    Q_int = progression_events(u_comp,
+        r_comp,
+        gamma,
+        5,
+        states,
+        index_vector,
+        reverse_prod,
+        class_idx,
+        matrix_shape,
+        Q_int)
 
     S = Q_int.sum(axis=1).getA().squeeze()
     Q_int += sparse((
@@ -492,10 +630,12 @@ def _sedur_subsystem(self, household_spec):
         array(inf_event_class, dtype=my_int, ndmin=1)))
 
 
+''' Entries in the subsystem key are in the following order: 1, list of cont
+'''
 
 subsystem_key = {
-'SIR' : [_sir_subsystem,3],
-'SEIR' : [_seir_subsystem,4],
-'SEPIR' : [_sepir_subsystem,5],
-'SEDUR' : [_sedur_subsystem,5],
+'SIR' : [_sir_subsystem, 3, [1]],
+'SEIR' : [_seir_subsystem, 4, [2]],
+'SEPIR' : [_sepir_subsystem,5, [2,3]],
+'SEDUR' : [_sedur_subsystem,5, [2,3]],
 }

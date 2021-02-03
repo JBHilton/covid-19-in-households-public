@@ -443,6 +443,8 @@ class TwoAgeModelInput(ModelInput):
             self.k_all, fine_bds, self.coarse_bds, pop_pyramid)
         self.k_ext = self.k_all - self.k_home
 
+        self.density_expo = 1
+
         # This is in ten year blocks
         rho = read_csv(
             spec['rho_file_name'], header=None).to_numpy().flatten()
@@ -468,6 +470,11 @@ class TwoAgeModelInput(ModelInput):
         self.tau = spec['asymp_trans_scaling'] * ones(rho.shape)
         self.sus = rho / self.det
         self.import_model = NoImportModel()
+
+        self.inf_scales = [ones(rho.shape),self.tau]
+
+        self.inf_compartment_list = [1]
+        self.no_inf_compartments = len(self.inf_compartment_list)
 
     @property
     def alpha(self):

@@ -5,12 +5,12 @@ from pickle import load, dump
 from pandas import read_csv
 from scipy.integrate import solve_ivp
 from model.preprocessing import (
-        ModelInput, HouseholdPopulation, make_initial_condition)
+        StandardModelInput, HouseholdPopulation, make_initial_condition)
 from model.specs import DEFAULT_SPEC
-from model.common import RateEquations
+from model.common import SEDURRateEquations
 # pylint: disable=invalid-name
 
-model_input = ModelInput(DEFAULT_SPEC)
+model_input = StandardModelInput(DEFAULT_SPEC)
 
 if isfile('vars.pkl') is True:
     with open('vars.pkl', 'rb') as f:
@@ -26,11 +26,11 @@ else:
         header=None).to_numpy().squeeze()
     # With the parameters chosen, we calculate Q_int:
     household_population = HouseholdPopulation(
-        composition_list, comp_dist, model_input)
+        composition_list, comp_dist, 'SEDUR', model_input)
     with open('vars.pkl', 'wb') as f:
         dump(household_population, f)
 
-rhs = RateEquations(model_input, household_population)
+rhs = SEDURRateEquations(model_input, 'SEDUR', household_population)
 
 H0 = make_initial_condition(household_population, rhs)
 

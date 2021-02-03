@@ -6,7 +6,7 @@ from scipy.integrate import solve_ivp
 from model.preprocessing import (
     TwoAgeModelInput, HouseholdPopulation, make_initial_condition)
 from model.specs import DEFAULT_SPEC
-from model.common import RateEquations
+from model.common import SEDURRateEquations
 from pickle import load, dump
 # pylint: disable=invalid-name
 
@@ -21,7 +21,19 @@ comp_dist = array([0.2, 0.2, 0.1, 0.1, 0.1,  0.1])
 household_population = HouseholdPopulation(
     composition_list, comp_dist, 'SEDUR', model_input)
 
-rhs = RateEquations(
+# class SEDURRateEquations(RateEquations):
+#     @property
+#     def states_det_only(self):
+#         return household_population.states[:, 2::self.no_compartments]
+#     @property
+#     def states_undet_only(self):
+#         return household_population.states[:, 3::self.no_compartments]
+#     @property
+#     def states_rec_only(self):
+#         return household_population.states[:, 4::self.no_compartments]
+
+rhs = SEDURRateEquations(
+    'SEDUR',
     model_input,
     household_population)
 
