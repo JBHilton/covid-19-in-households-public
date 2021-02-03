@@ -169,10 +169,10 @@ def inf_events(from_compartment,
         inf_rate = zeros(len(from_present))
         for k in range(len(from_present)):
             old_state = copy(states[from_present[k], :])
-            old_infs = 0
+            old_infs = zeros(len(class_idx))
             for ic in range(no_inf_compartments):
-                old_infs += inf_scales[ic] * (old_state[inf_compartment_list[ic] + no_compartments * arange(len(class_idx))] /
-                                                (composition[class_idx]**density_expo))
+                old_infs += (old_state[inf_compartment_list[ic] + no_compartments * arange(len(class_idx))] /
+                                                (composition[class_idx]**density_expo)) * inf_scales[ic]
             inf_rate[k] = old_state[no_compartments*i] * (
                 r_home[i, :].dot( old_infs ))
             new_state = old_state.copy()
@@ -558,16 +558,6 @@ def _sedur_subsystem(self, household_spec):
     inf_event_class = array([], dtype=my_int)
 
 
-    Q_int = progression_events(d_comp,
-        r_comp,
-        gamma,
-        5,
-        states,
-        index_vector,
-        reverse_prod,
-        class_idx,
-        matrix_shape,
-        Q_int)
     Q_int, inf_event_row, inf_event_col, inf_event_class = inf_events(s_comp,
                 e_comp,
                 [d_comp,u_comp],
@@ -585,16 +575,6 @@ def _sedur_subsystem(self, household_spec):
                 inf_event_row,
                 inf_event_col,
                 inf_event_class)
-    Q_int = progression_events(u_comp,
-        r_comp,
-        gamma,
-        5,
-        states,
-        index_vector,
-        reverse_prod,
-        class_idx,
-        matrix_shape,
-        Q_int)
     Q_int = stratified_progression_events(e_comp,
                     d_comp,
                     alpha*det,
@@ -615,6 +595,26 @@ def _sedur_subsystem(self, household_spec):
                     class_idx,
                     matrix_shape,
                     Q_int)
+    Q_int = progression_events(d_comp,
+        r_comp,
+        gamma,
+        5,
+        states,
+        index_vector,
+        reverse_prod,
+        class_idx,
+        matrix_shape,
+        Q_int)
+    Q_int = progression_events(u_comp,
+        r_comp,
+        gamma,
+        5,
+        states,
+        index_vector,
+        reverse_prod,
+        class_idx,
+        matrix_shape,
+        Q_int)
 
     S = Q_int.sum(axis=1).getA().squeeze()
     Q_int += sparse((

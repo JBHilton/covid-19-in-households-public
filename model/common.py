@@ -765,7 +765,7 @@ class RateEquations:
         self.ext_matrix_list = []
         self.inf_by_state_list = []
         for ic in range(self.no_inf_compartments):
-            self.ext_matrix_list.append(diag(model_input.sus).dot(model_input.k_ext).dot(model_input.inf_scales[ic]))
+            self.ext_matrix_list.append(diag(model_input.sus).dot(model_input.k_ext).dot(diag(model_input.inf_scales[ic])))
             self.inf_by_state_list.append(household_population.states[:, self.inf_compartment_list[ic]::self.no_compartments])
 
     def __call__(self, t, H):
@@ -801,8 +801,8 @@ class RateEquations:
                 H.T.dot(states_inf_only)[denom > 0]
                 / denom[denom > 0]).squeeze()
             FOI_list.append(self.states_sus_only.dot(
-                    self.ext_matrix_list[ic].dot(
-                    self.epsilon * inf_by_class.T)))
+                    diag(self.ext_matrix_list[ic].dot(
+                    self.epsilon * inf_by_class.T))))
 
         return FOI_list
 

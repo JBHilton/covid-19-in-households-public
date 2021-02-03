@@ -17,7 +17,7 @@ def test_simple():
     composition_distribution = array(
         [0.2, 0.2, 0.1, 0.1, 0.1, 0.1])
     household_population = HouseholdPopulation(
-        composition_list, composition_distribution, 'SEDUR' model_input)
+        composition_list, composition_distribution, 'SEDUR', model_input)
 
     rhs = SEDURRateEquations(
         'SEDUR',
