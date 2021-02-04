@@ -749,6 +749,7 @@ class RateEquations:
                  compartmental_structure,
                  model_input,
                  household_population,
+                 import_model,
                  epsilon=1.0):
 
         self.no_compartments = subsystem_key[compartmental_structure][1]
@@ -759,9 +760,9 @@ class RateEquations:
         self.states_sus_only = household_population.states[:, ::self.no_compartments]
         self.s_present = where(self.states_sus_only.sum(axis=1) > 0)[0]
         self.epsilon = epsilon
-        self.import_model = model_input.import_model
         self.inf_compartment_list = subsystem_key[compartmental_structure][2]
         self.no_inf_compartments = len(self.inf_compartment_list)
+        self.import_model = import_model
         self.ext_matrix_list = []
         self.inf_by_state_list = []
         for ic in range(self.no_inf_compartments):
@@ -802,7 +803,8 @@ class RateEquations:
                 / denom[denom > 0]).squeeze()
             FOI_list.append(self.states_sus_only.dot(
                     diag(self.ext_matrix_list[ic].dot(
-                    self.epsilon * inf_by_class.T))))
+                    self.epsilon * inf_by_class.T +
+                    self.import_model.cases(t)[ic]))))
 
         return FOI_list
 
@@ -850,7 +852,7 @@ class SEPIRQRateEquations:
     def __init__(self,
                  model_input,
                  household_population,
-                 import_model=NoImportModel()
+                 import_model
                  ):
 
         no_compartments=6

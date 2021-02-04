@@ -1,6 +1,6 @@
 '''Class structure describing external importations'''
 from abc import ABC
-from numpy import exp, ones
+from numpy import exp, ones, zeros
 from scipy.interpolate import interp1d
 
 def import_model_from_spec(spec, det):
@@ -16,19 +16,19 @@ def import_model_from_spec(spec, det):
 
 class ImportModel(ABC):
     '''Abstract class for importation models'''
-    def detected(self, t):
-        pass
-
-    def undetected(self, t):
+    def __init__(self,
+                no_inf_compartments,
+                no_age_classes):
+        self.no_inf_compartments = no_inf_compartments
+        self.no_age_classes = no_age_classes
+        self.no_entries = no_inf_compartments * no_age_classes
+    def cases(self, t):     # Cases is a list of import functions
         pass
 
 
 class NoImportModel(ImportModel):
-    def detected(self, t):
-        return 0.0
-
-    def undetected(self, t):
-        return 0.0
+    def cases(self, t):
+        return zeros(self.no_entries,)
 
     @classmethod
     def make_from_spec(cls, spec, det):
@@ -38,16 +38,12 @@ class NoImportModel(ImportModel):
 class FixedImportModel(ImportModel):
     def __init__(
             self,
-            detected_imports,
-            undetected_imports):
-        self.detected_imports = detected_imports
-        self.undetected_imports = undetected_imports
+            time,
+            import_array):
+        self.import_array = import_array
 
-    def detected(self, t):
-        return self.detected_imports
-
-    def undetected(self, t):
-        return self.undetected_imports
+    def cases(self, t):
+        return self.import_array
 
     @classmethod
     def make_from_spec(cls, spec, det):
@@ -57,23 +53,21 @@ class StepImportModel(ImportModel):
     def __init__(
             self,
             time,
-            external_prevalance,
-            detected_profile,
-            undetected_profile):
-        self.prevalence_interpolant = interp1d(
-            time, external_prevalance,
-            kind='nearest',
-            bounds_error=False,
-            fill_value='extrapolate',
-            assume_sorted=True)
-        self.detected_profile = detected_profile
-        self.undetected_profile = undetected_profile
+            external_prevalance):       # External prevalence is now a age classes by inf compartments array
+        self.prevalence_interpolant = []
+        for i in range(self.no_entries):
+            self.prevalence_interpolant.append(interp1d(
+                time, external_prevalance[i,:],
+                kind='nearest',
+                bounds_error=False,
+                fill_value='extrapolate',
+                assume_sorted=True))
 
-    def detected(self, t):
-        return self.prevalence_interpolant(t) * self.detected_profile
-
-    def undetected(self, t):
-        return self.prevalence_interpolant(t) * self.undetected_profile
+    def cases(self, t):
+        imports = zeros(no_entries,)
+        for i in range(self.no_entries):
+            imports[i] = self.prevalence_interpolant[i](t)
+        return imports
 
 
 class ExponentialImportModel(ImportModel):
@@ -82,7 +76,7 @@ class ExponentialImportModel(ImportModel):
         self.det_profile = det_profile
         self.undet_profile = undet_profile
 
-    @classmethod 
+    @classmethod
     def make_from_spec(cls, spec, det):
         r = float(spec['exponent'])
         alpha = float(spec['alpha'])
