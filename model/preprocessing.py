@@ -390,12 +390,12 @@ class ModelInput(ABC):
         self.density_expo = spec['density_expo']
         self.composition_list = composition_list
         self.composition_distribution = composition_distribution
-        self.ave_hh_size = \                                # Average household size
+        self.ave_hh_size = \
             composition_distribution.T.dot(
-            sum(composition_list,axis=1))
-        self.dens_adj_ave_hh_size = \                                # Average household size adjusted for density, needed to get internal transmission rate from secondary attack prob
+            sum(composition_list,axis=1))                                # Average household size
+        self.dens_adj_ave_hh_size = \
             composition_distribution.T.dot((
-            sum(composition_list,axis=1))**self.density_expo)
+            sum(composition_list,axis=1))**self.density_expo)                                # Average household size adjusted for density, needed to get internal transmission rate from secondary attack prob
 
 class SIRInput(ModelInput):
     def __init__(self, spec):
@@ -456,7 +456,7 @@ class SEPIRInput(ModelInput):
     @property
     def alpha_2(self):
         return self.spec['symp_onset_rate']
-        
+
     @property
     def gamma(self):
         return self.spec['recovery_rate']
@@ -513,8 +513,8 @@ class StandardModelInput(ModelInput):
 
 class TwoAgeModelInput(ModelInput):
     '''TODO: add docstring'''
-    def __init__(self, spec):
-        super().__init__(spec)
+    def __init__(self, spec, composition_list, composition_distribution):
+        super().__init__(spec, composition_list, composition_distribution)
 
         fine_bds = arange(0, 81, 5)
         self.coarse_bds = array([0, 20])
