@@ -7,16 +7,17 @@ from model.preprocessing import (
     TwoAgeModelInput, HouseholdPopulation, make_initial_condition)
 from model.specs import DEFAULT_SPEC
 from model.common import SEDURRateEquations
+from model.imports import NoImportModel
 from pickle import load, dump
 # pylint: disable=invalid-name
-
-model_input = TwoAgeModelInput(DEFAULT_SPEC)
 
 # List of observed household compositions
 composition_list = array(
     [[0, 1], [0, 2], [1, 1], [1, 2], [2, 1], [2, 2]])
 # Proportion of households which are in each composition
 comp_dist = array([0.2, 0.2, 0.1, 0.1, 0.1,  0.1])
+
+model_input = TwoAgeModelInput(DEFAULT_SPEC, composition_list, comp_dist)
 
 household_population = HouseholdPopulation(
     composition_list, comp_dist, 'SEDUR', model_input)
@@ -35,7 +36,8 @@ household_population = HouseholdPopulation(
 rhs = SEDURRateEquations(
     'SEDUR',
     model_input,
-    household_population)
+    household_population,
+    NoImportModel(5,2))
 
 H0 = make_initial_condition(
     household_population, rhs)
@@ -55,5 +57,5 @@ print(
     simple_model_end-simple_model_start,
     ' seconds.')
 
-with open('simple.pkl','wb') as f:
-    dump((time,H,D,U,model_input.coarse_bds),f)
+with open('simple.pkl', 'wb') as f:
+    dump((time, H, D, U, model_input.coarse_bds), f)

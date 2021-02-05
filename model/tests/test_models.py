@@ -2,39 +2,11 @@
 from numpy import arange, array, where, zeros
 from numpy.linalg import norm
 from numpy.testing import assert_almost_equal
+from model.specs import DEFAULT_SPEC
+from model.imports import NoImportModel
 from model.preprocessing import TwoAgeModelInput, HouseholdPopulation
 from model.preprocessing import make_initial_condition
 from model.common import SEDURRateEquations
-
-DEFAULT_SPEC = {
-    # Interpretable parameters:
-    'compartmental_structure': 'SEDUR',
-    'R0': 2.4,                      # Reproduction number
-    'recovery_rate': 0.5,                   # Mean infectious period
-    'incubation_rate': 0.2,                   # Incubation period
-    'asymp_trans_scaling': 0.0,                     # Asymptomatic transmission intensity relative to symptomatic rate
-    'det_model': {
-        'type': 'scaled',           # 'constant' and 'scaled' are the two options
-        'max_det_fraction': 0.9     # Cap for detected cases (90%)
-    },
-    # These represent input files for the model. We can make it more flexible
-    # in the future, but certain structure of input files must be assumed.
-    # Check ModelInput class in model/preprocessing.py to see what assumptions
-    # are used now.
-    'k_home': {
-        'file_name': 'inputs/MUestimates_home_2.xlsx',
-        'sheet_name':'United Kingdom of Great Britain'
-    },
-    'k_all': {
-        'file_name': 'inputs/MUestimates_all_locations_2.xlsx',
-        'sheet_name': 'United Kingdom of Great Britain'
-    },
-    'pop_pyramid_file_name': 'inputs/United Kingdom-2019.csv',   # File location for UK age pyramid
-    'fine_bds' : arange(0,81,5),                                # Boundaries used in pyramid/contact data
-    'coarse_bds' : array([0,20]),                               # Desired boundaries for model population
-    'rho_file_name': 'inputs/rho_estimate_cdc.csv',
-    'density_expo': 1
-}
 
 
 def test_simple():
@@ -51,12 +23,11 @@ def test_simple():
     rhs = SEDURRateEquations(
         'SEDUR',
         model_input,
-        household_population)
+        household_population,
+        NoImportModel(2,5))
 
     H0 = make_initial_condition(household_population, rhs)
     dH = rhs(0.0, H0)
     assert_almost_equal(7.776182090170313e-05, norm(dH))
     assert_almost_equal(2.7801365751414517e-05, max(dH))
     assert_almost_equal(-3.270492048199998e-05, min(dH))
-
-test_simple()

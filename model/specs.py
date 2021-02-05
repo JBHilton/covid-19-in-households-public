@@ -1,6 +1,6 @@
 '''Module containing model specifications'''
 
-from numpy import array
+from numpy import arange, array
 
 TWO_AGE_SIR_SPEC = {
     'compartmental_structure': 'SIR', # This is which subsystem key to use
@@ -40,6 +40,7 @@ TWO_AGE_UK_SPEC = {
 
 DEFAULT_SPEC = {
     # Interpretable parameters:
+    'compartmental_structure': 'SEDUR',
     'R0': 2.4,                      # Reproduction number
     'recovery_rate': 0.5,                   # Mean infectious period
     'incubation_rate': 0.2,                   # Incubation period
@@ -60,8 +61,11 @@ DEFAULT_SPEC = {
         'file_name': 'inputs/MUestimates_all_locations_2.xlsx',
         'sheet_name': 'United Kingdom of Great Britain'
     },
-    'pop_pyramid_file_name': 'inputs/United Kingdom-2019.csv',
-    'rho_file_name': 'inputs/rho_estimate_cdc.csv'
+    'pop_pyramid_file_name': 'inputs/United Kingdom-2019.csv',   # File location for UK age pyramid
+    'fine_bds' : arange(0,81,5),                                # Boundaries used in pyramid/contact data
+    'coarse_bds' : array([0,20]),                               # Desired boundaries for model population
+    'rho_file_name': 'inputs/rho_estimate_cdc.csv',
+    'density_expo': 1
 }
 
 VO_SPEC = {

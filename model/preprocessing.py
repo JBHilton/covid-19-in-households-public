@@ -374,17 +374,17 @@ class ModelInput(ABC):
             sheet_name=spec['k_all']['sheet_name'],
             header=header).to_numpy()
 
-        fine_bds = spec['fine_bds']
+        self.fine_bds = spec['fine_bds']
         self.coarse_bds = spec['coarse_bds']
 
-        pop_pyramid = read_csv(
+        self.pop_pyramid = read_csv(
             spec['pop_pyramid_file_name'], index_col=0)
-        pop_pyramid = (pop_pyramid['F'] + pop_pyramid['M']).to_numpy()
+        self.pop_pyramid = (self.pop_pyramid['F'] + self.pop_pyramid['M']).to_numpy()
 
         self.k_home = aggregate_contact_matrix(
-            self.k_home, fine_bds, self.coarse_bds, pop_pyramid)
+            self.k_home, self.fine_bds, self.coarse_bds, self.pop_pyramid)
         self.k_all = aggregate_contact_matrix(
-            self.k_all, fine_bds, self.coarse_bds, pop_pyramid)
+            self.k_all, self.fine_bds, self.coarse_bds, self.pop_pyramid)
         self.k_ext = self.k_all - self.k_home
 
         self.density_expo = spec['density_expo']
@@ -392,10 +392,10 @@ class ModelInput(ABC):
         self.composition_distribution = composition_distribution
         self.ave_hh_size = \
             composition_distribution.T.dot(
-            sum(composition_list,axis=1))                                # Average household size
+            composition_list.sum(axis=1))                                # Average household size
         self.dens_adj_ave_hh_size = \
             composition_distribution.T.dot((
-            sum(composition_list,axis=1))**self.density_expo)                                # Average household size adjusted for density, needed to get internal transmission rate from secondary attack prob
+            composition_list.sum(axis=1))**self.density_expo)                                # Average household size adjusted for density, needed to get internal transmission rate from secondary attack prob
 
 class SIRInput(ModelInput):
     def __init__(self, spec):
@@ -516,23 +516,6 @@ class TwoAgeModelInput(ModelInput):
     def __init__(self, spec, composition_list, composition_distribution):
         super().__init__(spec, composition_list, composition_distribution)
 
-        fine_bds = arange(0, 81, 5)
-        self.coarse_bds = array([0, 20])
-
-        # pop_pyramid = read_csv(
-        #     'inputs/United Kingdom-2019.csv', index_col=0)
-        pop_pyramid = read_csv(
-            spec['pop_pyramid_file_name'], index_col=0)
-        pop_pyramid = (pop_pyramid['F'] + pop_pyramid['M']).to_numpy()
-
-        self.k_home = aggregate_contact_matrix(
-            self.k_home, fine_bds, self.coarse_bds, pop_pyramid)
-        self.k_all = aggregate_contact_matrix(
-            self.k_all, fine_bds, self.coarse_bds, pop_pyramid)
-        self.k_ext = self.k_all - self.k_home
-
-        self.density_expo = 1
-
         # This is in ten year blocks
         rho = read_csv(
             spec['rho_file_name'], header=None).to_numpy().flatten()
@@ -542,7 +525,7 @@ class TwoAgeModelInput(ModelInput):
         #     'inputs/rho_estimate_cdc.csv', header=None).to_numpy().flatten()
 
         cdc_bds = arange(0, 81, 10)
-        aggregator = make_aggregator(cdc_bds, fine_bds)
+        aggregator = make_aggregator(cdc_bds, self.fine_bds)
 
         # This is in five year blocks
         rho = sparse((
@@ -550,7 +533,7 @@ class TwoAgeModelInput(ModelInput):
             (arange(len(aggregator)), [0]*len(aggregator))))
 
         rho = spec['recovery_rate'] * spec['R0'] * aggregate_vector_quantities(
-            rho, fine_bds, self.coarse_bds, pop_pyramid).toarray().squeeze()
+            rho, self.fine_bds, self.coarse_bds, self.pop_pyramid).toarray().squeeze()
 
         det_model = det_from_spec(self.spec)
         # self.det = (0.9/max(rho)) * rho
