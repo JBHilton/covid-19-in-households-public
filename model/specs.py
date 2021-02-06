@@ -1,9 +1,46 @@
 '''Module containing model specifications'''
 
-from numpy import array
+from numpy import arange, array
+
+TWO_AGE_SIR_SPEC = {
+    'compartmental_structure': 'SIR', # This is which subsystem key to use
+    'AR': 0.45,                     # Secondary attack probability
+    'R*': 1.1,                      # Household-level reproduction number
+    'recovery_rate': 1/12,           # Recovery rate
+    'sus': array([1,1]),          # Relative susceptibility by age/vulnerability class
+    'density_expo' : 0.5, # "Cauchemez parameter"
+}
+
+TWO_AGE_SEPIR_SPEC = {
+    'compartmental_structure': 'SEPIR', # This is which subsystem key to use
+    'AR': 0.45,                     # Secondary attack probability
+    'R*': 1.1,                      # Household-level reproduction number
+    'recovery_rate': 1/4,           # Recovery rate
+    'incubation_rate': 1/5,         # E->P incubation rate
+    'symp_onset_rate': 1/3,         # P->I prodromal to symptomatic rate
+    'prodromal_trans_scaling':
+     array([0.5,0.5]),          # Prodromal transmission intensity relative to full inf transmission
+    'sus': array([1,1]),          # Relative susceptibility by age/vulnerability class
+    'density_expo' : 0.5, # "Cauchemez parameter"
+}
+
+TWO_AGE_UK_SPEC = {
+    'k_home': {                                                 # File location for UK within-household contact matrix
+        'file_name': 'inputs/MUestimates_home_2.xlsx',
+        'sheet_name':'United Kingdom of Great Britain'
+    },
+    'k_all': {                                                  # File location for UK pop-level contact matrix
+        'file_name': 'inputs/MUestimates_all_locations_2.xlsx',
+        'sheet_name': 'United Kingdom of Great Britain'
+    },
+    'pop_pyramid_file_name': 'inputs/United Kingdom-2019.csv',   # File location for UK age pyramid
+    'fine_bds' : arange(0,81,5),                                # Boundaries used in pyramid/contact data
+    'coarse_bds' : array([0,20])                                # Desired boundaries for model population
+}
 
 DEFAULT_SPEC = {
     # Interpretable parameters:
+    'compartmental_structure': 'SEDUR',
     'R0': 2.4,                      # Reproduction number
     'recovery_rate': 0.5,                   # Mean infectious period
     'incubation_rate': 0.2,                   # Incubation period
@@ -24,8 +61,11 @@ DEFAULT_SPEC = {
         'file_name': 'inputs/MUestimates_all_locations_2.xlsx',
         'sheet_name': 'United Kingdom of Great Britain'
     },
-    'pop_pyramid_file_name': 'inputs/United Kingdom-2019.csv',
-    'rho_file_name': 'inputs/rho_estimate_cdc.csv'
+    'pop_pyramid_file_name': 'inputs/United Kingdom-2019.csv',   # File location for UK age pyramid
+    'fine_bds' : arange(0,81,5),                                # Boundaries used in pyramid/contact data
+    'coarse_bds' : array([0,20]),                               # Desired boundaries for model population
+    'rho_file_name': 'inputs/rho_estimate_cdc.csv',
+    'density_expo': 1
 }
 
 VO_SPEC = {

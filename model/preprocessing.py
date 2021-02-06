@@ -354,8 +354,17 @@ def det_from_spec(spec):
 
 
 class ModelInput(ABC):
-    def __init__(self, spec, header=None):
+    def __init__(self,
+                spec,
+                composition_list,
+                composition_distribution,
+                header=None):
         self.spec = deepcopy(spec)
+
+        self.comp_struct = subsystem_key[spec['compartmental_structure']]
+        self.inf_compartment_list = self.comp_struct[2]
+        self.no_inf_compartments = len(self.inf_compartment_list)
+
         self.k_home = read_excel(
             spec['k_home']['file_name'],
             sheet_name=spec['k_home']['sheet_name'],
@@ -365,13 +374,92 @@ class ModelInput(ABC):
             sheet_name=spec['k_all']['sheet_name'],
             header=header).to_numpy()
 
-    @property
-    def alpha(self):
-        return self.spec['alpha']
+        self.fine_bds = spec['fine_bds']
+        self.coarse_bds = spec['coarse_bds']
+
+        self.pop_pyramid = read_csv(
+            spec['pop_pyramid_file_name'], index_col=0)
+        self.pop_pyramid = (self.pop_pyramid['F'] + self.pop_pyramid['M']).to_numpy()
+
+        self.k_home = aggregate_contact_matrix(
+            self.k_home, self.fine_bds, self.coarse_bds, self.pop_pyramid)
+        self.k_all = aggregate_contact_matrix(
+            self.k_all, self.fine_bds, self.coarse_bds, self.pop_pyramid)
+        self.k_ext = self.k_all - self.k_home
+
+        self.density_expo = spec['density_expo']
+        self.composition_list = composition_list
+        self.composition_distribution = composition_distribution
+        self.ave_hh_size = \
+            composition_distribution.T.dot(
+            composition_list.sum(axis=1))                                # Average household size
+        self.dens_adj_ave_hh_size = \
+            composition_distribution.T.dot((
+            composition_list.sum(axis=1))**self.density_expo)                                # Average household size adjusted for density, needed to get internal transmission rate from secondary attack prob
+
+class SIRInput(ModelInput):
+    def __init__(self, spec):
+        super().__init__(spec)
+
+        self.sus = spec['sus']
+        self.inf_scales = [[1,1]] # In the SIR model there is only one infectious compartment
+
+        home_eig = max(eig(
+            self.sus * ((1/spec['recovery_rate']) *
+             (self.k_home))
+            )[0])
+        ext_eig = max(eig(
+            self.sus * ((1/spec['recovery_rate']) *
+             (self.k_ext))
+            )[0])
+
+        R_int = - log(1 - spec['AR']) * self.dens_adj_ave_hh_size
+
+        self.k_home = R_int * self.k_home / home_eig
+        external_scale = spec['R*']/(self.ave_hh_size*spec['AR'])
+        self.k_ext = external_scale * self.k_ext / ext_eig
 
     @property
     def gamma(self):
-        return self.spec['gamma']
+        return self.spec['recovery_rate']
+
+class SEPIRInput(ModelInput):
+    def __init__(self, spec):
+        super().__init__(spec)
+
+        self.sus = spec['sus']
+        self.inf_scales = [spec['prodromal_trans_scaling'], [1,1]] # In the SIR model there is only one infectious compartment
+
+        home_eig = max(eig(
+            self.sus * ((1/spec['recovery_rate']) *
+             (self.k_home) + \
+            (1/spec['symp_onset_rate']) *
+            (self.k_home ) * spec['prodromal_trans_scaling'])
+            )[0])
+        ext_eig = max(eig(
+            self.sus * ((1/spec['recovery_rate']) *
+             (self.k_ext) + \
+            (1/spec['symp_onset_rate']) *
+            (self.k_ext ) * spec['prodromal_trans_scaling'])
+            )[0])
+
+        R_int = - log(1 - spec['AR']) * self.dens_adj_ave_hh_size
+
+        self.k_home = R_int * self.k_home / home_eig
+        external_scale = spec['R*']/(self.ave_hh_size*spec['AR'])
+        self.k_ext = external_scale * self.k_ext / ext_eig
+
+    @property
+    def alpha_1(self):
+        return self.spec['incubation_rate']
+
+    @property
+    def alpha_2(self):
+        return self.spec['symp_onset_rate']
+
+    @property
+    def gamma(self):
+        return self.spec['recovery_rate']
 
 
 class StandardModelInput(ModelInput):
@@ -425,25 +513,8 @@ class StandardModelInput(ModelInput):
 
 class TwoAgeModelInput(ModelInput):
     '''TODO: add docstring'''
-    def __init__(self, spec):
-        super().__init__(spec)
-
-        fine_bds = arange(0, 81, 5)
-        self.coarse_bds = array([0, 20])
-
-        # pop_pyramid = read_csv(
-        #     'inputs/United Kingdom-2019.csv', index_col=0)
-        pop_pyramid = read_csv(
-            spec['pop_pyramid_file_name'], index_col=0)
-        pop_pyramid = (pop_pyramid['F'] + pop_pyramid['M']).to_numpy()
-
-        self.k_home = aggregate_contact_matrix(
-            self.k_home, fine_bds, self.coarse_bds, pop_pyramid)
-        self.k_all = aggregate_contact_matrix(
-            self.k_all, fine_bds, self.coarse_bds, pop_pyramid)
-        self.k_ext = self.k_all - self.k_home
-
-        self.density_expo = 1
+    def __init__(self, spec, composition_list, composition_distribution):
+        super().__init__(spec, composition_list, composition_distribution)
 
         # This is in ten year blocks
         rho = read_csv(
@@ -454,7 +525,7 @@ class TwoAgeModelInput(ModelInput):
         #     'inputs/rho_estimate_cdc.csv', header=None).to_numpy().flatten()
 
         cdc_bds = arange(0, 81, 10)
-        aggregator = make_aggregator(cdc_bds, fine_bds)
+        aggregator = make_aggregator(cdc_bds, self.fine_bds)
 
         # This is in five year blocks
         rho = sparse((
@@ -462,14 +533,14 @@ class TwoAgeModelInput(ModelInput):
             (arange(len(aggregator)), [0]*len(aggregator))))
 
         rho = spec['recovery_rate'] * spec['R0'] * aggregate_vector_quantities(
-            rho, fine_bds, self.coarse_bds, pop_pyramid).toarray().squeeze()
+            rho, self.fine_bds, self.coarse_bds, self.pop_pyramid).toarray().squeeze()
 
         det_model = det_from_spec(self.spec)
         # self.det = (0.9/max(rho)) * rho
         self.det = det_model(rho)
         self.tau = spec['asymp_trans_scaling'] * ones(rho.shape)
         self.sus = rho / self.det
-        self.import_model = NoImportModel()
+        self.import_model = NoImportModel(5,2)
 
         self.inf_scales = [ones(rho.shape),self.tau]
 
