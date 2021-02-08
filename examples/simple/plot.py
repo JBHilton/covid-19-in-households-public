@@ -6,36 +6,35 @@ from matplotlib.pyplot import subplots
 from matplotlib.cm import get_cmap
 
 with open('simple.pkl', 'rb') as f:
-    t, H, D, U, coarse_bds = load(f)
+    H, time_series, model_input = load(f)
 
-lgd=[
-    'Age {} to {}'.format(coarse_bds[i], coarse_bds[i+1])
-    for i, _ in enumerate(coarse_bds[:-1])]
+lgd=['S','E','P','I','R']
 
-#clist=0.5*ones(10,3)
-#clist(:,1)=(1/11)*(1:10)
-#clist(:,3)=(1/11)*(10:-1:1)
+t = time_series['time']
+data_list = [time_series['S']/model_input.ave_hh_by_class,
+    time_series['E']/model_input.ave_hh_by_class,
+    time_series['P']/model_input.ave_hh_by_class,
+    time_series['I']/model_input.ave_hh_by_class,
+    time_series['R']/model_input.ave_hh_by_class]
 
-fig, (axis_det, axis_undet) = subplots(2,1, sharex=True)
+fig, (axis_C, axis_A) = subplots(2,1, sharex=True)
 
 cmap = get_cmap('tab20')
 alpha = 0.5
-for i, _ in enumerate(coarse_bds[:-1]):
-    axis_det.plot(
-        t, D[:,i], label=lgd[i],
-        color=cmap(i/len(coarse_bds)), alpha=alpha)
-axis_det.plot(t,D[:,-1], label='Age{}+'.format(coarse_bds[-1]))
-axis_det.set_ylabel('Detected prevalence')
+for i in range(len(data_list)):
+    axis_C.plot(
+        t, data_list[i][:,0], label=lgd[i],
+        color=cmap(i/len(data_list)), alpha=alpha)
+axis_C.set_ylabel('Proportion of population')
+axis_C.set_title('Children (0-19 years old)')
+axis_C.legend(ncol=1, bbox_to_anchor=(1,0.50))
 
-
-for i, _ in enumerate(coarse_bds[:-1]):
-    axis_undet.plot(
-        t, U[:,i], label=lgd[i],
-        color=cmap(i/len(coarse_bds)), alpha=alpha)
-axis_undet.plot(t,U[:,-1], label='Age{}+'.format(coarse_bds[-1]))
-axis_undet.set_xlabel('Time in days')
-axis_undet.set_ylabel('Undetected prevalence')
-
-axis_det.legend(ncol=1, bbox_to_anchor=(1,0.50))
+for i in range(len(data_list)):
+    axis_A.plot(
+        t, data_list[i][:,1], label=lgd[i],
+        color=cmap(i/len(data_list)), alpha=alpha)
+axis_A.set_ylabel('Proportion of population')
+axis_A.set_title('Adults (20+ years old)')
+axis_A.legend(ncol=1, bbox_to_anchor=(1,0.50))
 
 fig.savefig('simple-plot.png', bbox_inches='tight', dpi=300)
