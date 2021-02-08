@@ -2,8 +2,8 @@
 from abc import ABC
 from copy import copy, deepcopy
 from numpy import (
-        append, arange, around, array, cumsum, ones, ones_like, where,
-        zeros, concatenate, vstack, identity, tile, hstack, prod, ix_,
+        append, arange, around, array, cumsum, log, ones, ones_like, where,
+        zeros, concatenate, vstack, identity, tile, hstack, prod, ix_, shape,
         atleast_2d, diag)
 from numpy.linalg import eig
 from scipy.sparse import block_diag
@@ -38,20 +38,25 @@ def initialise_carehome(
 def make_initial_condition(
         household_population,
         rhs,
-        alpha=1.0e-5):
+        prev=1.0e-5):
+
     '''TODO: docstring'''
     fully_sus = where(
         rhs.states_sus_only.sum(axis=1)
         ==
         household_population.states.sum(axis=1))[0]
-    i_is_one = where(
-        (rhs.states_det_only + rhs.states_undet_only).sum(axis=1) == 1)[0]
+    total_infs_by_state = zeros(household_population.which_composition.shape)
+    for i in range(rhs.no_inf_compartments):
+        total_infs_by_state = total_infs_by_state + \
+                                rhs.inf_by_state_list[i].sum(axis=1)
+    one_inf_present = where(total_infs_by_state == 1)[0]
     H0 = zeros(len(household_population.which_composition))
     x = household_population.composition_distribution[
-        household_population.which_composition[i_is_one]]
-    H0[i_is_one] = alpha * x
-    H0[fully_sus] = (1.0 - alpha * sum(x)) \
-        * household_population.composition_distribution
+        household_population.which_composition[one_inf_present]]
+    H0[one_inf_present] = prev * household_population.ave_hh_size * x / sum(x)
+    H0[fully_sus] = (1.0 -
+            prev * household_population.composition_distribution) \
+            * household_population.composition_distribution
     return H0
 
 
@@ -235,7 +240,6 @@ class HouseholdPopulation(ABC):
             self,
             composition_list,
             composition_distribution,
-            compartmental_structure,
             model_input,
             print_progress=True):
         '''This builds internal mixing matrix for entire system of
@@ -243,8 +247,10 @@ class HouseholdPopulation(ABC):
 
         self.composition_list = composition_list
         self.composition_distribution = composition_distribution
-        self.subsystem_function = subsystem_key[compartmental_structure][0]
-        self.num_of_epidemiological_compartments = subsystem_key[compartmental_structure][1]
+        self.ave_hh_size = model_input.ave_hh_size
+        self.compartmental_structure = model_input.compartmental_structure
+        self.subsystem_function = subsystem_key[self.compartmental_structure][0]
+        self.num_of_epidemiological_compartments = subsystem_key[self.compartmental_structure][1]
         self.model_input = model_input
 
         # If the compositions include household size at the beginning, we
@@ -361,8 +367,8 @@ class ModelInput(ABC):
                 header=None):
         self.spec = deepcopy(spec)
 
-        self.comp_struct = subsystem_key[spec['compartmental_structure']]
-        self.inf_compartment_list = self.comp_struct[2]
+        self.compartmental_structure = spec['compartmental_structure']
+        self.inf_compartment_list = subsystem_key[self.compartmental_structure][2]
         self.no_inf_compartments = len(self.inf_compartment_list)
 
         self.k_home = read_excel(
@@ -396,13 +402,14 @@ class ModelInput(ABC):
         self.dens_adj_ave_hh_size = \
             composition_distribution.T.dot((
             composition_list.sum(axis=1))**self.density_expo)                                # Average household size adjusted for density, needed to get internal transmission rate from secondary attack prob
+        self.ave_hh_by_class = composition_distribution.T.dot(composition_list)
 
 class SIRInput(ModelInput):
-    def __init__(self, spec):
-        super().__init__(spec)
+    def __init__(self, spec, composition_list, composition_distribution):
+        super().__init__(spec, composition_list, composition_distribution)
 
         self.sus = spec['sus']
-        self.inf_scales = [[1,1]] # In the SIR model there is only one infectious compartment
+        self.inf_scales = [ones((2,))] # In the SIR model there is only one infectious compartment
 
         home_eig = max(eig(
             self.sus * ((1/spec['recovery_rate']) *
@@ -424,11 +431,12 @@ class SIRInput(ModelInput):
         return self.spec['recovery_rate']
 
 class SEPIRInput(ModelInput):
-    def __init__(self, spec):
-        super().__init__(spec)
+    def __init__(self, spec, composition_list, composition_distribution):
+        super().__init__(spec, composition_list, composition_distribution)
 
         self.sus = spec['sus']
-        self.inf_scales = [spec['prodromal_trans_scaling'], [1,1]] # In the SIR model there is only one infectious compartment
+        self.inf_scales = [spec['prodromal_trans_scaling'],
+                ones(shape(spec['prodromal_trans_scaling']))]
 
         home_eig = max(eig(
             self.sus * ((1/spec['recovery_rate']) *
@@ -449,6 +457,8 @@ class SEPIRInput(ModelInput):
         external_scale = spec['R*']/(self.ave_hh_size*spec['AR'])
         self.k_ext = external_scale * self.k_ext / ext_eig
 
+
+
     @property
     def alpha_1(self):
         return self.spec['incubation_rate']
@@ -465,7 +475,7 @@ class SEPIRInput(ModelInput):
 class StandardModelInput(ModelInput):
     '''TODO: add docstring'''
     def __init__(self, spec):
-        super().__init__(spec)
+        super().__init__(spec, composition_list, composition_distribution)
 
         # Because we want 80 to be included as well.
         fine_bds = arange(0, 81, 5)
@@ -501,51 +511,6 @@ class StandardModelInput(ModelInput):
         self.det = det_model(rho)
         self.tau = spec['asymp_trans_scaling'] * ones(rho.shape)
         self.sus = rho / self.det
-
-    @property
-    def alpha(self):
-        return self.spec['incubation_rate']
-
-    @property
-    def gamma(self):
-        return self.spec['recovery_rate']
-
-
-class TwoAgeModelInput(ModelInput):
-    '''TODO: add docstring'''
-    def __init__(self, spec, composition_list, composition_distribution):
-        super().__init__(spec, composition_list, composition_distribution)
-
-        # This is in ten year blocks
-        rho = read_csv(
-            spec['rho_file_name'], header=None).to_numpy().flatten()
-
-        # This is in ten year blocks
-        # rho = read_csv(
-        #     'inputs/rho_estimate_cdc.csv', header=None).to_numpy().flatten()
-
-        cdc_bds = arange(0, 81, 10)
-        aggregator = make_aggregator(cdc_bds, self.fine_bds)
-
-        # This is in five year blocks
-        rho = sparse((
-            rho[aggregator],
-            (arange(len(aggregator)), [0]*len(aggregator))))
-
-        rho = spec['recovery_rate'] * spec['R0'] * aggregate_vector_quantities(
-            rho, self.fine_bds, self.coarse_bds, self.pop_pyramid).toarray().squeeze()
-
-        det_model = det_from_spec(self.spec)
-        # self.det = (0.9/max(rho)) * rho
-        self.det = det_model(rho)
-        self.tau = spec['asymp_trans_scaling'] * ones(rho.shape)
-        self.sus = rho / self.det
-        self.import_model = NoImportModel(5,2)
-
-        self.inf_scales = [ones(rho.shape),self.tau]
-
-        self.inf_compartment_list = [1]
-        self.no_inf_compartments = len(self.inf_compartment_list)
 
     @property
     def alpha(self):

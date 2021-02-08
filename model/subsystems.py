@@ -433,7 +433,7 @@ def _sepir_subsystem(self, household_spec):
     matrix_shape = household_spec.matrix_shape
     sus = self.model_input.sus
     K_home = self.model_input.k_home
-    tau = self.model_input.tau
+    inf_scales = copy(self.model_input.inf_scales)
     alpha_1 = self.model_input.alpha_1
     alpha_2 = self.model_input.alpha_2
     gamma = self.model_input.gamma
@@ -445,6 +445,8 @@ def _sepir_subsystem(self, household_spec):
     K_home = K_home[ix_(class_idx, class_idx)]
     sus = sus[class_idx]
     r_home = atleast_2d(diag(sus).dot(K_home))
+    for i in range(len(inf_scales)):
+        inf_scales[i] = inf_scales[i][class_idx]
 
     states, \
         reverse_prod, \
@@ -459,7 +461,7 @@ def _sepir_subsystem(self, household_spec):
     Q_int, inf_event_row, inf_event_col, inf_event_class = inf_events(s_comp,
                 i_comp,
                 [p_comp, i_comp],
-                [tau, 1],
+                inf_scales,
                 r_home,
                 density_expo,
                 5,
@@ -532,7 +534,7 @@ def _sedur_subsystem(self, household_spec):
     matrix_shape = household_spec.matrix_shape
     sus = self.model_input.sus
     det = self.model_input.det
-    tau = self.model_input.tau
+    inf_scales = copy(self.model_input.inf_scales)
     K_home = self.model_input.k_home
     alpha = self.model_input.alpha
     gamma = self.model_input.gamma
@@ -544,8 +546,9 @@ def _sedur_subsystem(self, household_spec):
     K_home = K_home[ix_(class_idx, class_idx)]
     sus = sus[class_idx]
     det = det[class_idx]
-    tau = tau[class_idx]
     r_home = atleast_2d(diag(sus).dot(K_home))
+    for i in range(len(inf_scales)):
+        inf_scales[i] = inf_scales[i][class_idx]
 
     states, \
         reverse_prod, \
@@ -561,7 +564,7 @@ def _sedur_subsystem(self, household_spec):
     Q_int, inf_event_row, inf_event_col, inf_event_class = inf_events(s_comp,
                 e_comp,
                 [d_comp,u_comp],
-                [1,tau],
+                inf_scales,
                 r_home,
                 density_expo,
                 5,

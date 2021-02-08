@@ -746,13 +746,13 @@ class RateEquations:
     state of the class contains all essential variables'''
     # pylint: disable=invalid-name
     def __init__(self,
-                 compartmental_structure,
                  model_input,
                  household_population,
                  import_model,
                  epsilon=1.0):
 
-        self.no_compartments = subsystem_key[compartmental_structure][1]
+        self.compartmental_structure = household_population.compartmental_structure
+        self.no_compartments = subsystem_key[self.compartmental_structure][1]
         self.household_population = household_population
         self.epsilon = epsilon
         self.Q_int = household_population.Q_int
@@ -760,7 +760,7 @@ class RateEquations:
         self.states_sus_only = household_population.states[:, ::self.no_compartments]
         self.s_present = where(self.states_sus_only.sum(axis=1) > 0)[0]
         self.epsilon = epsilon
-        self.inf_compartment_list = subsystem_key[compartmental_structure][2]
+        self.inf_compartment_list = subsystem_key[self.compartmental_structure][2]
         self.no_inf_compartments = len(self.inf_compartment_list)
         self.import_model = import_model
         self.ext_matrix_list = []
