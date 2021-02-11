@@ -459,7 +459,7 @@ def _sepir_subsystem(self, household_spec):
     inf_event_class = array([], dtype=my_int)
 
     Q_int, inf_event_row, inf_event_col, inf_event_class = inf_events(s_comp,
-                i_comp,
+                e_comp,
                 [p_comp, i_comp],
                 inf_scales,
                 r_home,

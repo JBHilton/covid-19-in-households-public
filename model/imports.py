@@ -38,16 +38,14 @@ class NoImportModel(ImportModel):
 class FixedImportModel(ImportModel):
     def __init__(
             self,
-            time,
+            no_inf_compartments,
+            no_age_classes,
             import_array):
+        super().__init__(no_inf_compartments, no_age_classes)
         self.import_array = import_array
 
     def cases(self, t):
         return self.import_array
-
-    @classmethod
-    def make_from_spec(cls, spec, det):
-        return cls()
 
 class StepImportModel(ImportModel):
     def __init__(
