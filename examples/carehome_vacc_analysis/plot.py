@@ -8,7 +8,7 @@ from matplotlib.cm import get_cmap
 with open('carehome_vacc_output.pkl', 'rb') as f:
     H, time_series, model_input = load(f)
 
-lgd=['S','E','C', 'M', 'R', 'D']
+lgd=['S','E','M', 'C', 'R', 'D']
 
 t = time_series['time']
 data_list = [time_series['S']/model_input.ave_hh_by_class,
@@ -22,7 +22,7 @@ fig, (axis_P, axis_S, axis_A) = subplots(3,1, sharex=True)
 
 cmap = get_cmap('tab20')
 alpha = 0.5
-for i in range(1,len(data_list)-1):
+for i in range(1,len(data_list)-2):
     axis_P.plot(
         t, data_list[i][:,0], label=lgd[i],
         color=cmap(i/len(data_list)), alpha=alpha)
@@ -30,7 +30,7 @@ axis_P.set_ylabel('Proportion of population')
 axis_P.set_title('Patients')
 axis_P.legend(ncol=1, bbox_to_anchor=(1,0.50))
 
-for i in range(1,len(data_list)-1):
+for i in range(1,len(data_list)-2):
     axis_S.plot(
         t, data_list[i][:,1], label=lgd[i],
         color=cmap(i/len(data_list)), alpha=alpha)
@@ -38,7 +38,7 @@ axis_S.set_ylabel('Proportion of population')
 axis_S.set_title('Permanent staff')
 axis_S.legend(ncol=1, bbox_to_anchor=(1,0.50))
 
-for i in range(1,len(data_list)-1):
+for i in range(1,len(data_list)-2):
     axis_A.plot(
         t, data_list[i][:,2], label=lgd[i],
         color=cmap(i/len(data_list)), alpha=alpha)

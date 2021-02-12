@@ -311,7 +311,7 @@ subsystem_key['carehome_SEMCRD'] = [_semcrd_ch_subsystem,6,[2,3]]
 THREE_CLASS_CH_EPI_SPEC = {
     'compartmental_structure': 'carehome_SEMCRD', # This is which subsystem key to use
     'AR': 0.45,                     # Secondary attack probability
-    'R*': 2,                      # Household-level reproduction number
+    'R*': 1.1,                      # Household-level reproduction number
     'recovery_rate': 1/4,           # Recovery rate
     'incubation_rate': 1/5,         # E->M or C incubation rate
     'critical_inf_prob': array([1/10,1/50,1/50]),      # Probability of going E->C

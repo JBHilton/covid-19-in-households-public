@@ -15,10 +15,11 @@ SPEC = {**THREE_CLASS_CH_EPI_SPEC,
         **THREE_CLASS_CH_SPEC}
 
 vacc_efficacy = 0.9
+vacc_inf_reduction = 0.5
 
 # List of observed care home compositions
 composition_list = array(
-    [[1,1,1], [2,1,1], [2,2,1]])
+    [[2,1,1], [2,2,1], [2,2,2]])
 # Proportion of care homes which are in each composition
 comp_dist = array([0.4, 0.3, 0.3])
 
@@ -29,21 +30,38 @@ household_population = HouseholdPopulation(
 
 '''Now create populations with vaccine.'''
 
-model_input_vacc_P = copy(model_input)
-model_input_vacc_P.crit_prob[0] = (1-vacc_efficacy) * \
-                                    model_input_vacc_P.crit_prob[0]
-model_input_vacc_PS = copy(model_input)
-model_input_vacc_PS.crit_prob[0] = (1-vacc_efficacy) * \
-                                    model_input_vacc_PS.crit_prob[0]
-model_input_vacc_PS.crit_prob[1] = (1-vacc_efficacy) * \
-                                    model_input_vacc_PS.crit_prob[1]
-model_input_vacc_PSA = copy(model_input)
-model_input_vacc_PSA.crit_prob[0] = (1-vacc_efficacy) * \
-                                    model_input_vacc_PSA.crit_prob[0]
-model_input_vacc_PSA.crit_prob[1] = (1-vacc_efficacy) * \
-                                    model_input_vacc_PSA.crit_prob[1]
-model_input_vacc_PSA.crit_prob[2] = (1-vacc_efficacy) * \
-                                    model_input_vacc_PSA.crit_prob[2]
+SPEC_VACC_P = copy(SPEC)
+SPEC_VACC_P['critical_inf_prob'][0] = (1-vacc_efficacy) * \
+                                    SPEC_VACC_P['critical_inf_prob'][0]
+SPEC_VACC_P['mild_trans_scaling'][0] = vacc_inf_reduction * \
+                                    SPEC_VACC_P['mild_trans_scaling'][0]
+SPEC_VACC_PS = copy(SPEC)
+SPEC_VACC_PS['critical_inf_prob'][0] = (1-vacc_efficacy) * \
+                                    SPEC_VACC_PS['critical_inf_prob'][0]
+SPEC_VACC_PS['critical_inf_prob'][1] = (1-vacc_efficacy) * \
+                                    SPEC_VACC_PS['critical_inf_prob'][1]
+SPEC_VACC_PS['mild_trans_scaling'][0] = vacc_inf_reduction * \
+                                    SPEC_VACC_PS['mild_trans_scaling'][0]
+SPEC_VACC_PS['mild_trans_scaling'][1] = vacc_inf_reduction * \
+                                    SPEC_VACC_PS['mild_trans_scaling'][1]
+SPEC_VACC_PSA = copy(SPEC)
+SPEC_VACC_PSA['critical_inf_prob'][0] = (1-vacc_efficacy) * \
+                                    SPEC_VACC_PSA['critical_inf_prob'][0]
+SPEC_VACC_PSA['critical_inf_prob'][1] = (1-vacc_efficacy) * \
+                                    SPEC_VACC_PSA['critical_inf_prob'][1]
+SPEC_VACC_PSA['critical_inf_prob'][2] = (1-vacc_efficacy) * \
+                                    SPEC_VACC_PSA['critical_inf_prob'][2]
+SPEC_VACC_PSA['mild_trans_scaling'][0] = vacc_inf_reduction * \
+                                    SPEC_VACC_PSA['mild_trans_scaling'][0]
+SPEC_VACC_PSA['mild_trans_scaling'][1] = vacc_inf_reduction * \
+                                    SPEC_VACC_PSA['mild_trans_scaling'][1]
+SPEC_VACC_PSA['mild_trans_scaling'][2] = vacc_inf_reduction * \
+                                    SPEC_VACC_PSA['mild_trans_scaling'][2]
+
+model_input_vacc_P = SEMCRDInput(SPEC_VACC_P, composition_list, comp_dist)
+model_input_vacc_PS = SEMCRDInput(SPEC_VACC_PS, composition_list, comp_dist)
+model_input_vacc_PSA = SEMCRDInput(SPEC_VACC_PSA, composition_list, comp_dist)
+
 hh_pop_P = HouseholdPopulation(composition_list,
                                 comp_dist,
                                 model_input_vacc_P)
@@ -85,17 +103,18 @@ print(
     initialise_end-initialise_start,
     ' seconds.')
 
-import_array = (1e-5)*ones(18)
+H0 = solution.y[:,-1]
+
+import_array = (1e-5)*ones(2)
 
 rhs = SEMCRDRateEquations(
     model_input,
     combined_pop,
     FixedImportModel(6,2,import_array))
-H0 = solution.y[:,-1]
 
 tspan = (0.0, 365.0)
 solver_start = get_time()
-solution = solve_ivp(rhs, tspan, H0, first_step=0.001)
+solution = solve_ivp(rhs, tspan, H0, first_step=0.001,atol=1e-12)
 solver_end = get_time()
 
 print(
