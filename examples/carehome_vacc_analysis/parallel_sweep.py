@@ -114,24 +114,20 @@ def compute_death_reduction(p):
     across vaccinated and unvaccinated homes'''
     SPEC_UNVACC = deepcopy(SPEC)
     SPEC_UNVACC['critical_inf_prob'][1] = \
-        p[1] \
-        * (1-death_red) \
+        (p[1] * (1-death_red) + (1-p[1])) \
         * SPEC_UNVACC['critical_inf_prob'][1]
     SPEC_UNVACC['sus'][1] = \
-        p[1] \
-        * (1-sus_red) \
+        (p[1]  * (1-sus_red) + (1-p[1])) \
         * SPEC_UNVACC['sus'][1]
     SPEC_UNVACC['mild_trans_scaling'][1] = \
         p[1] \
         * p[0] \
         * SPEC_UNVACC['mild_trans_scaling'][1]
     SPEC_UNVACC['critical_inf_prob'][2] = \
-        p[2] \
-        * (1-death_red) \
+        (p[2] * (1-death_red) + (1-p[2])) \
         * SPEC_UNVACC['critical_inf_prob'][2]
     SPEC_UNVACC['sus'][2] = \
-        p[2] \
-        * (1-sus_red) \
+        (p[2]  * (1-sus_red) + (1-p[2])) \
         * SPEC_UNVACC['sus'][2]
     SPEC_UNVACC['mild_trans_scaling'][2] = \
         p[2] \
@@ -142,31 +138,27 @@ def compute_death_reduction(p):
     SPEC_VACC_P['critical_inf_prob'][0] = \
         (1-death_red) \
         * SPEC_VACC_P['critical_inf_prob'][0]
-    SPEC_VACC_P['critical_inf_prob'][0] = \
+    SPEC_VACC_P['sus'][0] = \
         (1-sus_red) \
-        * SPEC_VACC_P['critical_inf_prob'][0]
+        * SPEC_VACC_P['sus'][0]
     SPEC_VACC_P['mild_trans_scaling'][0] = \
         p[0] \
         * SPEC_VACC_P['mild_trans_scaling'][0]
     SPEC_VACC_P['critical_inf_prob'][1] = \
-        p[1] \
-        * (1 - death_red) \
+        (p[1]  * (1-death_red) + (1-p[1])) \
         * SPEC_VACC_P['critical_inf_prob'][1]
     SPEC_VACC_P['sus'][1] = \
-        p[1] \
-        * (1-sus_red) \
+        (p[1]  * (1-sus_red) + (1-p[1])) \
         * SPEC_UNVACC['sus'][1]
     SPEC_VACC_P['mild_trans_scaling'][1] = \
         p[1] \
         * p[0] \
         * SPEC_VACC_P['mild_trans_scaling'][1]
     SPEC_VACC_P['critical_inf_prob'][2] = \
-        p[2] \
-        * (1-death_red) \
+        (p[2]  * (1-death_red) + (1-p[2])) \
         * SPEC_VACC_P['critical_inf_prob'][2]
     SPEC_VACC_P['sus'][2] = \
-        p[2] \
-        * (1-sus_red) \
+        (p[2]  * (1-sus_red) + (1-p[2])) \
         * SPEC_UNVACC['sus'][2]
     SPEC_VACC_P['mild_trans_scaling'][2] = \
         p[2] \

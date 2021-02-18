@@ -200,32 +200,32 @@ def _semcrd_ch_subsystem(self, household_spec):
                     matrix_shape,
                     Q_int)
 
-    '''Now do the non-disease related exit (to D) events - we can just cycle
-    over the numerical index of the compartments since all compartments progress
-    identically. This cycle only goes to range 5 since we assume no D->D
-    events.'''
-    for i in range(5):
-        Q_int = stratified_progression_events(i,
-                        d_comp,
-                        baseline_exit_rate,
-                        6,
-                        states,
-                        index_vector,
-                        reverse_prod,
-                        class_idx,
-                        matrix_shape,
-                        Q_int)
-
-    Q_int = stratified_progression_events(d_comp,
-                    s_comp,
-                    baseline_exit_rate,
-                    6,
-                    states,
-                    index_vector,
-                    reverse_prod,
-                    class_idx,
-                    matrix_shape,
-                    Q_int)
+    # '''Now do the non-disease related exit (to D) events - we can just cycle
+    # over the numerical index of the compartments since all compartments progress
+    # identically. This cycle only goes to range 5 since we assume no D->D
+    # events.'''
+    # for i in range(5):
+    #     Q_int = stratified_progression_events(i,
+    #                     d_comp,
+    #                     baseline_exit_rate,
+    #                     6,
+    #                     states,
+    #                     index_vector,
+    #                     reverse_prod,
+    #                     class_idx,
+    #                     matrix_shape,
+    #                     Q_int)
+    #
+    # Q_int = stratified_progression_events(d_comp,
+    #                 s_comp,
+    #                 baseline_exit_rate,
+    #                 6,
+    #                 states,
+    #                 index_vector,
+    #                 reverse_prod,
+    #                 class_idx,
+    #                 matrix_shape,
+    #                 Q_int)
 
     S = Q_int.sum(axis=1).getA().squeeze()
     Q_int += sparse((
