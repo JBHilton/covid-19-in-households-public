@@ -310,16 +310,16 @@ subsystem_key['carehome_SEMCRD'] = [_semcrd_ch_subsystem,6,[2,3]]
 
 THREE_CLASS_CH_EPI_SPEC = {
     'compartmental_structure': 'carehome_SEMCRD', # This is which subsystem key to use
-    'AR': 0.45,                     # Secondary attack probability
+    'AR': 0.80,                     # Secondary attack probability
     'R*': 1.1,                      # Household-level reproduction number
     'recovery_rate': 1/4,           # Recovery rate
     'incubation_rate': 1/5,         # E->M or C incubation rate
-    'critical_inf_prob': array([1/10,1/50,1/50]),      # Probability of going E->C
+    'critical_inf_prob': array([1.0,1.0,1.0]),      # Probability of going E->C
     'mild_trans_scaling':
      array([1.0,1.0,1.0]),          # Prodromal transmission intensity relative to full inf transmission
     'sus': array([1,1,1]),          # Relative susceptibility by age/vulnerability class
     'density_expo' : 1.0, # "Cauchemez parameter"
-    'covid_mortality_prob': array([1/10,1/10,1/10]) # Mortality rate CONDITIONED ON BEING CRITICAL ALREADY!!!
+    'covid_mortality_prob': array([0.2,0.0,0.0]) # Mortality rate CONDITIONED ON BEING CRITICAL ALREADY!!!
 }
 
 THREE_CLASS_CH_SPEC = {
@@ -336,5 +336,23 @@ THREE_CLASS_CH_SPEC = {
     'coarse_bds' : array([0,20]),                               # Desired boundaries for model population
     'within_ch_contact': array([[1,1,1], [1,1,1], [1,1,1]]),
     'between_ch_contact': array([[0,0,1], [0,0,0], [1,0,1]]),
-    'baseline_exit_rate': array([1/(32*30), 0, 0])
+    'baseline_exit_rate': array([0, 0, 0])
 }
+
+''' The following function is very hacky - it only works for the specific
+example we're doing in parallel_sweep.py. '''
+def simple_initialisation(
+        household_population,
+        rhs,
+        state_list = [(2,0,0,0,0,0,1,0,0,0,0,0,1,0,0,0,0,0),
+                  (1,0,0,0,1,0,1,0,0,0,0,0,1,0,0,0,0,0)],
+        weightings = [0.5,0.5]):
+
+    '''TODO: docstring'''
+    H0 = zeros(len(household_population.which_composition))
+    for i in range(len(state_list)):
+        loc = where((household_population.states == state_list[i]).all(axis=1))[0]
+        H0[loc] = weightings[i]
+        print('I found the requested starting state at loc and states[loc,:]=',
+                household_population.states[loc,:])
+    return H0
