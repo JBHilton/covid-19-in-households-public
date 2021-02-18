@@ -56,8 +56,8 @@ import_array = (1e-5)*ones(2)
 
 '''Now create populations with vaccine.'''
 
-patient_uptake_range = [0.9, 0.95]
-staff_uptake_range = [0.6, 0.8]
+patient_uptake_range = [0.9]
+staff_uptake_range = [0.6]
 agency_uptake_range = [0.2, 0.8]
 params = array([
     [p, s, a]
@@ -142,18 +142,19 @@ def compute_c_and_d(p):
     D = H.T.dot(combined_pop.states[:, 5::6])
     return C.max(), D.max()
 
-with Pool(NO_OF_WORKERS) as pool:
-    results = pool.map(compute_c_and_d, params)
+if __name__ == '__main__':
+    with Pool(NO_OF_WORKERS) as pool:
+        results = pool.map(compute_c_and_d, params)
 
 
-max_critical = array([r[0] for r in results]).reshape(
-    len(patient_uptake_range),
-    len(staff_uptake_range),
-    len(agency_uptake_range))
-max_empty = array([r[1] for r in results]).reshape(
-    len(patient_uptake_range),
-    len(staff_uptake_range),
-    len(agency_uptake_range))
+    max_critical = array([r[0] for r in results]).reshape(
+        len(patient_uptake_range),
+        len(staff_uptake_range),
+        len(agency_uptake_range))
+    max_empty = array([r[1] for r in results]).reshape(
+        len(patient_uptake_range),
+        len(staff_uptake_range),
+        len(agency_uptake_range))
 
-with open('carehome_sweep_data.pkl', 'wb') as f:
-    dump((max_critical, max_empty, model_input), f)
+    with open('carehome_sweep_data.pkl', 'wb') as f:
+        dump((max_critical, max_empty, params, model_input), f)
