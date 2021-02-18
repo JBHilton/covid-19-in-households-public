@@ -56,8 +56,8 @@ import_array = (1e-5)*ones(2)
 
 '''Now create populations with vaccine.'''
 
-patient_uptake_range = [0.9]
-staff_uptake_range = [0.6]
+patient_uptake_range = [0.9, 0.95]
+staff_uptake_range = [0.6, 0.8]
 agency_uptake_range = [0.2, 0.8]
 params = array([
     [p, s, a]
