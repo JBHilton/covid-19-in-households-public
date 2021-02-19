@@ -205,9 +205,9 @@ if __name__ == '__main__':
     H0 = hstack(((1-patient_uptake)*H0_no_vacc, patient_uptake*H0_no_vacc))
     results = []
     #for p in params:
-    #    results.append(compute_death_reduction_with_exception_handling(p))
+    #    results.append(compute_death_reduction(p))
     with Pool(NO_OF_WORKERS) as pool:
-        results = pool.map(compute_death_reduction_with_exception_handling, params)
+        results = pool.map(compute_death_reduction, params)
 
 
     death_reduction_data = array([r for r in results]).reshape(
