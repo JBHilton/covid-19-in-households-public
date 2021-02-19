@@ -777,7 +777,8 @@ class RateEquations:
             # pdb.set_trace()
             H[where(H < 0)[0]] = 0
         if isnan(H).any():
-            pdb.set_trace()
+            # pdb.set_trace()
+            raise ValueError('State vector contains NaNs at t={0}'.format(t))
         dH = (H.T * (self.Q_int + Q_ext)).T
         return dH
 

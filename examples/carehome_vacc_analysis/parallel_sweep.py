@@ -53,63 +53,19 @@ baseline_population = HouseholdPopulation(
 # H0_no_vacc = solution.y[:,-1]
 # H0 = hstack((solution.y[:,-1], solution.y[:,-1]))
 
-import_array = (1e-5)*ones(2)
-
-''' Project baseline outbreak with no vaccination '''
-
-no_vacc_rhs = SEMCRDRateEquations(
-    model_input,
-    baseline_population,
-    FixedImportModel(6, 2, import_array))
-
-start_state_list = [(5,0,0,0,0,0,3,0,0,0,0,0,2,0,0,0,0,0),
-                    (3,0,0,0,0,2,3,0,0,0,0,0,2,0,0,0,0,0)]
-start_state_weightings = [0.5, 0.5]
-
-H0_no_vacc = simple_initialisation(baseline_population,
-                                   no_vacc_rhs,
-                                   start_state_list,
-                                   start_state_weightings)
-
-
-''' Check we have a valid initial condition'''
-if H0_no_vacc.sum()==1:
-    print('Sucessfully built initial condition')
-else:
-    print('Failed to build valid initial condition')
-
-tspan = (0.0, 4*30.0)
-no_vacc_start = get_time()
-solution = solve_ivp(no_vacc_rhs, tspan, H0_no_vacc, first_step=0.001, atol=1e-12)
-no_vacc_end = get_time()
-print(
-    'Run without vaccination took ',
-    no_vacc_end-no_vacc_start,
-    ' seconds.')
-
-H_no_vacc = solution.y
-D_P_no_vacc = H_no_vacc.T.dot(baseline_population.states[:, 5])
-D_P_final_no_vacc = D_P_no_vacc[-1]
-
-'''Now create populations with vaccine.'''
-
-inf_red_range = [0.0, 0.7, 1.0]
-staff_uptake_range = [0.0, 0.2, 0.4, 0.6, 0.8, 1.0]
-agency_uptake_range = [0.0, 0.2, 0.4, 0.6, 0.8, 1.0]
-params = array([
-    [r, s, a]
-    for r in inf_red_range
-    for s in staff_uptake_range
-    for a in agency_uptake_range])
-
-patient_uptake = 0.9
-
-H0 = hstack(((1-patient_uptake)*H0_no_vacc, patient_uptake*H0_no_vacc))
 
 '''For this quick sketch we will record maximum critical and maximum empty beds
 as output'''
-
 def compute_death_reduction(p):
+    try:
+        result = _compute_death_reduction(p)
+    except ValueError as err:
+        print('Exception raised for parameters={0}\n\tException: {1}'.format(
+            p, err))
+        return 0.0
+    return result
+
+def _compute_death_reduction(p):
     '''Assume vaccinated staff and agency workers are split evenly
     across vaccinated and unvaccinated homes'''
     SPEC_UNVACC = deepcopy(SPEC)
@@ -193,7 +149,63 @@ def compute_death_reduction(p):
     D_P = H.T.dot(combined_pop.states[:, 5])
     return (D_P_final_no_vacc - D_P[-1]) / D_P_final_no_vacc
 
+
 if __name__ == '__main__':
+    import_array = (1e-5)*ones(2)
+
+    ''' Project baseline outbreak with no vaccination '''
+
+    no_vacc_rhs = SEMCRDRateEquations(
+        model_input,
+        baseline_population,
+        FixedImportModel(6, 2, import_array))
+
+    start_state_list = [(5,0,0,0,0,0,3,0,0,0,0,0,2,0,0,0,0,0),
+                        (3,0,0,0,0,2,3,0,0,0,0,0,2,0,0,0,0,0)]
+    start_state_weightings = [0.5, 0.5]
+
+    H0_no_vacc = simple_initialisation(baseline_population,
+                                       no_vacc_rhs,
+                                       start_state_list,
+                                       start_state_weightings)
+
+
+    ''' Check we have a valid initial condition'''
+    if H0_no_vacc.sum()==1:
+        print('Sucessfully built initial condition')
+    else:
+        print('Failed to build valid initial condition')
+
+    tspan = (0.0, 4*30.0)
+    no_vacc_start = get_time()
+    solution = solve_ivp(no_vacc_rhs, tspan, H0_no_vacc, first_step=0.001, atol=1e-12)
+    no_vacc_end = get_time()
+    print(
+        'Run without vaccination took ',
+        no_vacc_end-no_vacc_start,
+        ' seconds.')
+
+    H_no_vacc = solution.y
+    D_P_no_vacc = H_no_vacc.T.dot(baseline_population.states[:, 5])
+    D_P_final_no_vacc = D_P_no_vacc[-1]
+
+    '''Now create populations with vaccine.'''
+
+    inf_red_range = [0.0, 0.7, 1.0]
+    staff_uptake_range = [0.0, 0.2, 0.4, 0.6, 0.8, 1.0]
+    agency_uptake_range = [0.0, 0.2, 0.4, 0.6, 0.8, 1.0]
+    params = array([
+        [r, s, a]
+        for r in inf_red_range
+        for s in staff_uptake_range
+        for a in agency_uptake_range])
+
+    patient_uptake = 0.9
+
+    H0 = hstack(((1-patient_uptake)*H0_no_vacc, patient_uptake*H0_no_vacc))
+    results = []
+    #for p in params:
+    #    results.append(compute_death_reduction(p))
     with Pool(NO_OF_WORKERS) as pool:
         results = pool.map(compute_death_reduction, params)
 
