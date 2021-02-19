@@ -22,7 +22,7 @@ IMPORT_ARRAY = (1e-5)*ones(2)
 
 # List of observed care home compositions
 composition_list = array(
-    [[5, 3, 2]])
+    [[2, 1, 1]])
 # Proportion of care homes which are in each composition
 comp_dist = array([1.0])
 
@@ -92,9 +92,6 @@ class DeathReductionComputation:
         SPEC_UNVACC['critical_inf_prob'][1] = \
             (p[1] * (1-death_red) + (1-p[1])) \
             * SPEC_UNVACC['critical_inf_prob'][1]
-        SPEC_UNVACC['sus'][1] = \
-            (p[1]  * (1-sus_red) + (1-p[1])) \
-            * SPEC_UNVACC['sus'][1]
         SPEC_UNVACC['mild_trans_scaling'][1] = \
             p[1] \
             * p[0] \
@@ -102,9 +99,6 @@ class DeathReductionComputation:
         SPEC_UNVACC['critical_inf_prob'][2] = \
             (p[2] * (1-death_red) + (1-p[2])) \
             * SPEC_UNVACC['critical_inf_prob'][2]
-        SPEC_UNVACC['sus'][2] = \
-            (p[2]  * (1-sus_red) + (1-p[2])) \
-            * SPEC_UNVACC['sus'][2]
         SPEC_UNVACC['mild_trans_scaling'][2] = \
             p[2] \
             * p[0] \
@@ -114,18 +108,12 @@ class DeathReductionComputation:
         SPEC_VACC_P['critical_inf_prob'][0] = \
             (1-death_red) \
             * SPEC_VACC_P['critical_inf_prob'][0]
-        SPEC_VACC_P['sus'][0] = \
-            (1-sus_red) \
-            * SPEC_VACC_P['sus'][0]
         SPEC_VACC_P['mild_trans_scaling'][0] = \
             p[0] \
             * SPEC_VACC_P['mild_trans_scaling'][0]
         SPEC_VACC_P['critical_inf_prob'][1] = \
             (p[1]  * (1-death_red) + (1-p[1])) \
             * SPEC_VACC_P['critical_inf_prob'][1]
-        SPEC_VACC_P['sus'][1] = \
-            (p[1]  * (1-sus_red) + (1-p[1])) \
-            * SPEC_UNVACC['sus'][1]
         SPEC_VACC_P['mild_trans_scaling'][1] = \
             p[1] \
             * p[0] \
@@ -133,9 +121,6 @@ class DeathReductionComputation:
         SPEC_VACC_P['critical_inf_prob'][2] = \
             (p[2]  * (1-death_red) + (1-p[2])) \
             * SPEC_VACC_P['critical_inf_prob'][2]
-        SPEC_VACC_P['sus'][2] = \
-            (p[2]  * (1-sus_red) + (1-p[2])) \
-            * SPEC_UNVACC['sus'][2]
         SPEC_VACC_P['mild_trans_scaling'][2] = \
             p[2] \
             * p[0] \
@@ -143,6 +128,15 @@ class DeathReductionComputation:
 
         model_input_unvacc = SEMCRDInput(SPEC_UNVACC, composition_list, comp_dist)
         model_input_vacc_P = SEMCRDInput(SPEC_VACC_P, composition_list, comp_dist)
+
+        model_input_unvacc.sus = array([1,
+                                        (1 - p[1]) + (1 - sus_red) * p[1] ,
+                                        (1 - p[2]) + (1 - sus_red) * p[2]]) * \
+                                model_input_unvacc.sus
+        model_input_vacc_P.sus = array([1-sus_red,
+                                        (1 - p[1]) + (1 - sus_red) * p[1] ,
+                                        (1 - p[2]) + (1 - sus_red) * p[2]]) * \
+                                model_input_vacc_P.sus
 
         hh_pop_unvacc = HouseholdPopulation(
             composition_list,
