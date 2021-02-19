@@ -56,16 +56,16 @@ baseline_population = HouseholdPopulation(
 
 '''For this quick sketch we will record maximum critical and maximum empty beds
 as output'''
-def compute_death_reduction_with_exception_handling(p):
+def compute_death_reduction(p):
     try:
-        result = compute_death_reduction(p)
+        result = _compute_death_reduction(p)
     except ValueError as err:
         print('Exception raised for parameters={0}\n\tException: {1}'.format(
             p, err))
         return 0.0
     return result
 
-def compute_death_reduction(p):
+def _compute_death_reduction(p):
     '''Assume vaccinated staff and agency workers are split evenly
     across vaccinated and unvaccinated homes'''
     SPEC_UNVACC = deepcopy(SPEC)
