@@ -81,7 +81,7 @@ class DeathReductionComputation:
         'R_no_vacc': H_no_vacc.T.dot(self.baseline_population.states[:, 4::6]),
         'D_no_vacc': H_no_vacc.T.dot(self.baseline_population.states[:, 5::6])
         }
-        with open('carehome_no_vacc_sol.pkl','wb') as f:
+        with open('carehome_no_vacc_sol_'+str(i_scale)+'.pkl','wb') as f:
             dump((no_vacc_output, self.model_input.ave_hh_by_class),f)
 
         self.H0 = hstack((
