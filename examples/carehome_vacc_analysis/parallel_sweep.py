@@ -18,7 +18,7 @@ SPEC = {**THREE_CLASS_CH_EPI_SPEC,
 sus_red = 0.5
 death_red = 0.9
 PATIENT_UPTAKE = 0.9
-IMPORT_ARRAY = (1e-5)*ones(2)
+IMPORT_ARRAY = (1e-3)*ones(2)
 
 # List of observed care home compositions
 composition_list = array(
@@ -70,6 +70,18 @@ class DeathReductionComputation:
         D_P_no_vacc = H_no_vacc.T.dot(self.baseline_population.states[:, 5])
         self.D_P_final_no_vacc = D_P_no_vacc[-1]
 
+        no_vacc_output ={
+        't': solution.t,
+        'S_no_vacc': H_no_vacc.T.dot(self.baseline_population.states[:, ::6]),
+        'E_no_vacc': H_no_vacc.T.dot(self.baseline_population.states[:, 1::6]),
+        'M_no_vacc': H_no_vacc.T.dot(self.baseline_population.states[:, 2::6]),
+        'C_no_vacc': H_no_vacc.T.dot(self.baseline_population.states[:, 3::6]),
+        'R_no_vacc': H_no_vacc.T.dot(self.baseline_population.states[:, 4::6]),
+        'D_no_vacc': H_no_vacc.T.dot(self.baseline_population.states[:, 5::6])
+        }
+        with open('carehome_no_vacc_sol.pkl','wb') as f:
+            dump((no_vacc_output, self.model_input.ave_hh_by_class),f)
+
         self.H0 = hstack((
             (1-PATIENT_UPTAKE)*H0_no_vacc,
             PATIENT_UPTAKE*H0_no_vacc))
@@ -88,51 +100,47 @@ class DeathReductionComputation:
     def _compute_death_reduction(self, p):
         '''Assume vaccinated staff and agency workers are split evenly
         across vaccinated and unvaccinated homes'''
-        SPEC_UNVACC = deepcopy(SPEC)
-        SPEC_UNVACC['critical_inf_prob'][1] = \
+        model_input_unvacc = deepcopy(self.model_input)
+        model_input_unvacc.crit_prob[1] = \
             (p[1] * (1-death_red) + (1-p[1])) \
-            * SPEC_UNVACC['critical_inf_prob'][1]
-        SPEC_UNVACC['mild_trans_scaling'][1] = \
+            * model_input_unvacc.crit_prob[1]
+        model_input_unvacc.inf_scales[0][1] = \
             p[1] \
             * p[0] \
-            * SPEC_UNVACC['mild_trans_scaling'][1]
-        SPEC_UNVACC['critical_inf_prob'][2] = \
+            * model_input_unvacc.inf_scales[0][1]
+        model_input_unvacc.crit_prob[2] = \
             (p[2] * (1-death_red) + (1-p[2])) \
-            * SPEC_UNVACC['critical_inf_prob'][2]
-        SPEC_UNVACC['mild_trans_scaling'][2] = \
+            * model_input_unvacc.crit_prob[2]
+        model_input_unvacc.inf_scales[0][2] = \
             p[2] \
             * p[0] \
-            * SPEC_UNVACC['mild_trans_scaling'][2]
-
-        SPEC_VACC_P = deepcopy(SPEC)
-        SPEC_VACC_P['critical_inf_prob'][0] = \
-            (1-death_red) \
-            * SPEC_VACC_P['critical_inf_prob'][0]
-        SPEC_VACC_P['mild_trans_scaling'][0] = \
-            p[0] \
-            * SPEC_VACC_P['mild_trans_scaling'][0]
-        SPEC_VACC_P['critical_inf_prob'][1] = \
-            (p[1]  * (1-death_red) + (1-p[1])) \
-            * SPEC_VACC_P['critical_inf_prob'][1]
-        SPEC_VACC_P['mild_trans_scaling'][1] = \
-            p[1] \
-            * p[0] \
-            * SPEC_VACC_P['mild_trans_scaling'][1]
-        SPEC_VACC_P['critical_inf_prob'][2] = \
-            (p[2]  * (1-death_red) + (1-p[2])) \
-            * SPEC_VACC_P['critical_inf_prob'][2]
-        SPEC_VACC_P['mild_trans_scaling'][2] = \
-            p[2] \
-            * p[0] \
-            * SPEC_VACC_P['mild_trans_scaling'][2]
-
-        model_input_unvacc = SEMCRDInput(SPEC_UNVACC, composition_list, comp_dist)
-        model_input_vacc_P = SEMCRDInput(SPEC_VACC_P, composition_list, comp_dist)
-
+            * model_input_unvacc.inf_scales[0][2]
         model_input_unvacc.sus = array([1,
                                         (1 - p[1]) + (1 - sus_red) * p[1] ,
                                         (1 - p[2]) + (1 - sus_red) * p[2]]) * \
                                 model_input_unvacc.sus
+
+        model_input_vacc_P = deepcopy(self.model_input)
+        model_input_unvacc.crit_prob[0] = \
+            (1-death_red) \
+            * model_input_unvacc.crit_prob[0]
+        model_input_vacc_P.inf_scales[0][0] = \
+            p[0] \
+            * model_input_vacc_P.inf_scales[0][0]
+        model_input_vacc_P.crit_prob[1] = \
+            (p[1]  * (1-death_red) + (1-p[1])) \
+            * model_input_vacc_P.crit_prob[1]
+        model_input_vacc_P.inf_scales[0][1] = \
+            p[1] \
+            * p[0] \
+            * model_input_vacc_P.inf_scales[0][1]
+        model_input_vacc_P.crit_prob[2] = \
+            (p[2]  * (1-death_red) + (1-p[2])) \
+            * model_input_vacc_P.crit_prob[2]
+        model_input_vacc_P.inf_scales[0][2] = \
+            p[2] \
+            * p[0] \
+            * model_input_vacc_P.inf_scales[0][2]
         model_input_vacc_P.sus = array([1-sus_red,
                                         (1 - p[1]) + (1 - sus_red) * p[1] ,
                                         (1 - p[2]) + (1 - sus_red) * p[2]]) * \
@@ -212,12 +220,11 @@ if __name__ == '__main__':
         len(staff_uptake_range),
         len(agency_uptake_range))
 
+    print(compute_death_reduction.model_input)
+
     with open('carehome_sweep_data.pkl', 'wb') as f:
         dump(
             (
                 death_reduction_data,
-                params,
-                compute_death_reduction.model_input),
+                params),
             f)
-
-    print(death_reduction_data)
