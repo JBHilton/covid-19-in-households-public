@@ -18,7 +18,7 @@ SPEC = {**THREE_CLASS_CH_EPI_SPEC,
 sus_red = 0.5
 death_red = 0.9
 PATIENT_UPTAKE = 0.9
-IMPORT_ARRAY = (1e-3)*ones(2)
+UNSCALED_IMPORT_ARRAY = array([0,1,1])
 
 # List of observed care home compositions
 composition_list = array(
@@ -32,12 +32,14 @@ class DeathReductionComputation:
 
         self.baseline_population = HouseholdPopulation(
             composition_list, comp_dist, self.model_input)
+
+        self.import_array = import_array
         ''' Project baseline outbreak with no vaccination '''
 
         no_vacc_rhs = SEMCRDRateEquations(
             self.model_input,
             self.baseline_population,
-            FixedImportModel(6, 2, IMPORT_ARRAY))
+            FixedImportModel(6, 2, self.import_array))
 
         # start_state_list = [(5,0,0,0,0,0,3,0,0,0,0,0,2,0,0,0,0,0),
                             # (3,0,0,0,0,2,3,0,0,0,0,0,2,0,0,0,0,0)]
@@ -162,7 +164,7 @@ class DeathReductionComputation:
         rhs = SEMCRDRateEquations(
             self.model_input,
             combined_pop,
-            FixedImportModel(6, 2, IMPORT_ARRAY))
+            FixedImportModel(6, 2, self.import_array))
 
         tspan = (0.0, 4*30.0)
         solution = solve_ivp(rhs, tspan, self.H0, first_step=0.001, atol=1e-12)
@@ -199,32 +201,39 @@ class DeathReductionComputation:
 
 
 if __name__ == '__main__':
-    compute_death_reduction = DeathReductionComputation()
-    results = []
-    inf_red_range = [0.0, 0.7, 1.0]
-    staff_uptake_range = [0.0, 0.2, 0.4, 0.6, 0.8, 1.0]
-    agency_uptake_range = [0.0, 0.2, 0.4, 0.6, 0.8, 1.0]
-    params = array([
-        [r, s, a]
-        for r in inf_red_range
-        for s in staff_uptake_range
-        for a in agency_uptake_range])
-    #for p in params:
-    #    results.append(compute_death_reduction(p))
-    with Pool(NO_OF_WORKERS) as pool:
-        results = pool.map(compute_death_reduction, params)
+
+    import_scale_range = [1e-5, 1e-4, 1e-3]
+
+    for i_scale in import_scale_range:
+
+        import_array = i_scale*UNSCALED_IMPORT_ARRAY
+
+        compute_death_reduction = DeathReductionComputation()
+        results = []
+        inf_red_range = [0.0, 0.7, 1.0]
+        staff_uptake_range = [0.0, 0.2, 0.4, 0.6, 0.8, 1.0]
+        agency_uptake_range = [0.0, 0.2, 0.4, 0.6, 0.8, 1.0]
+        params = array([
+            [r, s, a]
+            for r in inf_red_range
+            for s in staff_uptake_range
+            for a in agency_uptake_range])
+        #for p in params:
+        #    results.append(compute_death_reduction(p))
+        with Pool(NO_OF_WORKERS) as pool:
+            results = pool.map(compute_death_reduction, params)
 
 
-    death_reduction_data = array([r for r in results]).reshape(
-        len(inf_red_range),
-        len(staff_uptake_range),
-        len(agency_uptake_range))
+        death_reduction_data = array([r for r in results]).reshape(
+            len(inf_red_range),
+            len(staff_uptake_range),
+            len(agency_uptake_range))
 
-    print(compute_death_reduction.model_input)
+        with open('carehome_sweep_data_import_scale_'+str(i_scale)+'.pkl', 'wb') as f:
+            dump(
+                (
+                    death_reduction_data,
+                    params),
+                f)
 
-    with open('carehome_sweep_data.pkl', 'wb') as f:
-        dump(
-            (
-                death_reduction_data,
-                params),
-            f)
+        # print(death_reduction_data)

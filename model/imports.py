@@ -41,6 +41,10 @@ class FixedImportModel(ImportModel):
             no_inf_compartments,
             no_age_classes,
             import_array):
+        '''import_arrays should be a list of arrays. The number of arrays is
+        no_inf_compartments and each has length no_age_classes. The jth element of
+        the ith array is the rate at which individuals in age class j are infected
+        by external cases in infectious compartment i.'''
         super().__init__(no_inf_compartments, no_age_classes)
         self.import_array = import_array
 

@@ -685,7 +685,7 @@ def within_household_SEPIRQ(
         array(inf_event_class, dtype=my_int, ndmin=1)
 
 def build_external_import_matrix(
-        household_population, FOI_list):
+        household_population, FOI):
     '''Gets sparse matrices containing rates of external infection in a
     household of a given type'''
 
@@ -698,9 +698,8 @@ def build_external_import_matrix(
 
     Q_ext = sparse(matrix_shape,)
 
-    for FOI in FOI_list:
-        vals = FOI[row, inf_class]
-        Q_ext += sparse((vals, (row, col)), shape = matrix_shape)
+    vals = FOI[row, inf_class]
+    Q_ext += sparse((vals, (row, col)), shape = matrix_shape)
 
     diagonal_idexes = (arange(total_size), arange(total_size))
     S = Q_ext.sum(axis=1).getA().squeeze()
@@ -783,10 +782,10 @@ class RateEquations:
         return dH
 
     def external_matrices(self, t, H):
-        FOI_list = self.get_FOI_by_class(t, H)
+        FOI = self.get_FOI_by_class(t, H)
         return build_external_import_matrix(
             self.household_population,
-            FOI_list)
+            FOI)
 
     def get_FOI_by_class(self, t, H):
         '''This calculates the age-stratified force-of-infection (FOI) on each
@@ -794,7 +793,7 @@ class RateEquations:
         # Average number of each class by household
         denom = H.T.dot(self.composition_by_state)
 
-        FOI_list = []
+        FOI = self.states_sus_only.dot(diag(self.import_model.cases(t)))
 
         for ic in range(self.no_inf_compartments):
             states_inf_only =  self.inf_by_state_list[ic]
@@ -802,12 +801,11 @@ class RateEquations:
             inf_by_class[denom > 0] = (
                 H.T.dot(states_inf_only)[denom > 0]
                 / denom[denom > 0]).squeeze()
-            FOI_list.append(self.states_sus_only.dot(
+            FOI += self.states_sus_only.dot(
                     diag(self.ext_matrix_list[ic].dot(
-                    self.epsilon * inf_by_class.T +
-                    self.import_model.cases(t)[ic]))))
+                    self.epsilon * inf_by_class.T)))
 
-        return FOI_list
+        return FOI
 
 class SIRRateEquations(RateEquations):
     @property
