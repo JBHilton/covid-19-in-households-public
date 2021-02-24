@@ -107,15 +107,13 @@ class DeathReductionComputation:
             (p[1] * (1-death_red) + (1-p[1])) \
             * model_input_unvacc.crit_prob[1]
         model_input_unvacc.inf_scales[0][1] = \
-            p[1] \
-            * p[0] \
+            p[0] \
             * model_input_unvacc.inf_scales[0][1]
         model_input_unvacc.crit_prob[2] = \
             (p[2] * (1-death_red) + (1-p[2])) \
             * model_input_unvacc.crit_prob[2]
         model_input_unvacc.inf_scales[0][2] = \
-            p[2] \
-            * p[0] \
+            p[0] \
             * model_input_unvacc.inf_scales[0][2]
         model_input_unvacc.sus = array([1,
                                         (1 - p[1]) + (1 - sus_red) * p[1] ,
@@ -133,15 +131,13 @@ class DeathReductionComputation:
             (p[1]  * (1-death_red) + (1-p[1])) \
             * model_input_vacc_P.crit_prob[1]
         model_input_vacc_P.inf_scales[0][1] = \
-            p[1] \
-            * p[0] \
+            p[0] \
             * model_input_vacc_P.inf_scales[0][1]
         model_input_vacc_P.crit_prob[2] = \
             (p[2]  * (1-death_red) + (1-p[2])) \
             * model_input_vacc_P.crit_prob[2]
         model_input_vacc_P.inf_scales[0][2] = \
-            p[2] \
-            * p[0] \
+            p[0] \
             * model_input_vacc_P.inf_scales[0][2]
         model_input_vacc_P.sus = array([1-sus_red,
                                         (1 - p[1]) + (1 - sus_red) * p[1] ,
@@ -204,7 +200,7 @@ def main(i_scale, no_of_workers):
 
     compute_death_reduction = DeathReductionComputation()
     results = []
-    inf_red_range = [0.0, 0.7, 1.0]
+    inf_red_range = [0.7, 1.0]
     staff_uptake_range = [0.0, 0.2, 0.4, 0.6, 0.8, 1.0]
     agency_uptake_range = [0.0, 0.2, 0.4, 0.6, 0.8, 1.0]
     params = array([
