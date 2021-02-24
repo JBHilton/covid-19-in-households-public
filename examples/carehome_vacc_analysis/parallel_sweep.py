@@ -1,5 +1,6 @@
 '''This sets up and runs a single solve of the care homes vaccine model'''
 from copy import deepcopy
+from argparse import ArgumentParser
 from numpy import array, hstack, ones, meshgrid, stack, zeros
 from time import time as get_time
 from scipy.integrate import solve_ivp
@@ -11,7 +12,6 @@ from pickle import dump
 from multiprocessing import Pool
 # pylint: disable=invalid-name
 
-NO_OF_WORKERS = 2
 SPEC = {**THREE_CLASS_CH_EPI_SPEC,
         **THREE_CLASS_CH_SPEC}
 
@@ -22,7 +22,7 @@ UNSCALED_IMPORT_ARRAY = array([0,1,1])
 
 # List of observed care home compositions
 composition_list = array(
-    [[2, 1, 1]])
+    [[5, 3, 2]])
 # Proportion of care homes which are in each composition
 comp_dist = array([1.0])
 
@@ -41,10 +41,10 @@ class DeathReductionComputation:
             self.baseline_population,
             FixedImportModel(6, 2, self.import_array))
 
-        # start_state_list = [(5,0,0,0,0,0,3,0,0,0,0,0,2,0,0,0,0,0),
-                            # (3,0,0,0,0,2,3,0,0,0,0,0,2,0,0,0,0,0)]
-        start_state_list = [(2,0,0,0,0,0,1,0,0,0,0,0,1,0,0,0,0,0),
-                            (1,0,0,0,0,1,1,0,0,0,0,0,1,0,0,0,0,0)]
+        start_state_list = [(5,0,0,0,0,0,3,0,0,0,0,0,2,0,0,0,0,0),
+                            (3,0,0,0,0,2,3,0,0,0,0,0,2,0,0,0,0,0)]
+        # start_state_list = [(2,0,0,0,0,0,1,0,0,0,0,0,1,0,0,0,0,0),
+        #                    (1,0,0,0,0,1,1,0,0,0,0,0,1,0,0,0,0,0)]
         start_state_weightings = [0.5, 0.5]
 
         H0_no_vacc = simple_initialisation(
@@ -199,41 +199,44 @@ class DeathReductionComputation:
 # H0_no_vacc = solution.y[:,-1]
 # H0 = hstack((solution.y[:,-1], solution.y[:,-1]))
 
+def main(i_scale, no_of_workers):
+    import_array = i_scale*UNSCALED_IMPORT_ARRAY
+
+    compute_death_reduction = DeathReductionComputation()
+    results = []
+    inf_red_range = [0.0, 0.7, 1.0]
+    staff_uptake_range = [0.0, 0.2, 0.4, 0.6, 0.8, 1.0]
+    agency_uptake_range = [0.0, 0.2, 0.4, 0.6, 0.8, 1.0]
+    params = array([
+        [r, s, a]
+        for r in inf_red_range
+        for s in staff_uptake_range
+        for a in agency_uptake_range])
+    #for p in params:
+    #    results.append(compute_death_reduction(p))
+    with Pool(no_of_workers) as pool:
+        results = pool.map(compute_death_reduction, params)
+
+
+    death_reduction_data = array([r for r in results]).reshape(
+        len(inf_red_range),
+        len(staff_uptake_range),
+        len(agency_uptake_range))
+
+    with open('carehome_sweep_data_import_scale_'+str(i_scale)+'.pkl', 'wb') as f:
+        dump(
+            (
+                death_reduction_data,
+                params),
+            f)
+
+    print(death_reduction_data)
+    return -1
 
 if __name__ == '__main__':
+    parser = ArgumentParser()
+    parser.add_argument('i_scale', type=float)
+    parser.add_argument('--no_of_workers', type=int, default=2)
+    args = parser.parse_args()
 
-    import_scale_range = [1e-5, 1e-4, 1e-3]
-
-    for i_scale in import_scale_range:
-
-        import_array = i_scale*UNSCALED_IMPORT_ARRAY
-
-        compute_death_reduction = DeathReductionComputation()
-        results = []
-        inf_red_range = [0.0, 0.7, 1.0]
-        staff_uptake_range = [0.0, 0.2, 0.4, 0.6, 0.8, 1.0]
-        agency_uptake_range = [0.0, 0.2, 0.4, 0.6, 0.8, 1.0]
-        params = array([
-            [r, s, a]
-            for r in inf_red_range
-            for s in staff_uptake_range
-            for a in agency_uptake_range])
-        #for p in params:
-        #    results.append(compute_death_reduction(p))
-        with Pool(NO_OF_WORKERS) as pool:
-            results = pool.map(compute_death_reduction, params)
-
-
-        death_reduction_data = array([r for r in results]).reshape(
-            len(inf_red_range),
-            len(staff_uptake_range),
-            len(agency_uptake_range))
-
-        with open('carehome_sweep_data_import_scale_'+str(i_scale)+'.pkl', 'wb') as f:
-            dump(
-                (
-                    death_reduction_data,
-                    params),
-                f)
-
-        # print(death_reduction_data)
+    main(args.i_scale, args.no_of_workers)
