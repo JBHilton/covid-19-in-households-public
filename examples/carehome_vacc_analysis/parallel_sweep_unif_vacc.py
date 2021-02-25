@@ -175,7 +175,7 @@ def main(i_scale, no_of_workers):
 
     compute_death_reduction = DeathReductionComputation()
     results = []
-    inf_red_range = [0.5]
+    inf_red_range = [0.6, 0]
     staff_uptake_range = [0.0, 0.2, 0.4, 0.6, 0.8, 1.0]
     agency_uptake_range = [0.0, 0.2, 0.4, 0.6, 0.8, 1.0]
     params = array([
