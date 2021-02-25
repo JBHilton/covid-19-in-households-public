@@ -20,20 +20,35 @@ death_red = 0.5
 PATIENT_UPTAKE = 0.9
 UNSCALED_IMPORT_ARRAY = array([0,1,1])
 
-# List of observed care home compositions
-composition_list = array(
-    [[2, 1, 1]])
+scenario2composition = {
+    0: array([[2, 1, 1]]),
+    1: array([[5, 3, 2]])}
+
+scenario2start_state = {
+    0: [
+        (2,0,0,0,0,0,1,0,0,0,0,0,1,0,0,0,0,0),
+        (1,0,0,0,0,1,1,0,0,0,0,0,1,0,0,0,0,0)],
+    1: [
+        (5,0,0,0,0,0,3,0,0,0,0,0,2,0,0,0,0,0),
+        (3,0,0,0,0,2,3,0,0,0,0,0,2,0,0,0,0,0)]}
+# start_state_list = [(2,0,0,0,0,0,1,0,0,0,0,0,1,0,0,0,0,0),
+#                    (1,0,0,0,0,1,1,0,0,0,0,0,1,0,0,0,0,0)]
+# start_state_list = [(2,0,0,0,0,0,1,0,0,0,0,0,1,0,0,0,0,0),
+#                    (1,0,0,0,0,1,1,0,0,0,0,0,1,0,0,0,0,0)]
 # Proportion of care homes which are in each composition
 comp_dist = array([1.0])
 
 class DeathReductionComputation:
-    def __init__(self):
-        self.model_input = SEMCRDInput(SPEC, composition_list, comp_dist)
+    def __init__(self, i_scale, scenario):
+        self.model_input = SEMCRDInput(
+            SPEC, scenario2composition[scenario], comp_dist)
 
         self.baseline_population = HouseholdPopulation(
-            composition_list, comp_dist, self.model_input)
+            self.model_input.composition_list,
+            comp_dist,
+            self.model_input)
 
-        self.import_array = import_array
+        self.import_array = i_scale*UNSCALED_IMPORT_ARRAY
         ''' Project baseline outbreak with no vaccination '''
 
         no_vacc_rhs = SEMCRDRateEquations(
@@ -41,10 +56,8 @@ class DeathReductionComputation:
             self.baseline_population,
             FixedImportModel(6, 2, self.import_array))
 
-        start_state_list = [(2,0,0,0,0,0,1,0,0,0,0,0,1,0,0,0,0,0),
-                            (1,0,0,0,0,1,1,0,0,0,0,0,1,0,0,0,0,0)]
-        # start_state_list = [(2,0,0,0,0,0,1,0,0,0,0,0,1,0,0,0,0,0),
-        #                    (1,0,0,0,0,1,1,0,0,0,0,0,1,0,0,0,0,0)]
+        start_state_list = scenario2start_state[scenario]
+
         start_state_weightings = [0.5, 0.5]
 
         H0_no_vacc = simple_initialisation(
@@ -81,7 +94,8 @@ class DeathReductionComputation:
         'R_no_vacc': H_no_vacc.T.dot(self.baseline_population.states[:, 4::6]),
         'D_no_vacc': H_no_vacc.T.dot(self.baseline_population.states[:, 5::6])
         }
-        with open('carehome_no_vacc_sol_'+str(i_scale)+'.pkl','wb') as f:
+        fname = 'carehome_no_vacc_sol_{0:f}_s{1:d}.pkl'
+        with open(fname.format(i_scale, scenario),'wb') as f:
             dump((no_vacc_output, self.model_input.ave_hh_by_class),f)
 
         self.H0 = hstack((
@@ -128,12 +142,12 @@ class DeathReductionComputation:
                                 model_input_vacc.sus
 
         hh_pop_vacc = HouseholdPopulation(
-            composition_list,
+            self.model_input.composition_list,
             comp_dist,
             model_input_vacc)
 
         rhs = SEMCRDRateEquations(
-            self.model_input_vacc,
+            model_input_vacc,
             hh_pop_vacc,
             FixedImportModel(6, 2, self.import_array))
 
@@ -170,12 +184,11 @@ class DeathReductionComputation:
 # H0_no_vacc = solution.y[:,-1]
 # H0 = hstack((solution.y[:,-1], solution.y[:,-1]))
 
-def main(i_scale, no_of_workers):
-    import_array = i_scale*UNSCALED_IMPORT_ARRAY
-
-    compute_death_reduction = DeathReductionComputation()
+def main(i_scale, no_of_workers, scenario):
+    compute_death_reduction = DeathReductionComputation(
+        i_scale, scenario)
     results = []
-    inf_red_range = [0.6, 0]
+    inf_red_range = [0.6, 0.0]
     staff_uptake_range = [0.0, 0.2, 0.4, 0.6, 0.8, 1.0]
     agency_uptake_range = [0.0, 0.2, 0.4, 0.6, 0.8, 1.0]
     params = array([
@@ -194,7 +207,8 @@ def main(i_scale, no_of_workers):
         len(staff_uptake_range),
         len(agency_uptake_range))
 
-    with open('carehome_sweep_data_import_scale_'+str(i_scale)+'.pkl', 'wb') as f:
+    fname = 'carehome_sweep_data_import_scale_{0:f}_s{1:d}.pkl'
+    with open(fname.format(i_scale, scenario), 'wb') as f:
         dump(
             (
                 death_reduction_data,
@@ -208,6 +222,7 @@ if __name__ == '__main__':
     parser = ArgumentParser()
     parser.add_argument('i_scale', type=float)
     parser.add_argument('--no_of_workers', type=int, default=2)
+    parser.add_argument('--scenario', type=int, default=0)
     args = parser.parse_args()
 
-    main(args.i_scale, args.no_of_workers)
+    main(args.i_scale, args.no_of_workers, args.scenario)
