@@ -98,9 +98,7 @@ class DeathReductionComputation:
         with open(fname.format(i_scale, scenario),'wb') as f:
             dump((no_vacc_output, self.model_input.ave_hh_by_class),f)
 
-        self.H0 = hstack((
-            (1-PATIENT_UPTAKE)*H0_no_vacc,
-            PATIENT_UPTAKE*H0_no_vacc))
+        self.H0 = H0_no_vacc
 
     '''For this quick sketch we will record maximum critical and maximum empty beds
     as output'''
@@ -188,7 +186,7 @@ def main(i_scale, no_of_workers, scenario):
     compute_death_reduction = DeathReductionComputation(
         i_scale, scenario)
     results = []
-    inf_red_range = [0.6, 0.0]
+    inf_red_range = [0.6]
     staff_uptake_range = [0.0, 0.2, 0.4, 0.6, 0.8, 1.0]
     agency_uptake_range = [0.0, 0.2, 0.4, 0.6, 0.8, 1.0]
     params = array([
