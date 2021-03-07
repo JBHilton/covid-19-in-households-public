@@ -28,7 +28,7 @@ class ImportModel(ABC):
 
 class NoImportModel(ImportModel):
     def cases(self, t):
-        return zeros(self.no_entries,)
+        return zeros(self.no_age_classes,)
 
     @classmethod
     def make_from_spec(cls, spec, det):

@@ -12,19 +12,19 @@ from time import time as get_time
 from scipy.integrate import solve_ivp
 from matplotlib.pyplot import subplots
 from matplotlib.cm import get_cmap
-from model.preprocessing import TwoAgeWithVulnerableInput, HouseholdPopulation
-from model.preprocessing import add_vulnerable_hh_members, make_initial_SEPIRQ_condition
-from model.common import SEPIRQRateEquations, within_household_SEPIRQ
-from model.imports import ( FixedImportModel)
-from model.specs import SEPIRQ_SPEC
-from examples.mixing_sweep.common import (SEPIR_SPEC, SEPIRInput, DataObject,
-make_initial_condition_with_recovereds, within_household_SEPIR, RateEquations)
+from model.preprocessing import (
+        SEPIRInput, HouseholdPopulation, make_initial_condition_with_recovereds)
+from model.specs import TWO_AGE_SEPIR_SPEC, TWO_AGE_UK_SPEC
+from model.common import SEPIRRateEquations
+from model.imports import FixedImportModel
+
+IMPORT_ARRAY = array([1e-5, 1e-5])
 
 class DataObject(): # Very hacky way to store output
     def __init__(self,thing):
         self.thing = thing
 
-basic_spec = SEPIR_SPEC
+basic_spec = {**TWO_AGE_SEPIR_SPEC, **TWO_AGE_UK_SPEC}
 print('Approx R_int is', -log(1-basic_spec['AR']))
 # List of observed household compositions
 composition_list = read_csv(
@@ -42,10 +42,13 @@ AR=1.0 # Starting attack ratio - visited households are fully recovered
 # internal_mix_range = array([0.0,0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8,0.9])
 # external_mix_range = array([0.0,0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8,0.9])
 
-AR_range = array([0.15,0.3,0.45])
+AR_range = array([0.3, 0.45, 0.6])
 
 internal_mix_range = arange(0.0,1.0,0.25)
 external_mix_range = arange(0.0,1.0,0.25)
+
+internal_mix_range = array([0.2,0.6])
+external_mix_range = array([0.2,0.6])
 
 AR_len = len(AR_range)
 internal_mix_len = len(internal_mix_range)
@@ -68,14 +71,14 @@ for i in range(AR_len):
 
             iter_start = get_time()
 
-            model_input = SEPIRInput(spec)
+            model_input = SEPIRInput(spec, composition_list, comp_dist)
             model_input.k_home = (1-internal_mix_range[j]) * model_input.k_home
             model_input.k_ext = (1-external_mix_range[k]) * model_input.k_ext
 
             household_population = HouseholdPopulation(
-                composition_list, comp_dist, model_input, within_household_SEPIR,5,True)
+                composition_list, comp_dist, model_input)
 
-            rhs = RateEquations(model_input, household_population)
+            rhs = SEPIRRateEquations(model_input, household_population, FixedImportModel(6, 2, IMPORT_ARRAY))
 
             H0 = make_initial_condition_with_recovereds(household_population, rhs, prev, antibody_prev, AR)
 
@@ -93,8 +96,8 @@ for i in range(AR_len):
             results.I = (results.H.T.dot(household_population.states[:, 3::5])).sum(axis=1)/ave_hh_size
             results.R = (results.H.T.dot(household_population.states[:, 4::5])).sum(axis=1)/ave_hh_size
 
-            print(max(results.I))
-            print(results.R[-1])
+            # print(max(results.I))
+            # print(results.R[-1])
 
             with open(filename + '.pkl', 'wb') as f:
                 dump((AR_range[i], household_population, results),
