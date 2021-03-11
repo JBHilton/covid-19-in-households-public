@@ -39,7 +39,7 @@ rhs = SEPIRRateEquations(model_input, household_population, NoImportModel(5,2))
 H0 = make_initial_condition(household_population, rhs)
 
 tspan = (0.0, 365)
-solution = solve_ivp(rhs, tspan, H0, first_step=0.001)
+solution = solve_ivp(rhs, tspan, H0, first_step=0.001, atol=1e-16)
 
 time = solution.t
 H = solution.y
