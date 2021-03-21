@@ -496,6 +496,35 @@ class SEPIRInput(ModelInput):
         super().__init__(spec, composition_list, composition_distribution)
 
         self.sus = spec['sus']
+
+        home_eig = max(eig(
+            self.sus * ((1/spec['recovery_rate']) *
+             (self.k_home))
+            )[0])
+        ext_eig = max(eig(
+            self.sus * ((1/spec['recovery_rate']) *
+             (self.k_ext))
+            )[0])
+
+        R_int = - log(1 - spec['AR']) * self.dens_adj_ave_hh_size
+
+        self.k_home = R_int * self.k_home / home_eig
+        external_scale = spec['R*']/(self.ave_hh_size*spec['AR'])
+        self.k_ext = external_scale * self.k_ext / ext_eig
+
+    @property
+    def alpha(self):
+        return self.spec['incubation_rate']
+
+    @property
+    def gamma(self):
+        return self.spec['recovery_rate']
+
+class SEPIRInput(ModelInput):
+    def __init__(self, spec, composition_list, composition_distribution):
+        super().__init__(spec, composition_list, composition_distribution)
+
+        self.sus = spec['sus']
         self.inf_scales = [spec['prodromal_trans_scaling'],
                 ones(shape(spec['prodromal_trans_scaling']))]
 

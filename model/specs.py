@@ -24,6 +24,40 @@ TWO_AGE_SEPIR_SPEC = {
     'density_expo' : 0.5, # "Cauchemez parameter"
 }
 
+SINGLE_AGE_SEIR_SPEC = {
+    'compartmental_structure': 'SEIR', # This is which subsystem key to use
+    'AR': 0.45,                     # Secondary attack probability
+    'R*': 1.1,                      # Household-level reproduction number
+    'recovery_rate': 1/7,           # Recovery rate
+    'incubation_rate': 1/5,         # E->I incubation rate
+    'sus': array([1]),          # Relative susceptibility by age/vulnerability class
+    'density_expo' : 0.5, # "Cauchemez parameter"
+}
+
+TWO_AGE_SEIR_SPEC = {
+    'compartmental_structure': 'SEIR', # This is which subsystem key to use
+    'AR': 0.45,                     # Secondary attack probability
+    'R*': 1.1,                      # Household-level reproduction number
+    'recovery_rate': 1/7,           # Recovery rate
+    'incubation_rate': 1/5,         # E->I incubation rate
+    'sus': array([1,1]),          # Relative susceptibility by age/vulnerability class
+    'density_expo' : 0.5, # "Cauchemez parameter"
+}
+
+SINGLE_AGE_UK_SPEC = {
+    'k_home': {                                                 # File location for UK within-household contact matrix
+        'file_name': 'inputs/MUestimates_home_2.xlsx',
+        'sheet_name':'United Kingdom of Great Britain'
+    },
+    'k_all': {                                                  # File location for UK pop-level contact matrix
+        'file_name': 'inputs/MUestimates_all_locations_2.xlsx',
+        'sheet_name': 'United Kingdom of Great Britain'
+    },
+    'pop_pyramid_file_name': 'inputs/United Kingdom-2019.csv',   # File location for UK age pyramid
+    'fine_bds' : arange(0,81,5),                                # Boundaries used in pyramid/contact data
+    'coarse_bds' : array([0])                                # Desired boundaries for model population
+}
+
 TWO_AGE_UK_SPEC = {
     'k_home': {                                                 # File location for UK within-household contact matrix
         'file_name': 'inputs/MUestimates_home_2.xlsx',

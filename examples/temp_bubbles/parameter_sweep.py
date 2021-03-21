@@ -4,9 +4,13 @@ from pickle import load, dump
 from pandas import read_csv
 from scipy.integrate import solve_ivp
 from time import time
+from model.preprocessing import (
+        SEIRInput, HouseholdPopulation, make_initial_condition)
+from model.specs import SINGLE_AGE_UK_SPEC, SINGLE_AGE_SEIR_SPEC
+from model.common import SEIRRateEquations
+from model.imports import NoImportModel
 from examples.temp_bubbles.common import (
         DataObject,
-        SINGLE_AGE_CLASS_SEIR_SPEC,
         SingleClassSEIRInput,
         MergedSEIRInput,
         demerged_initial_condition,
