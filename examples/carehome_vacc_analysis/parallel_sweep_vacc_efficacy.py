@@ -15,7 +15,6 @@ from multiprocessing import Pool
 SPEC = {**THREE_CLASS_CH_EPI_SPEC,
         **THREE_CLASS_CH_SPEC}
 
-sus_red = 1.0
 death_red = 0.5
 PATIENT_UPTAKE = 0.9
 STAFF_UPTAKE = 0.8
@@ -85,7 +84,7 @@ class DetermineCriticality:
             start_state_weightings)
 
         ''' Check we have a valid initial condition'''
-        if H0_no_vacc.sum()==1:
+        if abs(H0_no_vacc.sum() - 1) < 1e-6:
             print('Sucessfully built initial condition')
         else:
             print('Failed to build valid initial condition, sum(H0=)',H0_no_vacc.sum())
@@ -112,31 +111,30 @@ class DetermineCriticality:
 
         self.model_input = SEMCRDInput(
             this_spec, scenario2composition[self.scenario], comp_dist)
-        print('Did model input with p=',p)
 
         model_input_vacc = deepcopy(self.model_input)
         model_input_vacc.crit_prob[0] = \
-            (PATIENT_UPTAKE*(1-death_red) + (1-PATIENT_UPTAKE)) \
+            ((1-PATIENT_UPTAKE)) \
             * model_input_vacc.crit_prob[0]
         model_input_vacc.inf_scales[0][0] = \
-            p[1] \
+            (1-p[1]) \
             * model_input_vacc.inf_scales[0][0]
         model_input_vacc.crit_prob[1] = \
-            (STAFF_UPTAKE  * (1-death_red) + (1-STAFF_UPTAKE)) \
+            ((1-STAFF_UPTAKE)) \
             * model_input_vacc.crit_prob[1]
         model_input_vacc.inf_scales[0][1] = \
-            p[2] \
+            (1-p[2]) \
             * model_input_vacc.inf_scales[0][1]
         model_input_vacc.crit_prob[2] = \
-            (STAFF_UPTAKE  * (1-death_red) + (1-STAFF_UPTAKE)) \
+            ((1-STAFF_UPTAKE)) \
             * model_input_vacc.crit_prob[2]
         model_input_vacc.inf_scales[0][2] = \
-            p[2] \
+            (1-p[2]) \
             * model_input_vacc.inf_scales[0][2]
-        model_input_vacc.sus = array([(1-PATIENT_UPTAKE) + (1-p[1]) * PATIENT_UPTAKE,
-                                        (1 - STAFF_UPTAKE) + (1 - p[2]) * STAFF_UPTAKE ,
-                                        (1 - STAFF_UPTAKE) + (1 - p[2]) * STAFF_UPTAKE]) * \
-                                model_input_vacc.sus
+        # model_input_vacc.sus = array([(1-PATIENT_UPTAKE),
+        #                                 (1 - STAFF_UPTAKE),
+        #                                 (1 - STAFF_UPTAKE)]) * \
+        #                         model_input_vacc.sus
 
         hh_pop_vacc = HouseholdPopulation(
             self.model_input.composition_list,
@@ -148,14 +146,14 @@ class DetermineCriticality:
             hh_pop_vacc,
             NoImportModel(6, 3))
 
-        tspan = (0.0, 1.0)
+        tspan = (0.0, 30.0)
         solution = solve_ivp(rhs, tspan, self.H0, first_step=0.001, atol=1e-12)
 
         H = solution.y
         S = H.T.dot(hh_pop_vacc.states[:, 0]) + \
             H.T.dot(hh_pop_vacc.states[:, 6]) + \
             H.T.dot(hh_pop_vacc.states[:, 12])
-        return (S[0] - S[-1])/S[0]
+        return (S[0] - S[-1])
 
 
 
@@ -187,8 +185,8 @@ def main(no_of_workers, scenario):
     criticality = DetermineCriticality(scenario)
     results = []
     waifw_scale_range = [0.1, 1.0, 10.0]
-    patient_eff_range = [0.0, 0.5, 1.0]
-    staff_eff_range = [0.0, 0.5, 1.0]
+    patient_eff_range = [0.0, 0.2, 0.4, 0.6, 0.8, 1.0]
+    staff_eff_range = [0.0, 0.2, 0.4, 0.6, 0.8, 1.0]
     params = array([
         [b, p, s]
         for b in waifw_scale_range
