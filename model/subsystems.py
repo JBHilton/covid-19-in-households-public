@@ -331,7 +331,9 @@ def _sir_subsystem(self, household_spec):
         states,
         array(inf_event_row, dtype=my_int, ndmin=1),
         array(inf_event_col, dtype=my_int, ndmin=1),
-        array(inf_event_class, dtype=my_int, ndmin=1)))
+        array(inf_event_class, dtype=my_int, ndmin=1),
+        reverse_prod,
+        index_vector))
 
 def _seir_subsystem(self, household_spec):
     '''This function processes a composition to create subsystems i.e.
@@ -417,7 +419,9 @@ def _seir_subsystem(self, household_spec):
         states,
         array(inf_event_row, dtype=my_int, ndmin=1),
         array(inf_event_col, dtype=my_int, ndmin=1),
-        array(inf_event_class, dtype=my_int, ndmin=1)))
+        array(inf_event_class, dtype=my_int, ndmin=1),
+        reverse_prod,
+        index_vector))
 
 def _sepir_subsystem(self, household_spec):
     '''This function processes a composition to create subsystems i.e.
@@ -517,7 +521,9 @@ def _sepir_subsystem(self, household_spec):
         states,
         array(inf_event_row, dtype=my_int, ndmin=1),
         array(inf_event_col, dtype=my_int, ndmin=1),
-        array(inf_event_class, dtype=my_int, ndmin=1)))
+        array(inf_event_class, dtype=my_int, ndmin=1),
+        reverse_prod,
+        index_vector))
 
 
 def _sedur_subsystem(self, household_spec):
@@ -630,7 +636,9 @@ def _sedur_subsystem(self, household_spec):
         states,
         array(inf_event_row, dtype=my_int, ndmin=1),
         array(inf_event_col, dtype=my_int, ndmin=1),
-        array(inf_event_class, dtype=my_int, ndmin=1)))
+        array(inf_event_class, dtype=my_int, ndmin=1),
+        reverse_prod,
+        index_vector))
 
 
 ''' Entries in the subsystem key are in the following order: 1, list of cont

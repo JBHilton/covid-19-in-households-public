@@ -11,23 +11,22 @@ from model.common import SEIRRateEquations
 from model.imports import NoImportModel
 from examples.temp_bubbles.common import (
         DataObject,
-        SingleClassSEIRInput,
         MergedSEIRInput,
         demerged_initial_condition,
         build_mixed_compositions_pairwise,
         pairwise_merged_initial_condition,
         pairwise_demerged_initial_condition,
         make_initial_condition_with_recovereds,
-        SEIRHouseholdPopulation,
-        SEIRRateEquations,
         match_merged_states_to_unmerged,
         build_mixed_compositions_threewise,
         initialise_merged_system_threewise)
 
+SPEC = {**SINGLE_AGE_UK_SPEC, **SINGLE_AGE_SEIR_SPEC}
+
 comp_dist = read_csv(
     'inputs/england_hh_size_dist.csv',
     header=0).to_numpy().squeeze()
-comp_dist = comp_dist[:6]
+comp_dist = comp_dist[:4]
 comp_dist = comp_dist/sum(comp_dist)
 max_hh_size = len(comp_dist)
 composition_list = atleast_2d(arange(1, max_hh_size+1)).T
@@ -43,7 +42,7 @@ else:
     merged_comp_list_2, merged_comp_dist_2, hh_dimension, pairings_2 = \
       build_mixed_compositions_pairwise(composition_list, comp_dist)
     merged_comp_list_3, merged_comp_dist_3, hh_dimension, pairings_3 = \
-      build_mixed_compositions_threewise(composition_list, comp_dist, 12)
+      build_mixed_compositions_threewise(composition_list, comp_dist, 10)
 
     with open('threewise_merge_comps.pkl', 'wb') as f:
         dump((merged_comp_list_2, merged_comp_dist_2, pairings_2, merged_comp_list_3,
@@ -57,8 +56,8 @@ else:
 hh_to_merge = 3 # Number of households we merge
 mixing_strength = 1 # This is left over from an earlier formulation, just keep it at 1
 
-unmerged_expo_range = array([0,0.25,0.5,0.75,1])
-merged_expo_range = array([0,0.25,0.5,0.75,1])
+unmerged_expo_range = array([0.0, 0.25, 0.5, 0.75, 1.0])
+merged_expo_range = array([0.0, 0.25, 0.5, 0.75, 1.0])
 
 unmerged_expo_len = len(unmerged_expo_range)
 merged_expo_len = len(merged_expo_range)
@@ -172,19 +171,19 @@ for i in range(unmerged_expo_len):
 
     filename_stem = 'sweep_results_' + str(i)
 
-    unmerged_input = SingleClassSEIRInput(SINGLE_AGE_CLASS_SEIR_SPEC)
+    unmerged_input = SEIRInput(SPEC, composition_list, comp_dist)
 
     unmerged_input.density_expo = unmerged_expo_range[i]
 
     unmerged_input.k_home = (ave_hh_size ** unmerged_expo_range[i]) * unmerged_input.k_home
 
-    unmerged_population = SEIRHouseholdPopulation(
+    unmerged_population = HouseholdPopulation(
        composition_list,
        comp_dist,
        unmerged_input,
        True)
 
-    rhs_unmerged = SEIRRateEquations(unmerged_input, unmerged_population)
+    rhs_unmerged = SEIRRateEquations(unmerged_input, unmerged_population, NoImportModel(4,1))
 
     H0 = make_initial_condition_with_recovereds(unmerged_population, rhs_unmerged)
     tspan = (t0, merge_start)
@@ -220,21 +219,22 @@ for i in range(unmerged_expo_len):
 
         filename = filename_stem + str(j)
 
-        merged_input2 = MergedSEIRInput(SINGLE_AGE_CLASS_SEIR_SPEC,2,1)
+        merged_input2 = MergedSEIRInput(
+                        SPEC, composition_list, comp_dist, 2, 1)
         merged_input2.density_expo = merged_expo_range[j]
         merged_input2.k_home = (ave_hh_size ** unmerged_expo_range[i]) * merged_input2.k_home
-        merged_population2 = SEIRHouseholdPopulation(
+        merged_population2 = HouseholdPopulation(
           merged_comp_list_2,
           merged_comp_dist_2,
           merged_input2,
           True)
-        rhs_merged2 = SEIRRateEquations(merged_input2, merged_population2)
+        rhs_merged2 = SEIRRateEquations(merged_input2, merged_population2, NoImportModel(4, 2))
 
         merged_input3 = MergedSEIRInput(
-            SINGLE_AGE_CLASS_SEIR_SPEC, 3, 1)
+            SPEC, composition_list, comp_dist, 3, 1)
         merged_input3.density_expo = merged_expo_range[j]
         merged_input3.k_home = (ave_hh_size ** unmerged_expo_range[i]) * merged_input3.k_home
-        merged_population3 = SEIRHouseholdPopulation(
+        merged_population3 = HouseholdPopulation(
           merged_comp_list_3,
           merged_comp_dist_3,
           merged_input3,
@@ -247,7 +247,7 @@ for i in range(unmerged_expo_len):
                 hh_to_merge,
                 4)
 
-        rhs_merged3 = SEIRRateEquations(merged_input3, merged_population3)
+        rhs_merged3 = SEIRRateEquations(merged_input3, merged_population3, NoImportModel(4, 3))
 
         merge_results = DataObject(0) # This is just a class I made up to store the results - very hacky!
 

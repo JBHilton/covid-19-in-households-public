@@ -15,7 +15,6 @@ from multiprocessing import Pool
 SPEC = {**THREE_CLASS_CH_EPI_SPEC,
         **THREE_CLASS_CH_SPEC}
 
-death_red = 0.5
 PATIENT_UPTAKE = 0.9
 STAFF_UPTAKE = 0.8
 

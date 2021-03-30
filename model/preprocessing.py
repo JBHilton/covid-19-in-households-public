@@ -314,15 +314,6 @@ class HouseholdPopulation(ABC):
         self.num_of_epidemiological_compartments = subsystem_key[self.compartmental_structure][1]
         self.model_input = model_input
 
-        # If the compositions include household size at the beginning, we
-        # throw it away here. While we would expect to see some households
-        # with equal numbers in age class 1 and all others combined, we should
-        # not see it everywhere and so this is a safe way to check.
-        # condition = max(abs(
-        #    composition_list[:, 0] - composition_list[:, 1:].sum(axis=1)))
-        # if condition == 0:
-        #    composition_list = composition_list[:, 1:]
-
         # TODO: what if composition is given as list?
         self.no_compositions, self.no_risk_groups = composition_list.shape
 
@@ -363,7 +354,6 @@ class HouseholdPopulation(ABC):
         self.states = zeros((
             total_size,
             self.num_of_epidemiological_compartments * self.no_risk_groups))
-        # self.states = concatenate([part[1] for part in model_parts])
         for i, part in enumerate(model_parts):
             class_list = household_subsystem_specs[i].class_indexes
             for j in range(len(class_list)):
@@ -383,6 +373,8 @@ class HouseholdPopulation(ABC):
             part[3] + self.offsets[i]
             for i, part in enumerate(model_parts)])
         self.inf_event_class = concatenate([part[4] for part in model_parts])
+        self.reverse_prod = [part[5] for part in model_parts]
+        self.index_vector = [part[6] for part in model_parts]
         self.cum_sizes = cum_sizes
         self.system_sizes = array([
             hsh.total_size
@@ -432,27 +424,32 @@ class ModelInput(ABC):
         self.inf_compartment_list = subsystem_key[self.compartmental_structure][2]
         self.no_inf_compartments = len(self.inf_compartment_list)
 
-        self.k_home = read_excel(
-            spec['k_home']['file_name'],
-            sheet_name=spec['k_home']['sheet_name'],
-            header=header).to_numpy()
-        self.k_all = read_excel(
-            spec['k_all']['file_name'],
-            sheet_name=spec['k_all']['sheet_name'],
-            header=header).to_numpy()
-
         self.fine_bds = spec['fine_bds']
         self.coarse_bds = spec['coarse_bds']
+        self.no_age_classes = len(self.coarse_bds)
 
         self.pop_pyramid = read_csv(
             spec['pop_pyramid_file_name'], index_col=0)
         self.pop_pyramid = (self.pop_pyramid['F'] + self.pop_pyramid['M']).to_numpy()
 
-        self.k_home = aggregate_contact_matrix(
-            self.k_home, self.fine_bds, self.coarse_bds, self.pop_pyramid)
-        self.k_all = aggregate_contact_matrix(
-            self.k_all, self.fine_bds, self.coarse_bds, self.pop_pyramid)
-        self.k_ext = self.k_all - self.k_home
+        if self.no_age_classes==1:
+            self.k_home = array([[1]]) # If we have no age structure, we use a 1x1 array as the contact "matrix"
+            self.k_ext = array([[1]])
+        else:
+            self.k_home = read_excel(
+                spec['k_home']['file_name'],
+                sheet_name=spec['k_home']['sheet_name'],
+                header=header).to_numpy()
+            self.k_all = read_excel(
+                spec['k_all']['file_name'],
+                sheet_name=spec['k_all']['sheet_name'],
+                header=header).to_numpy()
+
+            self.k_home = aggregate_contact_matrix(
+                self.k_home, self.fine_bds, self.coarse_bds, self.pop_pyramid)
+            self.k_all = aggregate_contact_matrix(
+                self.k_all, self.fine_bds, self.coarse_bds, self.pop_pyramid)
+            self.k_ext = self.k_all - self.k_home
 
         self.density_expo = spec['density_expo']
         self.composition_list = composition_list
@@ -470,7 +467,7 @@ class SIRInput(ModelInput):
         super().__init__(spec, composition_list, composition_distribution)
 
         self.sus = spec['sus']
-        self.inf_scales = [ones((2,))] # In the SIR model there is only one infectious compartment
+        self.inf_scales = [ones((self.no_age_classes,))] # In the SIR model there is only one infectious compartment
 
         home_eig = max(eig(
             self.sus * ((1/spec['recovery_rate']) *
@@ -491,11 +488,12 @@ class SIRInput(ModelInput):
     def gamma(self):
         return self.spec['recovery_rate']
 
-class SEPIRInput(ModelInput):
+class SEIRInput(ModelInput):
     def __init__(self, spec, composition_list, composition_distribution):
         super().__init__(spec, composition_list, composition_distribution)
 
         self.sus = spec['sus']
+        self.inf_scales = [ones((self.no_age_classes,))]
 
         home_eig = max(eig(
             self.sus * ((1/spec['recovery_rate']) *

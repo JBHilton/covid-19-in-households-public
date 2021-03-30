@@ -3,13 +3,12 @@
 from numpy import (
     append, arange, around, array, atleast_2d, concatenate, copy,
     diag, hstack, isnan, ix_,
-    ones, prod, shape, sum, unique, where, zeros)
+    ones, prod, shape, sum, unique, where, zeros, exp, log, repeat)
 from numpy import int64 as my_int
-from numpy import exp, log
 from scipy.sparse import csc_matrix as sparse
 from scipy.special import factorial
 from scipy.stats import multinomial
-from model.preprocessing import ModelInput, HouseholdPopulation
+from model.preprocessing import ModelInput, HouseholdPopulation, SEIRInput
 from model.common import (
         build_state_matrix, build_external_import_matrix_SEPIRQ)
 from model.imports import NoImportModel
@@ -628,31 +627,19 @@ class MergedInput(ModelInput):
     def gamma(self):
         return self.spec['recovery_rate']
 
-class MergedSEIRInput(ModelInput):
-    '''TODO: add docstring'''
-    def __init__(self, spec, no_hh, guest_trans_scaling):
-        super().__init__(spec)
+class MergedSEIRInput(SEIRInput):
+    '''This creates the model input for an SEIR compartmental structured '''
+    '''merged household model.'''
+    def __init__(self, spec, comp_list, comp_dist, no_hh, guest_trans_scaling):
+        super().__init__(spec, comp_list, comp_dist)
 
-        same_hh_trans = spec['R_int'] * \
-                        spec['recovery_rate'] *\
-                        (1 - spec['external_trans_scaling'])
         self.k_home = \
-            diag((1-guest_trans_scaling) * same_hh_trans * ones((no_hh,))) + \
-                    guest_trans_scaling * same_hh_trans * ones((no_hh,no_hh))
-        self.k_ext = self.k_ext = spec['R_int'] * \
-            spec['recovery_rate'] * \
-            spec['external_trans_scaling'] * ones((no_hh,no_hh))
-        self.sus = spec['sus'] * ones((no_hh,))
-        self.import_model = NoImportModel()
-        self.density_expo = spec['density_exponent']
-
-    @property
-    def alpha_1(self):
-        return self.spec['incubation_rate']
-
-    @property
-    def gamma(self):
-        return self.spec['recovery_rate']
+            diag((1-guest_trans_scaling) * self.k_home * ones((no_hh,))) + \
+                    guest_trans_scaling * self.k_home * ones((no_hh,no_hh))
+        self.k_ext = self.k_ext * ones((no_hh,no_hh))
+        self.sus = repeat(self.sus, no_hh)
+        for i in range(len(self.inf_scales)):
+            self.inf_scales[i] = repeat(self.inf_scales[i], no_hh)
 
 
 def make_initial_condition(

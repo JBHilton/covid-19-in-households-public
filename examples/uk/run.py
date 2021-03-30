@@ -53,7 +53,7 @@ time_series = {
 'S':S,
 'E':E,
 'P':P,
-'I':P,
+'I':I,
 'R':R
 }
 
