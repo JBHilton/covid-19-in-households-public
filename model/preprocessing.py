@@ -354,6 +354,7 @@ class HouseholdPopulation(ABC):
         self.states = zeros((
             total_size,
             self.num_of_epidemiological_compartments * self.no_risk_groups))
+        self.index_vector = []
         for i, part in enumerate(model_parts):
             class_list = household_subsystem_specs[i].class_indexes
             for j in range(len(class_list)):
@@ -366,6 +367,10 @@ class HouseholdPopulation(ABC):
                     self.num_of_epidemiological_compartments*j,
                     self.num_of_epidemiological_compartments*(j+1))
                 self.states[row_idx, dst_col_idx] = part[1][:, src_col_idx]
+            temp_index_vector = part[6]
+            if i>0:
+                temp_index_vector.data += cum_sizes[i-1]
+            self.index_vector.append(temp_index_vector)
         self.inf_event_row = concatenate([
             part[2] + self.offsets[i]
             for i, part in enumerate(model_parts)])
@@ -374,7 +379,6 @@ class HouseholdPopulation(ABC):
             for i, part in enumerate(model_parts)])
         self.inf_event_class = concatenate([part[4] for part in model_parts])
         self.reverse_prod = [part[5] for part in model_parts]
-        self.index_vector = [part[6] for part in model_parts]
         self.cum_sizes = cum_sizes
         self.system_sizes = array([
             hsh.total_size

@@ -5,7 +5,7 @@ from pandas import read_csv
 from scipy.integrate import solve_ivp
 from time import time
 from model.preprocessing import (
-        SEIRInput, HouseholdPopulation, make_initial_condition)
+        SEIRInput, HouseholdPopulation, make_initial_condition_with_recovereds)
 from model.specs import SINGLE_AGE_UK_SPEC, SINGLE_AGE_SEIR_SPEC
 from model.common import SEIRRateEquations
 from model.imports import NoImportModel
@@ -16,7 +16,6 @@ from examples.temp_bubbles.common import (
         build_mixed_compositions_pairwise,
         pairwise_merged_initial_condition,
         pairwise_demerged_initial_condition,
-        make_initial_condition_with_recovereds,
         match_merged_states_to_unmerged,
         build_mixed_compositions_threewise,
         initialise_merged_system_threewise)
@@ -56,8 +55,8 @@ else:
 hh_to_merge = 3 # Number of households we merge
 mixing_strength = 1 # This is left over from an earlier formulation, just keep it at 1
 
-unmerged_expo_range = array([0.0, 0.25, 0.5, 0.75, 1.0])
-merged_expo_range = array([0.0, 0.25, 0.5, 0.75, 1.0])
+unmerged_expo_range = array([0.0, 0.5, 1.0])
+merged_expo_range = array([0.0, 0.5, 1.0])
 
 unmerged_expo_len = len(unmerged_expo_range)
 merged_expo_len = len(merged_expo_range)
@@ -222,7 +221,7 @@ for i in range(unmerged_expo_len):
         merged_input2 = MergedSEIRInput(
                         SPEC, composition_list, comp_dist, 2, 1)
         merged_input2.density_expo = merged_expo_range[j]
-        merged_input2.k_home = (ave_hh_size ** unmerged_expo_range[i]) * merged_input2.k_home
+        # merged_input2.k_home = (ave_hh_size ** unmerged_expo_range[i]) * merged_input2.k_home
         merged_population2 = HouseholdPopulation(
           merged_comp_list_2,
           merged_comp_dist_2,
@@ -233,7 +232,7 @@ for i in range(unmerged_expo_len):
         merged_input3 = MergedSEIRInput(
             SPEC, composition_list, comp_dist, 3, 1)
         merged_input3.density_expo = merged_expo_range[j]
-        merged_input3.k_home = (ave_hh_size ** unmerged_expo_range[i]) * merged_input3.k_home
+        # merged_input3.k_home = (ave_hh_size ** unmerged_expo_range[i]) * merged_input3.k_home
         merged_population3 = HouseholdPopulation(
           merged_comp_list_3,
           merged_comp_dist_3,

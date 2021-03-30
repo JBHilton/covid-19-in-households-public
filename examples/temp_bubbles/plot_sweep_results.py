@@ -6,8 +6,8 @@ from matplotlib.pyplot import close, subplots
 from examples.temp_bubbles.common import DataObject
 from seaborn import heatmap
 
-no_i_vals = 5
-no_j_vals = 5
+no_i_vals = 3
+no_j_vals = 3
 
 peaks_1 = zeros((no_i_vals,no_j_vals))
 peaks_2 = zeros((no_i_vals,no_j_vals))
@@ -26,7 +26,7 @@ for i in range(no_i_vals):
     with open(filename_stem + '.pkl', 'rb') as f:
         unmerged_population,baseline_H, baseline_time, baseline_S, baseline_E, baseline_I, baseline_R = load(f)
 
-    ave_hh_size = unmerged_population.composition_distribution.dot(atleast_2d(unmerged_population.composition_list))
+    ave_hh_size = unmerged_population.ave_hh_size
 
     fig, ax = subplots(1, 1, sharex=True)
 
@@ -98,7 +98,7 @@ for i in range(no_i_vals):
         ax.set_xlabel('Time in days')
         ax.set_ylabel('Percentage recovered')
         ax.set_xlim([340,395])
-        ax.set_ylim([5.5,9.0])
+        # ax.set_ylim([5.5,9.0])
 
         ax.legend(ncol=1, bbox_to_anchor=(1,0.50))
 
@@ -116,7 +116,7 @@ for i in range(no_i_vals):
         ax.set_xlabel('Time in days')
         ax.set_ylabel('Percentage infectious')
         ax.set_xlim([340,395])
-        ax.set_ylim([0,1])
+        # ax.set_ylim([0,1])
 
         ax.legend(ncol=1, bbox_to_anchor=(1,0.50))
 
