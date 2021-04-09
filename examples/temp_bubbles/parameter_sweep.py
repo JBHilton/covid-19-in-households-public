@@ -5,6 +5,7 @@ from pickle import load, dump
 from pandas import read_csv
 from scipy.integrate import solve_ivp
 from time import time
+from multiprocessing import Pool
 from model.preprocessing import (
         SEIRInput, HouseholdPopulation, make_initial_condition_with_recovereds)
 from model.specs import SINGLE_AGE_UK_SPEC, SINGLE_AGE_SEIR_SPEC
@@ -26,6 +27,255 @@ SPEC = {**SINGLE_AGE_UK_SPEC, **SINGLE_AGE_SEIR_SPEC}
 # NUMERICAL SETTINGS
 ATOL = 1e-16
 
+
+def create_unmerged_context(p):
+    return UnmergedContext(*p)
+
+
+class UnmergedContext:
+    def __init__(self, i, density_exponent, t_start, t_end, merge_start):
+        unmerged_input = SEIRInput(SPEC, composition_list, comp_dist)
+        unmerged_input.density_expo = density_exponent
+        unmerged_input.k_home = (
+            ave_hh_size ** density_exponent) * unmerged_input.k_home
+
+        self.population = HouseholdPopulation(
+           composition_list,
+           comp_dist,
+           unmerged_input,
+           True)
+
+        self.rhs = SEIRRateEquations(
+            unmerged_input,
+            self.population,
+            NoImportModel(4, 1))
+
+        self.H0 = make_initial_condition_with_recovereds(
+            self.population, self.rhs)
+        self.tspan = (t_start, merge_start)
+        solution = solve_ivp(
+            self.rhs,
+            self.tspan,
+            self.H0,
+            first_step=0.001,
+            atol=ATOL)
+        baseline_time = solution.t
+        self.baseline_H = solution.y
+
+        self.baseline_H0 = self.baseline_H[:, -1]
+
+        tspan = (merge_start, t_end)
+        solution = solve_ivp(
+            self.rhs,
+            tspan,
+            self.baseline_H[:, -1],
+            first_step=0.001,
+            atol=ATOL)
+        baseline_time = hstack((baseline_time, solution.t))
+        baseline_H = hstack((self.baseline_H, solution.y))
+
+        baseline_S = self.baseline_H.T.dot(
+            self.population.states[:, 0])/ave_hh_size
+        baseline_E = self.baseline_H.T.dot(
+            self.population.states[:, 1])/ave_hh_size
+        baseline_I = self.baseline_H.T.dot(
+            self.population.states[:, 2])/ave_hh_size
+        baseline_R = self.baseline_H.T.dot(
+            self.population.states[:, 3])/ave_hh_size
+
+        self.filename_stem = 'sweep_results_' + str(i)
+        with open(self.filename_stem + '.pkl', 'wb') as f:
+            dump(
+                (
+                    self.population,
+                    baseline_H,
+                    baseline_time,
+                    baseline_S,
+                    baseline_E,
+                    baseline_I,
+                    baseline_R
+                ),
+                f)
+
+
+def unpack_paramas_and_run_merge(p):
+    '''This function enables multi-argument parallel run.'''
+    return run_merge(*p)
+
+
+def run_merge(
+        i,
+        unmerged_exp,
+        j,
+        merged_exp,
+        merged_comp_list_2,
+        merged_comp_dist_2,
+        merged_comp_list_3,
+        merged_comp_dist_3,
+        pairings_2,
+        pairings_3,
+        hh_dimension,
+        unmerged,
+        t_start,
+        t_end,
+        merge_start,
+        merge_end
+        ):
+    '''This function runs a merge simulation for specified parameters.'''
+    print('i={0} j={1}.'.format(i, j))
+    print('Pre-merge density exponent is', unmerged_exp, '.')
+    print('Merged density exponent is', merged_exp, '.')
+
+    this_iteration_start = time()
+
+    merged_input2 = MergedSEIRInput(
+                    SPEC, composition_list, comp_dist, 2, 1)
+    merged_input2.density_expo = merged_exp
+    # merged_input2.k_home = (
+    # ave_hh_size ** unmerged_expo_range[i]) * merged_input2.k_home
+    merged_population2 = HouseholdPopulation(
+        merged_comp_list_2,
+        merged_comp_dist_2,
+        merged_input2,
+        True)
+    rhs_merged2 = SEIRRateEquations(
+        merged_input2,
+        merged_population2,
+        NoImportModel(4, 2))
+
+    merged_input3 = MergedSEIRInput(
+        SPEC, composition_list, comp_dist, 3, 1)
+    merged_input3.density_expo = merged_exp
+    # merged_input3.k_home = (ave_hh_size ** unmerged_expo_range[i])
+    # * merged_input3.k_home
+    merged_population3 = HouseholdPopulation(
+        merged_comp_list_3,
+        merged_comp_dist_3,
+        merged_input3,
+        True)
+    # We only need to generate this thing once, it is very time
+    # consuming
+    state_match = match_merged_states_to_unmerged(
+        unmerged.population,
+        merged_population3,
+        pairings_3,
+        hh_to_merge,
+        4)
+
+    rhs_merged3 = SEIRRateEquations(
+        merged_input3,
+        merged_population3,
+        NoImportModel(4, 3))
+    # This is just a class I made up to store the results - very hacky!
+    merge_results = DataObject(0)
+
+    # STRATEGIES: 1 is form triangles for 2 days, 2 is form pair on
+    # 25th and again on 26th, 3 is 1 plus pair on new year's, 4 is 2
+    # plus pair on new year's
+
+    merge_results.t_merge_1, \
+        merge_results.H_merge_1, \
+        merge_results.t_postmerge_1, \
+        merge_results.H_postmerge_1 = \
+        simulate_merge3(
+            unmerged.population,
+            merged_population3,
+            unmerged.rhs,
+            rhs_merged3,
+            hh_dimension,
+            pairings_3,
+            state_match,
+            [2],
+            0,
+            unmerged.baseline_H0,
+            merge_start,
+            merge_end)
+    merge_results.t_merge_3, \
+        merge_results.H_merge_3, \
+        merge_results.t_postmerge_3, \
+        merge_results.H_postmerge_3 = \
+        simulate_merge2(
+            unmerged.population,
+            merged_population2,
+            unmerged.rhs,
+            rhs_merged2,
+            hh_dimension,
+            pairings_2,
+            [1],
+            0,
+            merge_results.H_postmerge_1[:, -1],
+            merge_end,
+            t_end)
+
+    solution = solve_ivp(
+        unmerged.rhs,
+        (merge_end, t_end),
+        merge_results.H_postmerge_1[:, -1],
+        first_step=0.001,
+        atol=ATOL)
+    merge_results.t_postmerge_1 = hstack(
+        (merge_results.t_postmerge_1, solution.t))
+    merge_results.H_postmerge_1 = hstack(
+        (merge_results.H_postmerge_1, solution.y))
+
+    merge_results.t_merge_2, \
+        merge_results.H_merge_2, \
+        merge_results.t_postmerge_2, \
+        merge_results.H_postmerge_2 = \
+        simulate_merge2(
+            unmerged.population,
+            merged_population2,
+            unmerged.rhs,
+            rhs_merged2,
+            hh_dimension,
+            pairings_2,
+            [1, 1],
+            1,
+            unmerged.baseline_H0,
+            merge_start,
+            merge_end)
+    merge_results.t_merge_4, \
+        merge_results.H_merge_4, \
+        merge_results.t_postmerge_4, \
+        merge_results.H_postmerge_4 = \
+        simulate_merge2(
+            unmerged.population,
+            merged_population2,
+            unmerged.rhs,
+            rhs_merged2,
+            hh_dimension,
+            pairings_2,
+            [1],
+            0,
+            merge_results.H_postmerge_2[:, -1],
+            merge_end,
+            t_end)
+
+    solution = solve_ivp(
+        unmerged.rhs,
+        (merge_end, t_end),
+        merge_results.H_postmerge_2[:, -1],
+        first_step=0.001,
+        atol=ATOL)
+    merge_results.t_postmerge_2 = hstack((
+        merge_results.t_postmerge_2, solution.t))
+    merge_results.H_postmerge_2 = hstack((
+        merge_results.H_postmerge_2, solution.y))
+
+    filename = unmerged.filename_stem + str(j)
+    with open(filename + '.pkl', 'wb') as f:
+        dump(
+            (
+                merged_population2,
+                merged_population3,
+                merge_results
+            ),
+            f)
+
+    print('Iteration took {0} seconds'.format(
+        time() - this_iteration_start))
+
+
 comp_dist = read_csv(
     'inputs/england_hh_size_dist.csv',
     header=0).to_numpy().squeeze()
@@ -41,11 +291,8 @@ hh_to_merge = 3
 # This is left over from an earlier formulation, just keep it at 1
 mixing_strength = 1
 
-unmerged_expo_range = array([0.0, 0.5, 1.0])
-merged_expo_range = array([0.0, 0.5, 1.0])
-
-unmerged_expo_len = len(unmerged_expo_range)
-merged_expo_len = len(merged_expo_range)
+unmerged_exponents = array([0.0, 0.5, 1.0])
+merged_exponents = array([0.0, 0.5, 1.0])
 
 
 def simulate_merge2(
@@ -233,206 +480,28 @@ def main(no_of_workers):
     t0 = 335.0
     # December 25th
     merge_start = 359.0
+    merge_end = 365.0
     # Continue running projections to end of Jan
     t_end = 396
 
-    for i in range(unmerged_expo_len):
-        filename_stem = 'sweep_results_' + str(i)
-        unmerged_input = SEIRInput(SPEC, composition_list, comp_dist)
-        unmerged_input.density_expo = unmerged_expo_range[i]
-        unmerged_input.k_home = (
-            ave_hh_size ** unmerged_expo_range[i]) * unmerged_input.k_home
-
-        unmerged_population = HouseholdPopulation(
-           composition_list,
-           comp_dist,
-           unmerged_input,
-           True)
-
-        rhs_unmerged = SEIRRateEquations(
-            unmerged_input,
-            unmerged_population,
-            NoImportModel(4, 1))
-
-        H0 = make_initial_condition_with_recovereds(unmerged_population, rhs_unmerged)
-        tspan = (t0, merge_start)
-        solution = solve_ivp(
-            rhs_unmerged,
-            tspan,
-            H0,
-            first_step=0.001,
-            atol=ATOL)
-        baseline_time = solution.t
-        baseline_H = solution.y
-
-        baseline_premerge_H0 = baseline_H[:, -1]
-
-        tspan = (merge_start, t_end)
-        solution = solve_ivp(
-            rhs_unmerged,
-            tspan,
-            baseline_H[:, -1],
-            first_step=0.001,
-            atol=ATOL)
-        baseline_time = hstack((baseline_time, solution.t))
-        baseline_H = hstack((baseline_H, solution.y))
-
-        baseline_S = baseline_H.T.dot(
-            unmerged_population.states[:, 0])/ave_hh_size
-        baseline_E = baseline_H.T.dot(
-            unmerged_population.states[:, 1])/ave_hh_size
-        baseline_I = baseline_H.T.dot(
-            unmerged_population.states[:, 2])/ave_hh_size
-        baseline_R = baseline_H.T.dot(
-            unmerged_population.states[:, 3])/ave_hh_size
-
-        with open(filename_stem + '.pkl', 'wb') as f:
-            dump(
-                (
-                    unmerged_population,
-                    baseline_H,
-                    baseline_time,
-                    baseline_S,
-                    baseline_E,
-                    baseline_I,
-                    baseline_R
-                ),
-                f)
-
-        for j in range(merged_expo_len):
-            print('i={0} j={1}.'.format(i, j))
-            print('Pre-merge density exponent is', unmerged_expo_range[i], '.')
-            print('Merged density exponent is', merged_expo_range[j], '.')
-
-            this_iteration_start = time()
-
-            filename = filename_stem + str(j)
-
-            merged_input2 = MergedSEIRInput(
-                            SPEC, composition_list, comp_dist, 2, 1)
-            merged_input2.density_expo = merged_expo_range[j]
-            # merged_input2.k_home = (
-            # ave_hh_size ** unmerged_expo_range[i]) * merged_input2.k_home
-            merged_population2 = HouseholdPopulation(
-                merged_comp_list_2,
-                merged_comp_dist_2,
-                merged_input2,
-                True)
-            rhs_merged2 = SEIRRateEquations(
-                merged_input2,
-                merged_population2,
-                NoImportModel(4, 2))
-
-            merged_input3 = MergedSEIRInput(
-                SPEC, composition_list, comp_dist, 3, 1)
-            merged_input3.density_expo = merged_expo_range[j]
-            # merged_input3.k_home = (ave_hh_size ** unmerged_expo_range[i])
-            # * merged_input3.k_home
-            merged_population3 = HouseholdPopulation(
-              merged_comp_list_3,
-              merged_comp_dist_3,
-              merged_input3,
-              True)
-            # We only need to generate this thing once, it is very time
-            # consuming
-            if i == 0 and j == 0:
-                state_match = match_merged_states_to_unmerged(
-                    unmerged_population,
-                    merged_population3,
-                    pairings_3,
-                    hh_to_merge,
-                    4)
-
-            rhs_merged3 = SEIRRateEquations(
-                merged_input3,
-                merged_population3,
-                NoImportModel(4, 3))
-            # This is just a class I made up to store the results - very hacky!
-            merge_results = DataObject(0)
-
-            # STRATEGIES: 1 is form triangles for 2 days, 2 is form pair on
-            # 25th and again on 26th, 3 is 1 plus pair on new year's, 4 is 2
-            # plus pair on new year's
-
-            merge_results.t_merge_1, \
-                merge_results.H_merge_1, \
-                merge_results.t_postmerge_1, \
-                merge_results.H_postmerge_1 = \
-                simulate_merge3(
-                    unmerged_population,
-                    merged_population3,
-                    rhs_unmerged,
-                    rhs_merged3,
-                    hh_dimension,
-                    pairings_3,
-                    state_match,
-                    [2],
-                    0,
-                    baseline_premerge_H0,
-                    merge_start,
-                    365)
-            merge_results.t_merge_3, merge_results.H_merge_3, merge_results.t_postmerge_3, merge_results.H_postmerge_3 = \
-                simulate_merge2(
-                    unmerged_population,
-                    merged_population2,
-                    rhs_unmerged,
-                    rhs_merged2,
-                    hh_dimension,
-                    pairings_2,
-                    [1],
-                    0,
-                    merge_results.H_postmerge_1[:, -1],
-                    365,
-                    t_end)
-
-            solution = solve_ivp(rhs_unmerged, (365, t_end), merge_results.H_postmerge_1[:,-1], first_step=0.001, atol=1e-16)
-            merge_results.t_postmerge_1 = hstack(
-                (merge_results.t_postmerge_1, solution.t))
-            merge_results.H_postmerge_1 = hstack(
-                (merge_results.H_postmerge_1, solution.y))
-
-            merge_results.t_merge_2, merge_results.H_merge_2, merge_results.t_postmerge_2, merge_results.H_postmerge_2 = \
-                simulate_merge2(
-                    unmerged_population,
-                    merged_population2,
-                    rhs_unmerged,
-                    rhs_merged2,
-                    hh_dimension,
-                    pairings_2,
-                    [1, 1],
-                    1,
-                    baseline_premerge_H0,
-                    merge_start,
-                    365)
-            merge_results.t_merge_4, merge_results.H_merge_4, merge_results.t_postmerge_4, merge_results.H_postmerge_4 = \
-                simulate_merge2(
-                    unmerged_population,
-                    merged_population2,
-                    rhs_unmerged,
-                    rhs_merged2,
-                    hh_dimension,
-                    pairings_2,
-                    [1],
-                    0,
-                    merge_results.H_postmerge_2[:,-1],
-                    365,
-                    t_end)
-
-            solution = solve_ivp(rhs_unmerged, (365, t_end), merge_results.H_postmerge_2[:,-1], first_step=0.001, atol=1e-16)
-            merge_results.t_postmerge_2 = hstack((merge_results.t_postmerge_2,solution.t))
-            merge_results.H_postmerge_2 = hstack((merge_results.H_postmerge_2,solution.y))
-
-            with open(filename + '.pkl', 'wb') as f:
-                dump(
-                    (
-                        merged_population2,
-                        merged_population3,
-                        merge_results
-                    ),
-                    f)
-
-            print('Iteration took {0} seconds'.format(
-                time() - this_iteration_start))
+    params = []
+    for i, e in enumerate(unmerged_exponents):
+        params.append((i, e, t0, t_end, merge_start))
+    with Pool(no_of_workers) as pool:
+        unmerged_results = pool.map(create_unmerged_context, params)
+    params = []
+    for i, ei in enumerate(unmerged_exponents):
+        for j, ej in enumerate(merged_exponents):
+            params.append((
+                i, ei, j, ej,
+                merged_comp_list_2, merged_comp_dist_2,
+                merged_comp_list_3, merged_comp_dist_3,
+                pairings_2, pairings_3,
+                hh_dimension,
+                unmerged_results[i],
+                t0, t_end, merge_start, merge_end))
+    with Pool(no_of_workers) as pool:
+        pool.map(unpack_paramas_and_run_merge, params)
 
 
 if __name__ == '__main__':
