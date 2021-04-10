@@ -811,3 +811,51 @@ class CareHomeInput(ModelInput):
     @property
     def gamma(self):
         return self.spec['recovery_rate']
+
+def add_vuln_class(model_input,
+                    vuln_prop,
+                    vector_quants,
+                    class_to_split = 1):
+    '''This function expands the model input to account for an additional
+    vulnerable class. We assume that this vulnerable class is identical
+    to members of the class class_to_split, apart from in their mixing
+    behaviour, where we assume that they do not engage in any external
+    mixing. vector_quants lists (as strings) the names of any class-stratified
+    vector quantities which need to be expanded to account for the new class.'''
+
+    expanded_input = deepcopy(model_input)
+
+    vuln_class = expanded_input.no_age_classes + 1
+
+    expanded_input.vuln_prop = vuln_prop
+
+    '''We add a copy of of the class_to_split mixing behaviour to the bottom of
+    the internal mixing matrix, and a row of zeros to the bottom of the external
+    mixing matrix.'''
+    left_int_expander = vstack((
+        identity(expanded_input.no_age_classes),
+        identity(expanded_input.no_age_classes)[class_to_split, :]))
+    left_ext_expander = vstack((
+        identity(expanded_input.no_age_classes),
+        [0, 0]))
+
+    '''The next matrix splits interactions with the split class between
+    vulnerable and non-vulnerable individuals.'''
+    right_expander = hstack((
+        identity(expanded_input.no_age_classes)[:,
+                                            :expanded_input.no_age_classes-1],
+        expanded_input.vuln_prop * \
+        identity(expanded_input.no_age_classes)[:, class_to_split]))
+    right_expander[class_to_split, class_to_split] = \
+                                                    1 - expanded_input.vuln_prop
+
+    expanded_input.k_home = left_int_expander.dot(
+                                    expanded_input.k_home.dot(right_expander))
+    expanded_input.k_ext = lef_ext_expander.dot(
+                                    expanded_input.k_ext.dot(right_expander))
+
+    for vq in vector_quants:
+        getattr(expanded_input,vq).append(
+                                    getattr(expanded_input, vq[class_to_split]))
+
+    return expanded_input

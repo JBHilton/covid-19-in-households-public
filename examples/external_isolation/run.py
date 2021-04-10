@@ -15,9 +15,9 @@ from model.preprocessing import TwoAgeWithVulnerableInput, HouseholdPopulation
 from model.preprocessing import add_vulnerable_hh_members, make_initial_SEPIRQ_condition
 from model.common import SEPIRQRateEquations, within_household_SEPIRQ
 from model.imports import ( FixedImportModel)
-from model.specs import SEPIRQ_SPEC
+from model.specs import TWO_AGE_UK_SPEC, TWO_AGE_SEPIR_SPEC
 
-spec = SEPIRQ_SPEC
+spec = {**TWO_AGE_UK_SPEC, **TWO_AGE_SEPIR_SPEC}
 model_input = TwoAgeWithVulnerableInput(spec)
 prev = 1e-5
 
