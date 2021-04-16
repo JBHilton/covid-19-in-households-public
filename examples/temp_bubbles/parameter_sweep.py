@@ -27,6 +27,8 @@ SPEC = {**SINGLE_AGE_UK_SPEC, **SINGLE_AGE_SEIR_SPEC}
 # NUMERICAL SETTINGS
 ATOL = 1e-16
 
+NO_COMPARTMENTS = 4 # We use an SEIR model, hence 4 compartments
+
 
 def create_unmerged_context(p):
     return UnmergedContext(*p)
@@ -48,7 +50,7 @@ class UnmergedContext:
         self.rhs = SEIRRateEquations(
             unmerged_input,
             self.population,
-            NoImportModel(4, 1))
+            NoImportModel(NO_COMPARTMENTS, 1))
 
         self.H0 = make_initial_condition_with_recovereds(
             self.population, self.rhs)
@@ -102,76 +104,74 @@ def unpack_paramas_and_run_merge(p):
     '''This function enables multi-argument parallel run.'''
     return run_merge(*p)
 
+def create_merged_systems(p):
+    return MergedSystems(*p)
+
+class MergedSystems:
+    def __init__(
+            self,
+            merged_exp,
+            merged_comp_list_2,
+            merged_comp_dist_2,
+            merged_comp_list_3,
+            merged_comp_dist_3
+            ):
+
+        merged_input2 = MergedSEIRInput(
+                        SPEC, composition_list, comp_dist, 2, 1)
+        merged_input2.density_expo = merged_exp
+        self.merged_population2 = HouseholdPopulation(
+            merged_comp_list_2,
+            merged_comp_dist_2,
+            merged_input2,
+            True)
+        self.rhs_merged2 = SEIRRateEquations(
+            merged_input2,
+            self.merged_population2,
+            NoImportModel(NO_COMPARTMENTS, 2))
+
+        merged_input3 = MergedSEIRInput(
+            SPEC, composition_list, comp_dist, 3, 1)
+        merged_input3.density_expo = merged_exp
+        self.merged_population3 = HouseholdPopulation(
+            merged_comp_list_3,
+            merged_comp_dist_3,
+            merged_input3,
+            True)
+        self.rhs_merged3 = SEIRRateEquations(
+            merged_input3,
+            self.merged_population3,
+            NoImportModel(NO_COMPARTMENTS, 3))
+
 
 def run_merge(
         i,
-        unmerged_exp,
         j,
-        merged_exp,
-        merged_comp_list_2,
-        merged_comp_dist_2,
-        merged_comp_list_3,
-        merged_comp_dist_3,
         pairings_2,
         pairings_3,
         hh_dimension,
         unmerged,
+        merged,
+        state_match,
         t_start,
         t_end,
         merge_start,
         merge_end
         ):
     '''This function runs a merge simulation for specified parameters.'''
-    print('i={0} j={1}.'.format(i, j))
-    print('Pre-merge density exponent is', unmerged_exp, '.')
-    print('Merged density exponent is', merged_exp, '.')
 
     this_iteration_start = time()
-
-    merged_input2 = MergedSEIRInput(
-                    SPEC, composition_list, comp_dist, 2, 1)
-    merged_input2.density_expo = merged_exp
-    # merged_input2.k_home = (
-    # ave_hh_size ** unmerged_expo_range[i]) * merged_input2.k_home
-    merged_population2 = HouseholdPopulation(
-        merged_comp_list_2,
-        merged_comp_dist_2,
-        merged_input2,
-        True)
-    rhs_merged2 = SEIRRateEquations(
-        merged_input2,
-        merged_population2,
-        NoImportModel(4, 2))
-
-    merged_input3 = MergedSEIRInput(
-        SPEC, composition_list, comp_dist, 3, 1)
-    merged_input3.density_expo = merged_exp
-    # merged_input3.k_home = (ave_hh_size ** unmerged_expo_range[i])
-    # * merged_input3.k_home
-    merged_population3 = HouseholdPopulation(
-        merged_comp_list_3,
-        merged_comp_dist_3,
-        merged_input3,
-        True)
-    # We only need to generate this thing once, it is very time
-    # consuming
-    state_match = match_merged_states_to_unmerged(
-        unmerged.population,
-        merged_population3,
-        pairings_3,
-        hh_to_merge,
-        4)
-
-    rhs_merged3 = SEIRRateEquations(
-        merged_input3,
-        merged_population3,
-        NoImportModel(4, 3))
     # This is just a class I made up to store the results - very hacky!
     merge_results = DataObject(0)
 
     # STRATEGIES: 1 is form triangles for 2 days, 2 is form pair on
     # 25th and again on 26th, 3 is 1 plus pair on new year's, 4 is 2
     # plus pair on new year's
+
+    merged_population2 = merged.merged_population2
+    merged_population3 = merged.merged_population3
+    rhs_merged2 = merged.rhs_merged2
+    rhs_merged3 = merged.rhs_merged3
 
     merge_results.t_merge_1, \
         merge_results.H_merge_1, \
@@ -490,15 +490,34 @@ def main(no_of_workers):
     with Pool(no_of_workers) as pool:
         unmerged_results = pool.map(create_unmerged_context, params)
     params = []
+    for e in merged_exponents:
+        params.append((
+            e,
+            merged_comp_list_2,
+            merged_comp_dist_2,
+            merged_comp_list_3,
+            merged_comp_dist_3
+            ))
+    with Pool(no_of_workers) as pool:
+        merged_populations = pool.map(create_merged_systems, params)
+
+    state_match = match_merged_states_to_unmerged(
+        unmerged_results[0].population,
+        merged_populations[0].merged_population3,
+        pairings_3,
+        hh_to_merge,
+        NO_COMPARTMENTS)
+
+    params = []
     for i, ei in enumerate(unmerged_exponents):
         for j, ej in enumerate(merged_exponents):
             params.append((
-                i, ei, j, ej,
-                merged_comp_list_2, merged_comp_dist_2,
-                merged_comp_list_3, merged_comp_dist_3,
+                i, j,
                 pairings_2, pairings_3,
                 hh_dimension,
                 unmerged_results[i],
+                merged_populations[j],
+                state_match,
                 t0, t_end, merge_start, merge_end))
     with Pool(no_of_workers) as pool:
         pool.map(unpack_paramas_and_run_merge, params)
