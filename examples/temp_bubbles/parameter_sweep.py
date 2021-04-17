@@ -1,6 +1,7 @@
 from argparse import ArgumentParser
 from numpy import arange, array, atleast_2d, hstack
-from os.path import isfile
+from os import makedirs
+from os.path import exists,isfile
 from pickle import load, dump
 from pandas import read_csv
 from scipy.integrate import solve_ivp
@@ -28,6 +29,9 @@ SPEC = {**SINGLE_AGE_UK_SPEC, **SINGLE_AGE_SEIR_SPEC}
 ATOL = 1e-16
 
 NO_COMPARTMENTS = 4 # We use an SEIR model, hence 4 compartments
+
+MAX_MERGED_SIZE = 10 # We only allow merges where total individuals is at most 12
+MAX_UNMERGED_SIZE = 4 # As usual, we model the chunk of the population in households of size 6 or fewer
 
 
 def create_unmerged_context(p):
@@ -76,16 +80,16 @@ class UnmergedContext:
         baseline_time = hstack((baseline_time, solution.t))
         baseline_H = hstack((self.baseline_H, solution.y))
 
-        baseline_S = self.baseline_H.T.dot(
+        baseline_S = baseline_H.T.dot(
             self.population.states[:, 0])/ave_hh_size
-        baseline_E = self.baseline_H.T.dot(
+        baseline_E = baseline_H.T.dot(
             self.population.states[:, 1])/ave_hh_size
-        baseline_I = self.baseline_H.T.dot(
+        baseline_I = baseline_H.T.dot(
             self.population.states[:, 2])/ave_hh_size
-        baseline_R = self.baseline_H.T.dot(
+        baseline_R = baseline_H.T.dot(
             self.population.states[:, 3])/ave_hh_size
 
-        self.filename_stem = 'sweep_results_' + str(i)
+        self.filename_stem = 'outputs/temp_bubbles/sweep_results_' + str(i)
         with open(self.filename_stem + '.pkl', 'wb') as f:
             dump(
                 (
@@ -272,19 +276,16 @@ def run_merge(
             ),
             f)
 
-    print('Iteration took {0} seconds'.format(
-        time() - this_iteration_start))
-
 
 comp_dist = read_csv(
     'inputs/england_hh_size_dist.csv',
     header=0).to_numpy().squeeze()
-comp_dist = comp_dist[:4]
+comp_dist = comp_dist[:MAX_UNMERGED_SIZE]
 comp_dist = comp_dist/sum(comp_dist)
 max_hh_size = len(comp_dist)
 composition_list = atleast_2d(arange(1, max_hh_size+1)).T
 
-ave_hh_size = comp_dist.dot(composition_list)
+ave_hh_size = comp_dist.dot(composition_list)[0]
 
 # Number of households we merge
 hh_to_merge = 3
@@ -462,7 +463,7 @@ def main(no_of_workers):
             merged_comp_dist_3, \
             hh_dimension, \
             pairings_3 = build_mixed_compositions_threewise(
-                composition_list, comp_dist, 10)
+                composition_list, comp_dist, MAX_MERGED_SIZE)
 
         with open('threewise_merge_comps.pkl', 'wb') as f:
             dump(
@@ -527,4 +528,6 @@ if __name__ == '__main__':
     parser = ArgumentParser()
     parser.add_argument('--no_of_workers', type=int, default=2)
     args = parser.parse_args()
+    start = time()
     main(args.no_of_workers)
+    print('Execution took',time() - start,'seconds.')
