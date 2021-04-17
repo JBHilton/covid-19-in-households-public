@@ -23,6 +23,11 @@ from examples.temp_bubbles.common import (
         build_mixed_compositions_threewise,
         initialise_merged_system_threewise)
 
+'''If there is not already a results folder assigned to the outputs from this
+script, create one now.'''
+if not exists('outputs/temp_bubbles'):
+    makedirs('outputs/temp_bubbles')
+
 SPEC = {**SINGLE_AGE_UK_SPEC, **SINGLE_AGE_SEIR_SPEC}
 
 # NUMERICAL SETTINGS
