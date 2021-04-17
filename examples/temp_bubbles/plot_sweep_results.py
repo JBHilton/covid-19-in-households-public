@@ -21,7 +21,7 @@ jan_antiprev_4 = zeros((no_i_vals,no_j_vals))
 
 for i in range(no_i_vals):
 
-    filename_stem = 'sweep_results_' + str(i)
+    filename_stem = 'outputs/temp_bubbles/sweep_results_' + str(i)
 
     with open(filename_stem + '.pkl', 'rb') as f:
         unmerged_population,baseline_H, baseline_time, baseline_S, baseline_E, baseline_I, baseline_R = load(f)
@@ -29,6 +29,9 @@ for i in range(no_i_vals):
     ave_hh_size = unmerged_population.ave_hh_size
 
     fig, ax = subplots(1, 1, sharex=True)
+
+    print(baseline_time.shape)
+    print(baseline_E.shape)
 
     ax.plot(baseline_time, baseline_E, label='E')
     ax.plot(baseline_time, baseline_I, label='I')
