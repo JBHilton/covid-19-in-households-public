@@ -817,6 +817,9 @@ class SIRRateEquations(RateEquations):
 
 class SEIRRateEquations(RateEquations):
     @property
+    def states_exp_only(self):
+        return self.household_population.states[:, 1::self.no_compartments]
+    @property
     def states_inf_only(self):
         return self.household_population.states[:, 2::self.no_compartments]
     @property
@@ -825,6 +828,12 @@ class SEIRRateEquations(RateEquations):
 
 class SEPIRRateEquations(RateEquations):
     @property
+    def states_exp_only(self):
+        return self.household_population.states[:, 1::self.no_compartments]
+    @property
+    def states_pro_only(self):
+        return self.household_population.states[:, 2::self.no_compartments]
+    @property
     def states_inf_only(self):
         return self.household_population.states[:, 3::self.no_compartments]
     @property
@@ -832,6 +841,9 @@ class SEPIRRateEquations(RateEquations):
         return self.household_population.states[:, 4::self.no_compartments]
 
 class SEDURRateEquations(RateEquations):
+    @property
+    def states_exp_only(self):
+        return self.household_population.states[:, 1::self.no_compartments]
     @property
     def states_det_only(self):
         return self.household_population.states[:, 2::self.no_compartments]

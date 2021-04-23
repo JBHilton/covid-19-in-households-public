@@ -11,14 +11,32 @@ from time import time as get_time
 from scipy.integrate import solve_ivp
 from matplotlib.pyplot import subplots
 from matplotlib.cm import get_cmap
-from model.preprocessing import TwoAgeWithVulnerableInput, HouseholdPopulation
-from model.preprocessing import add_vulnerable_hh_members, make_initial_SEPIRQ_condition
+from model.preprocessing import SEPIRInput, HouseholdPopulation
+from model.preprocessing import add_vuln_class, add_vulnerable_hh_members, make_initial_SEPIRQ_condition
 from model.common import SEPIRQRateEquations, within_household_SEPIRQ
 from model.imports import ( FixedImportModel)
 from model.specs import TWO_AGE_UK_SPEC, TWO_AGE_SEPIR_SPEC
 
 spec = {**TWO_AGE_UK_SPEC, **TWO_AGE_SEPIR_SPEC}
-model_input = TwoAgeWithVulnerableInput(spec)
+
+# List of observed household compositions
+composition_list = read_csv(
+    'inputs/eng_and_wales_adult_child_vuln_composition_list.csv',
+    header=0).to_numpy()
+# Proportion of households which are in each composition
+comp_dist = read_csv(
+    'inputs/eng_and_wales_adult_child_vuln_composition_dist.csv',
+    header=0).to_numpy().squeeze()
+
+vuln_prop = 2.2/56
+vector_quants = ['sus', 'inf_scales']
+adult_class = 1
+
+model_input = SEPIRInput(spec, composition_list, comp_dist)
+model_input = add_vuln_class(model_input,
+                    vuln_prop,
+                    vector_quants,
+                    adult_class)
 prev = 1e-5
 
 adherence_rate = 1
@@ -32,14 +50,7 @@ model_input.class_is_isolating = array([[False, False, False],[False, False, Tru
 model_input.iso_method = 0
 model_input.iso_prob = 1
 
-# List of observed household compositions
-composition_list = read_csv(
-    'inputs/eng_and_wales_adult_child_vuln_composition_list.csv',
-    header=0).to_numpy()
-# Proportion of households which are in each composition
-comp_dist = read_csv(
-    'inputs/eng_and_wales_adult_child_vuln_composition_dist.csv',
-    header=0).to_numpy().squeeze()
+
 # With the parameters chosen, we calculate Q_int:
 OOHI_household_population = HouseholdPopulation(
     composition_list, comp_dist, model_input, within_household_SEPIRQ,6)

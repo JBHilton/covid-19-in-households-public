@@ -842,20 +842,21 @@ def add_vuln_class(model_input,
     '''The next matrix splits interactions with the split class between
     vulnerable and non-vulnerable individuals.'''
     right_expander = hstack((
-        identity(expanded_input.no_age_classes)[:,
-                                            :expanded_input.no_age_classes-1],
+        identity(expanded_input.no_age_classes),
         expanded_input.vuln_prop * \
-        identity(expanded_input.no_age_classes)[:, class_to_split]))
+        identity(expanded_input.no_age_classes)[:, [class_to_split]]))
     right_expander[class_to_split, class_to_split] = \
                                                     1 - expanded_input.vuln_prop
 
     expanded_input.k_home = left_int_expander.dot(
                                     expanded_input.k_home.dot(right_expander))
-    expanded_input.k_ext = lef_ext_expander.dot(
+    expanded_input.k_ext = left_ext_expander.dot(
                                     expanded_input.k_ext.dot(right_expander))
 
     for vq in vector_quants:
-        getattr(expanded_input,vq).append(
-                                    getattr(expanded_input, vq[class_to_split]))
+        print(vq)
+        expanded_vq = append( getattr(expanded_input,vq),
+                                    getattr(expanded_input, vq)[class_to_split])
+        setattr(expanded_input, vq, expanded_vq)
 
     return expanded_input
