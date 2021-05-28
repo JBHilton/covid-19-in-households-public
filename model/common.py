@@ -764,6 +764,7 @@ class RateEquations:
         self.import_model = import_model
         self.ext_matrix_list = []
         self.inf_by_state_list = []
+        print(model_input.inf_scales)
         for ic in range(self.no_inf_compartments):
             self.ext_matrix_list.append(diag(model_input.sus).dot(model_input.k_ext).dot(diag(model_input.inf_scales[ic])))
             self.inf_by_state_list.append(household_population.states[:, self.inf_compartment_list[ic]::self.no_compartments])
@@ -840,6 +841,94 @@ class SEPIRRateEquations(RateEquations):
     def states_rec_only(self):
         return self.household_population.states[:, 4::self.no_compartments]
 
+class SEPIRQRateEquations(RateEquations):
+
+    def __init__(self,
+                 model_input,
+                 household_population,
+                 import_model,
+                 epsilon=1.0):
+        super().__init__(model_input,
+                     household_population,
+                     import_model,
+                     epsilon)
+
+        self.iso_pos = 5 + self.no_compartments * \
+                                arange(model_input.no_age_classes)
+        self.states_iso_only = \
+                        household_population.states[:,self.iso_pos]
+
+        self.iso_method = model_input.iso_method
+
+        if self.iso_method == "int":
+            total_iso_by_state = self.states_iso_only.sum(axis=1)
+            self.no_isos = total_iso_by_state==0
+            self.isos_present = total_iso_by_state>0
+            self.ad_prob = model_input.ad_prob
+        else:
+            self.inf_compartment_list = [2, 3] # If we are isolating externally, remove quarantined from inf compartment list
+            self.no_inf_compartments = len(self.inf_compartment_list)
+            self.ext_matrix_list = []
+            self.inf_by_state_list = []
+            for ic in range(self.no_inf_compartments):
+                self.ext_matrix_list.append(diag(model_input.sus).dot(model_input.k_ext).dot(diag(model_input.inf_scales[ic])))
+                self.inf_by_state_list.append(household_population.states[:, self.inf_compartment_list[ic]::self.no_compartments])
+
+    def get_FOI_by_class(self, t, H):
+        '''This calculates the age-stratified force-of-infection (FOI) on each
+        household composition'''
+
+        FOI = self.states_sus_only.dot(diag(self.import_model.cases(t)))
+
+        if self.iso_method == "ext":
+            # Under ext. isolation, we need to take iso's away from total
+            # household size
+            denom = H.T.dot(self.composition_by_state - \
+                        self.states_iso_only)
+            for ic in range(self.no_inf_compartments):
+                states_inf_only =  self.inf_by_state_list[ic]
+                inf_by_class = zeros(shape(denom))
+                inf_by_class[denom > 0] = (
+                    H.T.dot(states_inf_only)[denom > 0]
+                    / denom[denom > 0]).squeeze()
+                FOI += self.states_sus_only.dot(
+                        diag(self.ext_matrix_list[ic].dot(
+                        self.epsilon * inf_by_class.T)))
+        else:
+            # Under internal isoltion, we scale down contribution to infections
+            # of any houshold containing Q individuals
+            denom = H.T.dot(self.composition_by_state)
+
+            for ic in range(self.no_inf_compartments):
+                states_inf_only =  self.inf_by_state_list[ic]
+                inf_by_class = zeros(shape(denom))
+                inf_by_class[denom > 0] = (
+                    ( H[where(self.no_isos)[0]].T.dot(
+                    states_inf_only[where(self.no_isos)[0],:])[denom>0]  +
+                     (1 - self.ad_prob) *
+                     H[where(self.isos_present)[0]].T.dot(
+                     states_inf_only[where(self.isos_present)[0],:]))[denom>0]
+                    / denom[denom > 0]).squeeze()
+                FOI += self.states_sus_only.dot(
+                        diag(self.ext_matrix_list[ic].dot(
+                        self.epsilon * inf_by_class.T)))
+
+        return FOI
+
+
+    @property
+    def states_exp_only(self):
+        return self.household_population.states[:, 1::self.no_compartments]
+    @property
+    def states_pro_only(self):
+        return self.household_population.states[:, 2::self.no_compartments]
+    @property
+    def states_inf_only(self):
+        return self.household_population.states[:, 3::self.no_compartments]
+    @property
+    def states_rec_only(self):
+        return self.household_population.states[:, 4::self.no_compartments]
+
 class SEDURRateEquations(RateEquations):
     @property
     def states_exp_only(self):
@@ -855,7 +944,7 @@ class SEDURRateEquations(RateEquations):
         return self.household_population.states[:, 4::self.no_compartments]
 
 
-class SEPIRQRateEquations:
+class OldFormatSEPIRQRateEquations:
     '''This class represents a functor for evaluating the rate equations for
     the model with no imports of infection from outside the population. The
     state of the class contains all essential variables'''

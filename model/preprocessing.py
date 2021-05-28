@@ -5,7 +5,7 @@ from numpy import (
         append, arange, around, array, cumsum, log, ones, ones_like, where,
         zeros, concatenate, vstack, identity, tile, hstack, prod, ix_, shape,
         atleast_2d, diag)
-from numpy.linalg import eig
+from numpy.linalg import eig, inv
 from scipy.sparse import block_diag
 from scipy.special import binom as binom_coeff
 from scipy.stats import binom
@@ -546,7 +546,11 @@ class SEPIRInput(ModelInput):
         R_int = - log(1 - spec['AR']) * self.dens_adj_ave_hh_size
 
         self.k_home = R_int * self.k_home / home_eig
-        external_scale = spec['R*']/(self.ave_hh_size*spec['AR'])
+
+        if spec['fit_method'] == 'R*':
+            external_scale = spec['R*'] / (self.ave_hh_size*spec['AR'])
+        else:
+            external_scale = 1 / (self.ave_hh_size*spec['AR'])
         self.k_ext = external_scale * self.k_ext / ext_eig
 
 
@@ -563,6 +567,57 @@ class SEPIRInput(ModelInput):
     def gamma(self):
         return self.spec['recovery_rate']
 
+class SEPIRQInput(ModelInput):
+    def __init__(self, spec, composition_list, composition_distribution):
+        super().__init__(spec, composition_list, composition_distribution)
+
+        self.sus = spec['sus']
+        self.inf_scales = [spec['prodromal_trans_scaling'],
+                ones(shape(spec['prodromal_trans_scaling'])),
+                spec['iso_trans_scaling']]
+
+        home_eig = max(eig(
+            self.sus * ((1/spec['recovery_rate']) *
+             (self.k_home) + \
+            (1/spec['symp_onset_rate']) *
+            (self.k_home ) * spec['prodromal_trans_scaling'])
+            )[0])
+        ext_eig = max(eig(
+            self.sus * ((1/spec['recovery_rate']) *
+             (self.k_ext) + \
+            (1/spec['symp_onset_rate']) *
+            (self.k_ext ) * spec['prodromal_trans_scaling'])
+            )[0])
+
+        R_int = - log(1 - spec['AR']) * self.dens_adj_ave_hh_size
+
+        self.k_home = R_int * self.k_home / home_eig
+
+        if spec['fit_method'] == 'R*':
+            external_scale = spec['R*'] / (self.ave_hh_size*spec['AR'])
+        else:
+            external_scale = 1 / (self.ave_hh_size*spec['AR'])
+        self.k_ext = external_scale * self.k_ext / ext_eig
+
+        self.iso_rates = spec['iso_rates']
+        self.adult_bd = spec['adult_bd']
+        self.class_is_isolating = spec['class_is_isolating']
+        self.iso_method = spec['iso_method']
+        self.ad_prob = spec['ad_prob']
+        self.discharge_rate = spec['discharge_rate']
+
+
+    @property
+    def alpha_1(self):
+        return self.spec['incubation_rate']
+
+    @property
+    def alpha_2(self):
+        return self.spec['symp_onset_rate']
+
+    @property
+    def gamma(self):
+        return self.spec['recovery_rate']
 
 class StandardModelInput(ModelInput):
     '''TODO: add docstring'''
@@ -812,6 +867,93 @@ class CareHomeInput(ModelInput):
     def gamma(self):
         return self.spec['recovery_rate']
 
+def get_multiplier(r, Q_int, FOI_by_state, index_prob, starter_mat):
+    inv_diff = inv(r * identity(Q_int.shape[0]) - Q_int)
+    step_1 = FOI_by_state.dot(index_prob)
+    step_2 = inv_diff.dot(step_1)
+    step_3 = starter_mat.dot(step_2)
+    step_4 = step_3
+    return step_4
+
+def estimate_growth_rate(household_population,rhs,interval=[0.01,0.1],tol=1e-3):
+
+    reverse_comp_dist = diag(household_population.composition_distribution).dot(household_population.composition_list)
+    reverse_comp_dist = reverse_comp_dist.dot(diag(1/reverse_comp_dist.sum(0)))
+
+    Q_int = rhs.Q_int
+    FOI_by_state = zeros((Q_int.shape[0],household_population.no_risk_groups))
+    for ic in range(rhs.no_inf_compartments):
+                states_inf_only =  rhs.inf_by_state_list[ic]
+                FOI_by_state += (rhs.ext_matrix_list[ic].dot(
+                        rhs.epsilon * states_inf_only.T)).T
+    index_states = where(
+    ((rhs.states_exp_only.sum(axis=1)==1) *
+    ((rhs.states_pro_only + rhs.states_inf_only + rhs.states_rec_only).sum(axis=1)==0)))[0]
+
+    no_index_states = len(index_states)
+    comp_by_index_state = household_population.which_composition[index_states]
+
+    starter_mat = sparse((ones(no_index_states),(range(no_index_states), index_states)),shape=(no_index_states,Q_int.shape[0]))
+
+    index_prob = zeros((household_population.no_risk_groups,no_index_states))
+    for i in range(no_index_states):
+        index_class = where(rhs.states_exp_only[index_states[i],:]==1)[0]
+        index_prob[index_class,i] = reverse_comp_dist[comp_by_index_state[i], index_class]
+
+    r_min = interval[0]
+    r_max = interval[1]
+    multiplier = get_multiplier(r_min, Q_int, FOI_by_state, index_prob, starter_mat)
+    eval_min = eig(multiplier.T)[0][0]
+    multiplier = get_multiplier(r_max, Q_int, FOI_by_state, index_prob, starter_mat)
+    eval_max = eig(multiplier.T)[0][0]
+
+    if ((eval_min-1) * (eval_max-1) > 0):
+        print('Solution not contained within interval')
+        return None
+
+    while (r_max - r_min > tol):
+        r_now = 0.5 * (r_max + r_min)
+        multiplier = get_multiplier(r_now, Q_int, FOI_by_state, index_prob, starter_mat)
+        eval_now = eig(multiplier.T)[0][0]
+        if ((eval_now-1) * (eval_max-1) > 0):
+            r_max = r_now
+        else:
+            r_min = r_now
+
+    return r_now
+
+def estimate_beta_ext(household_population,rhs,r):
+
+    reverse_comp_dist = diag(household_population.composition_distribution).dot(household_population.composition_list)
+    reverse_comp_dist = reverse_comp_dist.dot(diag(1/reverse_comp_dist.sum(0)))
+
+    Q_int = rhs.Q_int
+    FOI_by_state = zeros((Q_int.shape[0],household_population.no_risk_groups))
+    for ic in range(rhs.no_inf_compartments):
+                states_inf_only =  rhs.inf_by_state_list[ic]
+                FOI_by_state += (rhs.ext_matrix_list[ic].dot(
+                        rhs.epsilon * states_inf_only.T)).T
+    index_states = where(
+    ((rhs.states_exp_only.sum(axis=1)==1) *
+    ((rhs.states_pro_only + rhs.states_inf_only + rhs.states_rec_only).sum(axis=1)==0)))[0]
+
+    no_index_states = len(index_states)
+    comp_by_index_state = household_population.which_composition[index_states]
+
+    starter_mat = sparse((ones(no_index_states),(range(no_index_states), index_states)),shape=(no_index_states,Q_int.shape[0]))
+
+    index_prob = zeros((household_population.no_risk_groups,no_index_states))
+    for i in range(no_index_states):
+        index_class = where(rhs.states_exp_only[index_states[i],:]==1)[0]
+        index_prob[index_class,i] = reverse_comp_dist[comp_by_index_state[i], index_class]
+
+    multiplier = get_multiplier(r, Q_int, FOI_by_state, index_prob, starter_mat)
+    evalue = eig(multiplier.T)[0][0]
+
+    beta_ext = 1/evalue
+
+    return beta_ext
+
 def add_vuln_class(model_input,
                     vuln_prop,
                     vector_quants,
@@ -854,9 +996,12 @@ def add_vuln_class(model_input,
                                     expanded_input.k_ext.dot(right_expander))
 
     for vq in vector_quants:
-        print(vq)
         expanded_vq = append( getattr(expanded_input,vq),
                                     getattr(expanded_input, vq)[class_to_split])
         setattr(expanded_input, vq, expanded_vq)
+
+
+
+    expanded_input.no_age_classes = expanded_input.no_age_classes + 1
 
     return expanded_input

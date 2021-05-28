@@ -11,13 +11,16 @@ from time import time as get_time
 from scipy.integrate import solve_ivp
 from matplotlib.pyplot import subplots
 from matplotlib.cm import get_cmap
-from model.preprocessing import SEPIRInput, HouseholdPopulation
-from model.preprocessing import add_vuln_class, add_vulnerable_hh_members, make_initial_SEPIRQ_condition
+from model.preprocessing import SEPIRQInput, HouseholdPopulation
+from model.preprocessing import (add_vuln_class, add_vulnerable_hh_members,
+make_initial_SEPIRQ_condition)
 from model.common import SEPIRQRateEquations, within_household_SEPIRQ
-from model.imports import ( FixedImportModel)
-from model.specs import TWO_AGE_UK_SPEC, TWO_AGE_SEPIR_SPEC
+from model.imports import NoImportModel
+from model.specs import (TWO_AGE_UK_SPEC, TWO_AGE_EXT_SEPIRQ_SPEC,
+TWO_AGE_INT_SEPIRQ_SPEC)
 
-spec = {**TWO_AGE_UK_SPEC, **TWO_AGE_SEPIR_SPEC}
+ext_spec = {**TWO_AGE_UK_SPEC, **TWO_AGE_EXT_SEPIRQ_SPEC}
+int_spec = {**TWO_AGE_UK_SPEC, **TWO_AGE_INT_SEPIRQ_SPEC}
 
 # List of observed household compositions
 composition_list = read_csv(
@@ -29,38 +32,71 @@ comp_dist = read_csv(
     header=0).to_numpy().squeeze()
 
 vuln_prop = 2.2/56
-vector_quants = ['sus', 'inf_scales']
+vector_quants = ['sus',
+                 'inf_scales0',
+                 'inf_scales1',
+                 'inf_scales2',
+                 'iso_rateE',
+                 'iso_rateP',
+                 'iso_rateI']
 adult_class = 1
 
-model_input = SEPIRInput(spec, composition_list, comp_dist)
-model_input = add_vuln_class(model_input,
+ext_model_input = SEPIRQInput(ext_spec, composition_list, comp_dist)
+ext_model_input.inf_scales0 = ext_model_input.inf_scales[0]
+ext_model_input.inf_scales1 = ext_model_input.inf_scales[1]
+ext_model_input.inf_scales2 = ext_model_input.inf_scales[2]
+ext_model_input.iso_rateE = ext_model_input.iso_rates['E']
+ext_model_input.iso_rateP = ext_model_input.iso_rates['P']
+ext_model_input.iso_rateI = ext_model_input.iso_rates['I']
+ext_model_input = add_vuln_class(ext_model_input,
                     vuln_prop,
                     vector_quants,
                     adult_class)
+ext_model_input.inf_scales = [ext_model_input.inf_scales0,
+                              ext_model_input.inf_scales1,
+                              ext_model_input.inf_scales2]
+ext_model_input.iso_rates = {'E': ext_model_input.iso_rateE,
+                            'P': ext_model_input.iso_rateP,
+                            'I': ext_model_input.iso_rateI,}
+int_model_input = SEPIRQInput(int_spec, composition_list, comp_dist)
+int_model_input.inf_scales0 = int_model_input.inf_scales[0]
+int_model_input.inf_scales1 = int_model_input.inf_scales[1]
+int_model_input.inf_scales2 = int_model_input.inf_scales[2]
+int_model_input.iso_rateE = int_model_input.iso_rates['E']
+int_model_input.iso_rateP = int_model_input.iso_rates['P']
+int_model_input.iso_rateI = int_model_input.iso_rates['I']
+int_model_input = add_vuln_class(int_model_input,
+                    vuln_prop,
+                    vector_quants,
+                    adult_class)
+int_model_input.inf_scales = [int_model_input.inf_scales0,
+                              int_model_input.inf_scales1,
+                              int_model_input.inf_scales2]
+int_model_input.iso_rates = {'E': int_model_input.iso_rateE,
+                            'P': int_model_input.iso_rateP,
+                            'I': int_model_input.iso_rateI,}
 prev = 1e-5
 
-adherence_rate = 1
-
-model_input.E_iso_rate = adherence_rate*1/1
-model_input.P_iso_rate = adherence_rate*1/1
-model_input.I_iso_rate = adherence_rate*1/0.5
-model_input.discharge_rate = 1/14
-model_input.adult_bd = 1
-model_input.class_is_isolating = array([[False, False, False],[False, False, True],[False, False, False]])
-model_input.iso_method = 0
-model_input.iso_prob = 1
+# adherence_rate = 1
+#
+# model_input.E_iso_rates = adherence_rate*1/1
+# model_input.P_iso_rates = adherence_rate*1/1
+# model_input.I_iso_rates = adherence_rate*1/0.5
+# model_input.discharge_rate = 1/14
+# model_input.adult_bd = 1
+# model_input.class_is_isolating = array([[False, False, False],[False, False, True],[False, False, False]])
+# model_input.iso_method = 0
+# model_input.iso_prob = 1
 
 
 # With the parameters chosen, we calculate Q_int:
 OOHI_household_population = HouseholdPopulation(
-    composition_list, comp_dist, model_input, within_household_SEPIRQ,6)
+    composition_list, comp_dist, ext_model_input)
 
-import_model = FixedImportModel(
-    1e-5, # Import rate of prodromals
-    1e-5) # Import rate of symptomatic cases
+import_model = NoImportModel(6,3)
 
 OOHI_rhs = SEPIRQRateEquations(
-    model_input,
+    ext_model_input,
     OOHI_household_population,
     import_model)
 
@@ -88,14 +124,14 @@ children_per_hh = comp_dist.T.dot(composition_list[:,0])
 nonv_adults_per_hh = comp_dist.T.dot(composition_list[:,1])
 vuln_adults_per_hh = comp_dist.T.dot(composition_list[:,2])
 
-model_input.class_is_isolating = array([[True, True, True],[True, True, True],[True, True, True]])
-model_input.iso_method = 1
+# model_input.class_is_isolating = array([[True, True, True],[True, True, True],[True, True, True]])
+# model_input.iso_method = 1
 
 WHQ_household_population = HouseholdPopulation(
-    composition_list, comp_dist, model_input, within_household_SEPIRQ,6)
+    composition_list, comp_dist, int_model_input)
 
 WHQ_rhs = SEPIRQRateEquations(
-    model_input,
+    int_model_input,
     WHQ_household_population,
     import_model)
 
