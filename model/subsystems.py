@@ -744,7 +744,7 @@ def _sepirq_subsystem(self, household_spec):
                     Q_int)
     Q_int = isolation_events(e_comp,
                     q_comp,
-                    iso_rates['E'],
+                    iso_rates[e_comp],
                     class_is_isolating,
                     iso_method,
                     adult_bd,
@@ -760,7 +760,7 @@ def _sepirq_subsystem(self, household_spec):
                     Q_int)
     Q_int = isolation_events(p_comp,
                     q_comp,
-                    iso_rates['P'],
+                    iso_rates[p_comp],
                     class_is_isolating,
                     iso_method,
                     adult_bd,
@@ -776,7 +776,7 @@ def _sepirq_subsystem(self, household_spec):
                     Q_int)
     Q_int = isolation_events(i_comp,
                     q_comp,
-                    iso_rates['I'],
+                    iso_rates[i_comp],
                     class_is_isolating,
                     iso_method,
                     adult_bd,

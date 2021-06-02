@@ -107,9 +107,9 @@ TWO_AGE_INT_SEPIRQ_SPEC = {
     'recovery_rate': 1/4,           # Recovery rate
     'incubation_rate': 1/5,         # E->P incubation rate
     'symp_onset_rate': 1/3,         # P->I prodromal to symptomatic rate
-    'iso_rates': {'E': 1/1 * ones(2,),
-                  'P': 1/1 * ones(2,),
-                  'I': 1/0.5 * ones(2,)},      # Ave. time in days to detection by class
+    'exp_iso_rate': 1/1 * ones(2,),  # Ave. time in days to detection by class
+    'pro_iso_rate': 1/1 * ones(2,),
+    'inf_iso_rate': 1/0.5 * ones(2,),
     'discharge_rate': 1/14,         # 1 / ave time in isolation
     'iso_method': "int",            # This is either "int" or "ext"
     'ad_prob': 1,                   # Probability under internal isolation that household members actually isolate
@@ -133,12 +133,12 @@ TWO_AGE_EXT_SEPIRQ_SPEC = {
     'recovery_rate': 1/4,           # Recovery rate
     'incubation_rate': 1/5,         # E->P incubation rate
     'symp_onset_rate': 1/3,         # P->I prodromal to symptomatic rate
-    'iso_rates': {'E': 1/1 * ones(2,),
-                  'P': 1/1 * ones(2,),
-                  'I': 1/0.5 * ones(2,)},      # Ave. time in days to detection by class
+    'exp_iso_rate': 1/1 * ones(2,),  # Ave. time in days to detection by class
+    'pro_iso_rate': 1/1 * ones(2,),
+    'inf_iso_rate': 1/0.5 * ones(2,),
     'discharge_rate': 1/14,         # 1 / ave time in isolation
     'iso_method': "ext",            # This is either "int" or "ext"
-    'ad_prob': 1,                   # Probability under internal isolation that household members actually isolate
+    'ad_prob': 0.2,                   # Probability under internal isolation that household members actually isolate
     'class_is_isolating':
     array([[False, False, False],
            [False, False, True],

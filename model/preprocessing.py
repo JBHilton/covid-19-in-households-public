@@ -2,9 +2,9 @@
 from abc import ABC
 from copy import copy, deepcopy
 from numpy import (
-        append, arange, around, array, cumsum, log, ones, ones_like, where,
-        zeros, concatenate, vstack, identity, tile, hstack, prod, ix_, shape,
-        atleast_2d, diag)
+        append, arange, around, array, cumsum, log, ndarray, ones, ones_like,
+        where, zeros, concatenate, vstack, identity, tile, hstack, prod, ix_,
+        shape, atleast_2d, diag)
 from numpy.linalg import eig, inv
 from scipy.sparse import block_diag
 from scipy.special import binom as binom_coeff
@@ -470,6 +470,8 @@ class SIRInput(ModelInput):
     def __init__(self, spec, composition_list, composition_distribution):
         super().__init__(spec, composition_list, composition_distribution)
 
+        self.expandables = ['sus']
+
         self.sus = spec['sus']
         self.inf_scales = [ones((self.no_age_classes,))] # In the SIR model there is only one infectious compartment
 
@@ -495,6 +497,8 @@ class SIRInput(ModelInput):
 class SEIRInput(ModelInput):
     def __init__(self, spec, composition_list, composition_distribution):
         super().__init__(spec, composition_list, composition_distribution)
+
+        self.expandables = ['sus']
 
         self.sus = spec['sus']
         self.inf_scales = [ones((self.no_age_classes,))]
@@ -525,6 +529,9 @@ class SEIRInput(ModelInput):
 class SEPIRInput(ModelInput):
     def __init__(self, spec, composition_list, composition_distribution):
         super().__init__(spec, composition_list, composition_distribution)
+
+        self.expandables = ['sus',
+                         'inf_scales']
 
         self.sus = spec['sus']
         self.inf_scales = [spec['prodromal_trans_scaling'],
@@ -571,6 +578,10 @@ class SEPIRQInput(ModelInput):
     def __init__(self, spec, composition_list, composition_distribution):
         super().__init__(spec, composition_list, composition_distribution)
 
+        self.expandables = ['sus',
+                         'inf_scales',
+                         'iso_rates']
+
         self.sus = spec['sus']
         self.inf_scales = [spec['prodromal_trans_scaling'],
                 ones(shape(spec['prodromal_trans_scaling'])),
@@ -599,7 +610,15 @@ class SEPIRQInput(ModelInput):
             external_scale = 1 / (self.ave_hh_size*spec['AR'])
         self.k_ext = external_scale * self.k_ext / ext_eig
 
-        self.iso_rates = spec['iso_rates']
+        # To define the iso_rates property, we add some zeros which act as dummy
+        # entries so that the index of the isolation rates match the
+        # corresponding compartmental indices.
+        self.iso_rates = [ zeros((self.no_age_classes,)),
+                           spec['exp_iso_rate'],
+                           spec['pro_iso_rate'],
+                           spec['inf_iso_rate'],
+                           zeros((self.no_age_classes,)),
+                           zeros((self.no_age_classes,)) ]
         self.adult_bd = spec['adult_bd']
         self.class_is_isolating = spec['class_is_isolating']
         self.iso_method = spec['iso_method']
@@ -956,7 +975,6 @@ def estimate_beta_ext(household_population,rhs,r):
 
 def add_vuln_class(model_input,
                     vuln_prop,
-                    vector_quants,
                     class_to_split = 1):
     '''This function expands the model input to account for an additional
     vulnerable class. We assume that this vulnerable class is identical
@@ -995,10 +1013,23 @@ def add_vuln_class(model_input,
     expanded_input.k_ext = left_ext_expander.dot(
                                     expanded_input.k_ext.dot(right_expander))
 
-    for vq in vector_quants:
-        expanded_vq = append( getattr(expanded_input,vq),
-                                    getattr(expanded_input, vq)[class_to_split])
-        setattr(expanded_input, vq, expanded_vq)
+    for par_name in model_input.expandables:
+
+        param = getattr(expanded_input, par_name)
+
+        if isinstance(param, ndarray):
+            expanded_param = append(param, param[class_to_split])
+        elif isinstance(param, list):
+            no_params = len(param)
+            expanded_param = []
+            for i in range(no_params):
+                expanded_param.append(append(param[i],
+                                            param[i][class_to_split]))
+        else:
+            print('Invalid object type in add_vuln_class.',
+                  'Valid types are arrays or lists, but',
+                  par_name,'is of type',type(param),'.')
+        setattr(expanded_input, par_name, expanded_param)
 
 
 
