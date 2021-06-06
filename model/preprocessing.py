@@ -927,7 +927,10 @@ def estimate_growth_rate(household_population,rhs,interval=[0.01,0.1],tol=1e-3):
     eval_max = eig(multiplier.T)[0][0]
 
     if ((eval_min-1) * (eval_max-1) > 0):
-        print('Solution not contained within interval')
+        print('Solution not contained within interval, eval at min is',
+              eval_min-1,
+              ', eval at max is',
+              eval_max-1)
         return None
 
     while (r_max - r_min > tol):
