@@ -7,8 +7,12 @@ from numpy import (
         shape, atleast_2d, diag)
 from numpy.linalg import eig, inv
 from scipy.sparse import block_diag
+from scipy.sparse import identity as spidentity
+from scipy.sparse.linalg import spsolve
+from scipy.sparse.linalg import eigs as speig
 from scipy.special import binom as binom_coeff
 from scipy.stats import binom
+from time import time as get_time
 from pandas import read_excel, read_csv
 from tqdm import tqdm
 from model.common import (
@@ -345,14 +349,14 @@ class HouseholdPopulation(ABC):
         # This is useful for placing blocks of system states
         cum_sizes = cumsum(array(
             [s.total_size for s in household_subsystem_specs]))
-        total_size = cum_sizes[-1]
+        self.total_size = cum_sizes[-1]
         self.Q_int = block_diag(
             [part[0] for part in model_parts],
             format='csc')
         self.Q_int.eliminate_zeros()
         self.offsets = concatenate(([0], cum_sizes))
         self.states = zeros((
-            total_size,
+            self.total_size,
             self.num_of_epidemiological_compartments * self.no_risk_groups))
         self.index_vector = []
         for i, part in enumerate(model_parts):
@@ -557,7 +561,7 @@ class SEPIRInput(ModelInput):
         if spec['fit_method'] == 'R*':
             external_scale = spec['R*'] / (self.ave_hh_size*spec['AR'])
         else:
-            external_scale = 1 / (self.ave_hh_size*spec['AR'])
+            external_scale = 1
         self.k_ext = external_scale * self.k_ext / ext_eig
 
 
@@ -887,14 +891,28 @@ class CareHomeInput(ModelInput):
         return self.spec['recovery_rate']
 
 def get_multiplier(r, Q_int, FOI_by_state, index_prob, starter_mat):
-    inv_diff = inv(r * identity(Q_int.shape[0]) - Q_int)
+    inv_diff = spsolve(r * spidentity(Q_int.shape[0]) - Q_int,
+                       identity(Q_int.shape[0]))
     step_1 = FOI_by_state.dot(index_prob)
     step_2 = inv_diff.dot(step_1)
     step_3 = starter_mat.dot(step_2)
     step_4 = step_3
     return step_4
 
-def estimate_growth_rate(household_population,rhs,interval=[0.01,0.1],tol=1e-3):
+def path_integral_solve(discount_matrix, reward_by_state):
+    sol = spsolve(discount_matrix, reward_by_state)
+    return sol
+
+def get_multiplier_by_path_integral(r, Q_int, FOI_by_state, index_prob, index_states, no_index_states):
+    multiplier = sparse((no_index_states, no_index_states))
+    discount_matrix = r * spidentity(Q_int.shape[0]) - Q_int
+    reward_mat = FOI_by_state.dot(index_prob)
+    for i, index_state in enumerate(index_states):
+        col = path_integral_solve(discount_matrix, reward_mat[:, i])
+        multiplier += sparse((col[index_states], (range(no_index_states), no_index_states * [i] )), shape=(no_index_states, no_index_states))
+    return multiplier
+
+def estimate_growth_rate(household_population,rhs,interval=[-1, 1],tol=1e-3):
 
     reverse_comp_dist = diag(household_population.composition_distribution).dot(household_population.composition_list)
     reverse_comp_dist = reverse_comp_dist.dot(diag(1/reverse_comp_dist.sum(0)))
@@ -912,7 +930,7 @@ def estimate_growth_rate(household_population,rhs,interval=[0.01,0.1],tol=1e-3):
     no_index_states = len(index_states)
     comp_by_index_state = household_population.which_composition[index_states]
 
-    starter_mat = sparse((ones(no_index_states),(range(no_index_states), index_states)),shape=(no_index_states,Q_int.shape[0]))
+    # starter_mat = sparse((ones(no_index_states),(range(no_index_states), index_states)),shape=(no_index_states,Q_int.shape[0]))
 
     index_prob = zeros((household_population.no_risk_groups,no_index_states))
     for i in range(no_index_states):
@@ -921,10 +939,10 @@ def estimate_growth_rate(household_population,rhs,interval=[0.01,0.1],tol=1e-3):
 
     r_min = interval[0]
     r_max = interval[1]
-    multiplier = get_multiplier(r_min, Q_int, FOI_by_state, index_prob, starter_mat)
-    eval_min = eig(multiplier.T)[0][0]
-    multiplier = get_multiplier(r_max, Q_int, FOI_by_state, index_prob, starter_mat)
-    eval_max = eig(multiplier.T)[0][0]
+    multiplier = get_multiplier_by_path_integral(r_min, Q_int, FOI_by_state, index_prob, index_states, no_index_states)
+    eval_min = (speig(multiplier.T)[0]).real.max()
+    multiplier = get_multiplier_by_path_integral(r_max, Q_int, FOI_by_state, index_prob, index_states, no_index_states)
+    eval_max = (speig(multiplier.T)[0]).real.max()
 
     if ((eval_min-1) * (eval_max-1) > 0):
         print('Solution not contained within interval, eval at min is',
@@ -935,8 +953,8 @@ def estimate_growth_rate(household_population,rhs,interval=[0.01,0.1],tol=1e-3):
 
     while (r_max - r_min > tol):
         r_now = 0.5 * (r_max + r_min)
-        multiplier = get_multiplier(r_now, Q_int, FOI_by_state, index_prob, starter_mat)
-        eval_now = eig(multiplier.T)[0][0]
+        multiplier = get_multiplier_by_path_integral(r_now, Q_int, FOI_by_state, index_prob, index_states, no_index_states)
+        eval_now = (speig(multiplier.T)[0]).real.max()
         if ((eval_now-1) * (eval_max-1) > 0):
             r_max = r_now
         else:
@@ -969,8 +987,8 @@ def estimate_beta_ext(household_population,rhs,r):
         index_class = where(rhs.states_exp_only[index_states[i],:]==1)[0]
         index_prob[index_class,i] = reverse_comp_dist[comp_by_index_state[i], index_class]
 
-    multiplier = get_multiplier(r, Q_int, FOI_by_state, index_prob, starter_mat)
-    evalue = eig(multiplier.T)[0][0]
+    multiplier = get_multiplier_by_path_integral(r, Q_int, FOI_by_state, index_prob, index_states, no_index_states)
+    evalue = (speig(multiplier.T)[0]).real.max()
 
     beta_ext = 1/evalue
 

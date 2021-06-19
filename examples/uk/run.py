@@ -4,7 +4,7 @@ from os.path import isfile
 from pickle import load, dump
 from pandas import read_csv
 from scipy.integrate import solve_ivp
-from model.preprocessing import (
+from model.preprocessing import ( estimate_growth_rate,
         SEPIRInput, HouseholdPopulation, make_initial_condition)
 from model.specs import TWO_AGE_SEPIR_SPEC, TWO_AGE_UK_SPEC
 from model.common import SEPIRRateEquations
@@ -35,6 +35,10 @@ else:
         dump(household_population, f)
 
 rhs = SEPIRRateEquations(model_input, household_population, NoImportModel(5,2))
+
+r_est = estimate_growth_rate(household_population, rhs, [0.001, 5], 1e-3)
+
+print('Estimated growth rate is',r_est,'.')
 
 H0 = make_initial_condition(household_population, rhs)
 

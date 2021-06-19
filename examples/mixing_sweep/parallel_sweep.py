@@ -16,9 +16,9 @@ from matplotlib.pyplot import subplots
 from matplotlib.cm import get_cmap
 from model.preprocessing import ( estimate_growth_rate,
         SEPIRInput, HouseholdPopulation, make_initial_condition_with_recovereds)
-from model.specs import TWO_AGE_SEPIR_SPEC, TWO_AGE_UK_SPEC
+from model.specs import TWO_AGE_SEPIR_SPEC, TWO_AGE_SEPIR_SPEC_FOR_FITTING, TWO_AGE_UK_SPEC
 from model.common import SEPIRRateEquations
-from model.imports import FixedImportModel
+from model.imports import NoImportModel, FixedImportModel
 
 IMPORT_ARRAY = array([1e-5, 1e-5])
 
@@ -64,18 +64,18 @@ class MixingAnalysis:
         household_population = HouseholdPopulation(
             composition_list, comp_dist, model_input)
 
-        rhs = SEPIRRateEquations(model_input, household_population, FixedImportModel(6, 2, IMPORT_ARRAY))
+        rhs = SEPIRRateEquations(model_input, household_population, NoImportModel(5,2))
 
-        beta_ext = estimate_growth_rate(household_population, rhs, [-5, 5], 1e-2)
-        if beta_ext is None:
-            beta_ext = 0
+        growth_rate = estimate_growth_rate(household_population, rhs, [-0.9*this_spec['recovery_rate'], 5], 1e-2)
+        print('r=',growth_rate)
+        if growth_rate is None:
+            growth_rate = 0
 
         H0 = make_initial_condition_with_recovereds(household_population, rhs, prev, antibody_prev, AR)
 
         no_days = 100
         tspan = (0.0, no_days)
         solution = solve_ivp(rhs, tspan, H0, first_step=0.001, atol=1e-16)
-        iter_end = get_time()
 
         t = solution.t
         H = solution.y
@@ -88,7 +88,7 @@ class MixingAnalysis:
         peaks = 100 * max(I)
         R_end = 100 * R[-1]
 
-        return [beta_ext, peaks, R_end]
+        return [growth_rate, peaks, R_end]
 
 def main(no_of_workers):
     mixing_system = MixingAnalysis()
@@ -105,7 +105,7 @@ def main(no_of_workers):
     with Pool(no_of_workers) as pool:
         results = pool.map(mixing_system, params)
 
-    beta_ext_data = array([r[0] for r in results]).reshape(
+    growth_rate_data = array([r[0] for r in results]).reshape(
         len(ar_range),
         len(internal_mix_range),
         len(external_mix_range))
@@ -121,14 +121,14 @@ def main(no_of_workers):
     fname = 'mixing_sweep_output.pkl'
     with open(fname, 'wb') as f:
         dump(
-            (beta_ext_data, peak_data, end_data, params),
+            (growth_rate_data, peak_data, end_data, params),
             f)
 
     return -1
 
 if __name__ == '__main__':
     parser = ArgumentParser()
-    parser.add_argument('--no_of_workers', type=int, default=2)
+    parser.add_argument('--no_of_workers', type=int, default=4)
     args = parser.parse_args()
 
     main(args.no_of_workers)

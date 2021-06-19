@@ -764,7 +764,6 @@ class RateEquations:
         self.import_model = import_model
         self.ext_matrix_list = []
         self.inf_by_state_list = []
-        print(model_input.inf_scales)
         for ic in range(self.no_inf_compartments):
             self.ext_matrix_list.append(diag(model_input.sus).dot(model_input.k_ext).dot(diag(model_input.inf_scales[ic])))
             self.inf_by_state_list.append(household_population.states[:, self.inf_compartment_list[ic]::self.no_compartments])

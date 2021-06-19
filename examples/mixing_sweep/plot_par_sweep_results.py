@@ -16,9 +16,6 @@ external_mix_len = len(external_mix_range)
 with open('mixing_sweep_output.pkl','rb') as f:
     beta_ext, peaks, R_end, params = load(f)
 
-print('peaks=',peaks)
-print('R_end=',R_end)
-
 beta_min = beta_ext.min()
 beta_max = beta_ext.max()
 peak_min = peaks.min()
@@ -29,7 +26,6 @@ for i in range(3):
     fig, ax = subplots(1,1,sharex=True)
     imshow(beta_ext[i,:,:],origin='lower',extent=(0,100,0,100),vmin=beta_min,vmax=beta_max)
     ttl = 'Secondary attack probability ' + str(AR_range[i])
-    print(ttl)
     ax.set_title(ttl)
     ax.set_ylabel('% reduction in within-household transmission')
     ax.set_xlabel('% reduction in between-household transmission')
@@ -42,7 +38,6 @@ for i in range(3):
     fig, ax = subplots(1,1,sharex=True)
     imshow(peaks[i,:,:],origin='lower',extent=(0,100,0,100),vmin=peak_min,vmax=peak_max)
     ttl = 'Secondary attack probability ' + str(AR_range[i])
-    print(ttl)
     ax.set_title(ttl)
     ax.set_ylabel('% reduction in within-household transmission')
     ax.set_xlabel('% reduction in between-household transmission')
