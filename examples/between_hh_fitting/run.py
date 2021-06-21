@@ -1,7 +1,8 @@
 from argparse import ArgumentParser
 from copy import deepcopy
 from multiprocessing import Pool
-from numpy import arange, argmin, array, diag,  log, ones, where, zeros
+from numpy import (arange, argmin, array, diag,  log, mean, ones, sqrt, where,
+        zeros)
 from numpy.linalg import eig
 from numpy.random import rand
 from os.path import isfile
@@ -63,14 +64,18 @@ class BetaEstimator:
 
         return [beta_ext, beta_ext_guess]
 
-def main(no_of_workers):
+def main(no_of_workers, no_samples):
     estimator = BetaEstimator()
     results = []
     with Pool(no_of_workers) as pool:
-        results = pool.map(estimator, ones((4,1)))
+        results = pool.map(estimator, ones((no_samples, 1)))
 
     beta_in = array([r[0] for r in results])
     beta_out = array([r[1] for r in results])
+
+    print('Input beta=', beta_in)
+    print('Output beta=', beta_out)
+    print('RMSE=', sqrt(mean(beta_out-beta_in)**2))
 
     with open('beta_estimate_output.pkl', 'wb') as f:
         dump((beta_in, beta_out), f)
@@ -79,7 +84,8 @@ def main(no_of_workers):
 
 if __name__ == '__main__':
     parser = ArgumentParser()
-    parser.add_argument('--no_of_workers', type=int, default=4)
+    parser.add_argument('--no_of_workers', type=int, default=10)
+    parser.add_argument('--no_samples', type=int, default=4)
     args = parser.parse_args()
 
-    main(args.no_of_workers)
+    main(args.no_of_workers, args.no_samples)

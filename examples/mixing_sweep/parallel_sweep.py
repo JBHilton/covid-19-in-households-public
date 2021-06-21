@@ -67,7 +67,6 @@ class MixingAnalysis:
         rhs = SEPIRRateEquations(model_input, household_population, NoImportModel(5,2))
 
         growth_rate = estimate_growth_rate(household_population, rhs, [-0.9*this_spec['recovery_rate'], 5], 1e-2)
-        print('r=',growth_rate)
         if growth_rate is None:
             growth_rate = 0
 
@@ -90,12 +89,19 @@ class MixingAnalysis:
 
         return [growth_rate, peaks, R_end]
 
-def main(no_of_workers):
+def main(no_of_workers,
+         ar_vals,
+         internal_mix_vals,
+         external_mix_vals):
     mixing_system = MixingAnalysis()
     results = []
-    ar_range = array([0.3, 0.45, 0.6])
-    internal_mix_range = array([0.2,0.6])
-    external_mix_range = array([0.2,0.6])
+    ar_range = arange(ar_vals[0], ar_vals[1], ar_vals[2])
+    internal_mix_range = arange(internal_mix_vals[0],
+                                internal_mix_vals[1],
+                                internal_mix_vals[2])
+    external_mix_range = arange(external_mix_vals[0],
+                                external_mix_vals[1],
+                                external_mix_vals[2])
     params = array([
         [a, i, e]
         for a in ar_range
@@ -121,14 +127,25 @@ def main(no_of_workers):
     fname = 'mixing_sweep_output.pkl'
     with open(fname, 'wb') as f:
         dump(
-            (growth_rate_data, peak_data, end_data, params),
+            (growth_rate_data,
+             peak_data,
+             end_data,
+             ar_range,
+             internal_mix_range,
+             external_mix_range),
             f)
 
     return -1
 
 if __name__ == '__main__':
     parser = ArgumentParser()
-    parser.add_argument('--no_of_workers', type=int, default=4)
+    parser.add_argument('--no_of_workers', type=int, default=8)
+    parser.add_argument('--ar_vals', type=int, default=[0.25, 1, 0.25])
+    parser.add_argument('--internal_mix_vals', type=int, default=[0, 1.0, 0.25])
+    parser.add_argument('--external_mix_vals', type=int, default=[0, 1.0, 0.25])
     args = parser.parse_args()
 
-    main(args.no_of_workers)
+    main(args.no_of_workers,
+         args.ar_vals,
+         args.internal_mix_vals,
+         args.external_mix_vals)
