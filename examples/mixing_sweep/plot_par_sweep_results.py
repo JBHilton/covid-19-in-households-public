@@ -1,12 +1,17 @@
 '''This plots the bubble results
 '''
+from os import mkdir
+from os.path import isdir
 from pickle import load
 from numpy import arange, array, atleast_2d, hstack, sum, where, zeros
 from matplotlib.pyplot import close, colorbar, imshow, set_cmap, subplots
 from examples.temp_bubbles.common import DataObject
 from seaborn import heatmap
 
-with open('mixing_sweep_output.pkl','rb') as f:
+if isdir('plots/mixing_sweep') is False:
+    mkdir('plots/mixing_sweep')
+
+with open('outputs/mixing_sweep/results.pkl','rb') as f:
     (growth_rate, peaks,
     R_end,
     ar_range,
@@ -33,7 +38,7 @@ for i in range(ar_len):
     set_cmap('bwr')
     cbar = colorbar(label="Growth rate",fraction=0.046, pad=0.04)
 
-    fig.savefig('mixing_sweep_growth_rate_AR_par'+str(ar_range[i])+'.png',bbox_inches='tight', dpi=300)
+    fig.savefig('plots/mixing_sweep/growth_rate_AR'+str(ar_range[i])+'.png',bbox_inches='tight', dpi=300)
     close()
 
     fig, ax = subplots(1,1,sharex=True)
@@ -45,7 +50,7 @@ for i in range(ar_len):
     set_cmap('bwr')
     cbar = colorbar(label="Peak % prevalence",fraction=0.046, pad=0.04)
 
-    fig.savefig('mixing_sweep_peak_AR_par'+str(ar_range[i])+'.png',bbox_inches='tight', dpi=300)
+    fig.savefig('plots/mixing_sweep/peak_AR'+str(ar_range[i])+'.png',bbox_inches='tight', dpi=300)
     close()
 
     fig, ax = subplots(1,1,sharex=True)
@@ -56,5 +61,5 @@ for i in range(ar_len):
     set_cmap('bwr')
     cbar = colorbar(label="% immune at end of projection",fraction=0.046, pad=0.04)
 
-    fig.savefig('mixing_sweep_immunity_AR_par'+str(ar_range[i])+'.png',bbox_inches='tight', dpi=300)
+    fig.savefig('plots/mixing_sweep/immunity_AR'+str(ar_range[i])+'.png',bbox_inches='tight', dpi=300)
     close()

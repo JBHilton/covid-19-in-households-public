@@ -1,11 +1,18 @@
 '''This plots the UK-like model with a single set of parameters for 100 days
 '''
+from os import mkdir
+from os.path import isdir
 from pickle import load
 from matplotlib.pyplot import subplots
 from matplotlib.cm import get_cmap
 
-with open('uk_like.pkl', 'rb') as f:
-    H, time_series, model_input = load(f)
+if isdir('plots/uk') is False:
+    mkdir('plots/uk')
+
+with open('outputs/uk/results.pkl', 'rb') as f:
+    H, time_series = load(f)
+with open('outputs/uk/fitted_model_input.pkl', 'rb') as f:
+    model_input = load(f)
 
 t = time_series['time']
 data_list = [time_series['S']/model_input.ave_hh_by_class,
@@ -36,4 +43,4 @@ axis_A.set_ylabel('Proportion of population')
 axis_A.set_title('Adults (20+ years old)')
 axis_A.legend(ncol=1, bbox_to_anchor=(1,0.50))
 
-fig.savefig('uk_like.png', bbox_inches='tight', dpi=300)
+fig.savefig('plots/uk/time_series.png', bbox_inches='tight', dpi=300)

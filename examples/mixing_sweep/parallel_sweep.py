@@ -2,7 +2,8 @@
 between-household transmission by doing a 2D parameter sweep'''
 
 from argparse import ArgumentParser
-from os.path import isfile
+from os import mkdir
+from os.path import isdir, isfile
 from pickle import load, dump
 from copy import deepcopy
 from multiprocessing import Pool
@@ -14,20 +15,17 @@ from time import time as get_time
 from scipy.integrate import solve_ivp
 from matplotlib.pyplot import subplots
 from matplotlib.cm import get_cmap
-from model.preprocessing import ( estimate_growth_rate,
+from model.preprocessing import ( estimate_beta_ext, estimate_growth_rate,
         SEPIRInput, HouseholdPopulation, make_initial_condition_with_recovereds)
-from model.specs import TWO_AGE_SEPIR_SPEC, TWO_AGE_SEPIR_SPEC_FOR_FITTING, TWO_AGE_UK_SPEC
+from model.specs import TWO_AGE_SEPIR_SPEC_FOR_FITTING, TWO_AGE_UK_SPEC
 from model.common import SEPIRRateEquations
 from model.imports import NoImportModel, FixedImportModel
 
+if isdir('outputs/mixing_sweep') is False:
+    mkdir('outputs/mixing_sweep')
+
 IMPORT_ARRAY = array([1e-5, 1e-5])
 
-# class DataObject(): # Very hacky way to store output
-#     def __init__(self,thing):
-#         self.thing = thing
-#
-# basic_spec = {**TWO_AGE_SEPIR_SPEC, **TWO_AGE_UK_SPEC}
-# print('Approx R_int is', -log(1-basic_spec['AR']))
 # List of observed household compositions
 composition_list = read_csv(
     'inputs/eng_and_wales_adult_child_composition_list.csv',
@@ -37,13 +35,27 @@ comp_dist = read_csv(
     'inputs/eng_and_wales_adult_child_composition_dist.csv',
     header=0).to_numpy().squeeze()
 
-prev=1.0e-2 # Starting prevalence
+if isfile('outputs/mixing_sweep/beta_ext.pkl') is True:
+    with open('outputs/mixing_sweep/beta_ext.pkl', 'rb') as f:
+        beta_ext = load(f)
+else:
+    SPEC = {**TWO_AGE_SEPIR_SPEC_FOR_FITTING, **TWO_AGE_UK_SPEC}
+    growth_rate = log(2) / 3 # Doubling time of 3 days
+    model_input_to_fit = SEPIRInput(SPEC, composition_list, comp_dist)
+    household_population_to_fit = HouseholdPopulation(
+        composition_list, comp_dist, model_input_to_fit)
+    rhs_to_fit = SEPIRRateEquations(model_input_to_fit, household_population_to_fit, NoImportModel(5,2))
+    beta_ext = estimate_beta_ext(household_population_to_fit, rhs_to_fit, growth_rate)
+    with open('outputs/mixing_sweep/beta_ext.pkl', 'wb') as f:
+        dump(beta_ext, f)
+
+prev=1.0e-5 # Starting prevalence
 antibody_prev=0 # Starting antibody prev/immunity
 AR=1.0 # Starting attack ratio - visited households are fully recovered
 
 class MixingAnalysis:
     def __init__(self):
-        self.basic_spec = {**TWO_AGE_SEPIR_SPEC, **TWO_AGE_UK_SPEC}
+        self.basic_spec = {**TWO_AGE_SEPIR_SPEC_FOR_FITTING, **TWO_AGE_UK_SPEC}
 
     def __call__(self, p):
         try:
@@ -59,7 +71,7 @@ class MixingAnalysis:
         this_spec['AR'] = p[0]
         model_input = SEPIRInput(this_spec, composition_list, comp_dist)
         model_input.k_home = (1 - p[1]) * model_input.k_home
-        model_input.k_ext = (1 - p[2]) * model_input.k_ext
+        model_input.k_ext = (1 - p[2]) * beta_ext * model_input.k_ext
 
         household_population = HouseholdPopulation(
             composition_list, comp_dist, model_input)
@@ -124,7 +136,7 @@ def main(no_of_workers,
         len(internal_mix_range),
         len(external_mix_range))
 
-    fname = 'mixing_sweep_output.pkl'
+    fname = 'outputs/mixing_sweep/results.pkl'
     with open(fname, 'wb') as f:
         dump(
             (growth_rate_data,
