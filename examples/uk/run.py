@@ -1,17 +1,20 @@
 '''This runs the UK-like model with a single set of parameters for 100 days
 '''
-from os.path import isfile
+from numpy import log
+from os import mkdir
+from os.path import isdir, isfile
 from pickle import load, dump
 from pandas import read_csv
 from scipy.integrate import solve_ivp
-from model.preprocessing import ( estimate_growth_rate,
+from model.preprocessing import ( estimate_beta_ext, estimate_growth_rate,
         SEPIRInput, HouseholdPopulation, make_initial_condition)
-from model.specs import TWO_AGE_SEPIR_SPEC, TWO_AGE_UK_SPEC
+from model.specs import TWO_AGE_SEPIR_SPEC_FOR_FITTING, TWO_AGE_UK_SPEC
 from model.common import SEPIRRateEquations
 from model.imports import NoImportModel
 # pylint: disable=invalid-name
 
-SPEC = {**TWO_AGE_SEPIR_SPEC, **TWO_AGE_UK_SPEC}
+if isdir('outputs/uk') is False:
+    mkdir('outputs/uk')
 
 # List of observed household compositions
 composition_list = read_csv(
@@ -22,16 +25,31 @@ comp_dist = read_csv(
     'inputs/eng_and_wales_adult_child_composition_dist.csv',
     header=0).to_numpy().squeeze()
 
-model_input = SEPIRInput(SPEC, composition_list, comp_dist)
 
-if isfile('vars.pkl') is True:
-    with open('vars.pkl', 'rb') as f:
+if isfile('outputs/uk/fitted_model_input.pkl') is True:
+    with open('outputs/uk/fitted_model_input.pkl', 'rb') as f:
+        model_input = load(f)
+else:
+    SPEC = {**TWO_AGE_SEPIR_SPEC_FOR_FITTING, **TWO_AGE_UK_SPEC}
+    growth_rate = log(2) / 3 # Doubling time of 3 days
+    model_input_to_fit = SEPIRInput(SPEC, composition_list, comp_dist)
+    household_population_to_fit = HouseholdPopulation(
+        composition_list, comp_dist, model_input_to_fit)
+    rhs_to_fit = SEPIRRateEquations(model_input_to_fit, household_population_to_fit, NoImportModel(5,2))
+    beta_ext = estimate_beta_ext(household_population_to_fit, rhs_to_fit, growth_rate)
+    model_input = model_input_to_fit
+    model_input.k_ext *= beta_ext
+    with open('outputs/uk/fitted_model_input.pkl', 'wb') as f:
+        dump(model_input, f)
+
+if isfile('outputs/uk/household_population.pkl') is True:
+    with open('outputs/uk/household_population.pkl', 'rb') as f:
         household_population = load(f)
 else:
     # With the parameters chosen, we calculate Q_int:
     household_population = HouseholdPopulation(
         composition_list, comp_dist, model_input)
-    with open('vars.pkl', 'wb') as f:
+    with open('outputs/uk/household_population.pkl', 'wb') as f:
         dump(household_population, f)
 
 rhs = SEPIRRateEquations(model_input, household_population, NoImportModel(5,2))
@@ -39,6 +57,7 @@ rhs = SEPIRRateEquations(model_input, household_population, NoImportModel(5,2))
 r_est = estimate_growth_rate(household_population, rhs, [0.001, 5], 1e-3)
 
 print('Estimated growth rate is',r_est,'.')
+print('Estimated doubling time is',log(2) / r_est,'.')
 
 H0 = make_initial_condition(household_population, rhs)
 
@@ -61,5 +80,5 @@ time_series = {
 'R':R
 }
 
-with open('uk_like.pkl', 'wb') as f:
-    dump((H, time_series, model_input), f)
+with open('outputs/uk/results.pkl', 'wb') as f:
+    dump((H, time_series), f)
