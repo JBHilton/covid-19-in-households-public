@@ -994,6 +994,51 @@ def estimate_beta_ext(household_population,rhs,r):
 
     return beta_ext
 
+def build_support_bubbles(
+        composition_list,
+        comp_dist,
+        max_adults,
+        max_bubble_size,
+        bubble_prob):
+    '''This function returns the composition list and distribution which results
+    from a support bubble policy. max_adults specifies the maximum number of adults
+    which can be present in a household for that household to be
+    elligible to join a support bubble. The 2-age class structure with
+    children in age class 0 and adults in age class 1 is "hard-wired" into this
+    function as we only use the function for this specific example.'''
+
+    no_comps = composition_list.shape[0]
+    hh_sizes = composition_list.sum(1)
+
+    elligible_comp_locs = where(composition_list[:,1]<=max_adults)[0]
+    no_elligible_comps = len(elligible_comp_locs)
+
+    mixed_comp_list = deepcopy(composition_list)
+    mixed_comp_dist = deepcopy(comp_dist)
+
+    index = 0
+
+    for hh1 in elligible_comp_locs:
+        mixed_comp_dist[hh1] = (1-bubble_prob) * mixed_comp_dist[hh1]
+        bubbled_sizes = hh_sizes + hh_sizes[hh1]
+        permitted_bubbles = where(bubbled_sizes<=max_bubble_size)
+        bubble_dist = comp_dist / comp_dist[permitted_bubbles].sum() # This scales the entries in the allowed bubble compositions so they sum to one, but keeps the indexing consistent with everything else
+        for hh2 in permitted_bubbles:
+
+            bubbled_comp = composition_list[hh1,] + composition_list[hh2,]
+
+            if bubbled_comp.tolist() in mixed_comp_list.tolist():
+                bc_loc = where((mixed_comp_list==bubbled_comp).all(axis=1))
+                mixed_comp_dist[bc_loc] += bubble_prob * \
+                                           comp_dist[hh1] * \
+                                           bubble_dist[hh2]
+            else:
+                mixed_comp_list = vstack((mixed_comp_list, bubbled_comp))
+                mixed_comp_dist = append(mixed_comp_dist, array([bubble_prob *
+                                       comp_dist[hh1] *
+                                       bubble_dist[hh2]]))
+    return mixed_comp_list, mixed_comp_dist
+
 def add_vuln_class(model_input,
                     vuln_prop,
                     class_to_split = 1):
