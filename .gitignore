@@ -4,5 +4,6 @@ octave-workspace
 *.pkl
 *.spyproject
 output*.txt
+*.ipynb_checkpoints*
 *.swp
 *.png

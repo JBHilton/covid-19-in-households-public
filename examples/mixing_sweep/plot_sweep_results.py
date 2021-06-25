@@ -6,9 +6,9 @@ from matplotlib.pyplot import close, colorbar, imshow, set_cmap, subplots
 from examples.temp_bubbles.common import DataObject
 from seaborn import heatmap
 
-AR_range = array([0.15,0.3,0.45])
-internal_mix_range = arange(0.0,1.0,0.05)
-external_mix_range = arange(0.0,1.0,0.05)
+AR_range = array([0.3,0.45,0.6])
+internal_mix_range = array([0.2,0.6])
+external_mix_range = array([0.2,0.6])
 AR_len = len(AR_range)
 internal_mix_len = len(internal_mix_range)
 external_mix_len = len(external_mix_range)
