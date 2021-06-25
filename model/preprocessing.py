@@ -306,7 +306,7 @@ class HouseholdPopulation(ABC):
             composition_list,
             composition_distribution,
             model_input,
-            print_progress=True):
+            print_progress=False):
         '''This builds internal mixing matrix for entire system of
         age-structured households.'''
 
@@ -1019,24 +1019,25 @@ def build_support_bubbles(
     index = 0
 
     for hh1 in elligible_comp_locs:
-        mixed_comp_dist[hh1] = (1-bubble_prob) * mixed_comp_dist[hh1]
-        bubbled_sizes = hh_sizes + hh_sizes[hh1]
-        permitted_bubbles = where(bubbled_sizes<=max_bubble_size)
-        bubble_dist = comp_dist / comp_dist[permitted_bubbles].sum() # This scales the entries in the allowed bubble compositions so they sum to one, but keeps the indexing consistent with everything else
-        for hh2 in permitted_bubbles:
+        if hh_sizes[hh1] < max_bubble_size:
+            mixed_comp_dist[hh1] = (1-bubble_prob) * mixed_comp_dist[hh1]
+            bubbled_sizes = hh_sizes + hh_sizes[hh1]
+            permitted_bubbles = where(bubbled_sizes<=max_bubble_size)
+            bubble_dist = comp_dist / comp_dist[permitted_bubbles].sum() # This scales the entries in the allowed bubble compositions so they sum to one, but keeps the indexing consistent with everything else
+            for hh2 in permitted_bubbles:
 
-            bubbled_comp = composition_list[hh1,] + composition_list[hh2,]
+                bubbled_comp = composition_list[hh1,] + composition_list[hh2,]
 
-            if bubbled_comp.tolist() in mixed_comp_list.tolist():
-                bc_loc = where((mixed_comp_list==bubbled_comp).all(axis=1))
-                mixed_comp_dist[bc_loc] += bubble_prob * \
-                                           comp_dist[hh1] * \
-                                           bubble_dist[hh2]
-            else:
-                mixed_comp_list = vstack((mixed_comp_list, bubbled_comp))
-                mixed_comp_dist = append(mixed_comp_dist, array([bubble_prob *
-                                       comp_dist[hh1] *
-                                       bubble_dist[hh2]]))
+                if bubbled_comp.tolist() in mixed_comp_list.tolist():
+                    bc_loc = where((mixed_comp_list==bubbled_comp).all(axis=1))
+                    mixed_comp_dist[bc_loc] += bubble_prob * \
+                                               comp_dist[hh1] * \
+                                               bubble_dist[hh2]
+                else:
+                    mixed_comp_list = vstack((mixed_comp_list, bubbled_comp))
+                    mixed_comp_dist = append(mixed_comp_dist, array([bubble_prob *
+                                           comp_dist[hh1] *
+                                           bubble_dist[hh2]]))
     return mixed_comp_list, mixed_comp_dist
 
 def add_vuln_class(model_input,

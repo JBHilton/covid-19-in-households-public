@@ -25,7 +25,7 @@ if isdir('outputs/long_term_bubbles') is False:
     mkdir('outputs/long_term_bubbles')
 
 MAX_ADULTS = 1 # In this example we assume only single-adult households can join bubbles
-MAX_BUBBLE_SIZE = 8
+MAX_BUBBLE_SIZE = 7
 SPEC = {**TWO_AGE_SEPIR_SPEC_FOR_FITTING, **TWO_AGE_UK_SPEC}
 
 
@@ -54,6 +54,22 @@ antibody_prev=0 # Starting antibody prev/immunity
 AR=1.0 # Starting attack ratio - visited households are fully recovered
 
 class BubbleAnalysis:
+    def __init__(self):
+        basic_mixed_comp_list, basic_mixed_comp_dist = build_support_bubbles(
+                composition_list,
+                comp_dist,
+                MAX_ADULTS,
+                MAX_BUBBLE_SIZE,
+                1)
+
+        basic_mixed_comp_dist = basic_mixed_comp_dist/sum(basic_mixed_comp_dist)
+        self.basic_bubbled_input = SEPIRInput(SPEC, basic_mixed_comp_list, basic_mixed_comp_dist)
+
+        self.bubbled_household_population = HouseholdPopulation(
+            basic_mixed_comp_list, basic_mixed_comp_dist, self.basic_bubbled_input)
+
+        rhs = SEPIRRateEquations(self.basic_bubbled_input, self.bubbled_household_population, NoImportModel(5,2))
+
     def __call__(self, p):
         print('now calling')
         try:
@@ -72,27 +88,35 @@ class BubbleAnalysis:
                 MAX_ADULTS,
                 MAX_BUBBLE_SIZE,
                 p[0])
-        print('built mixed list')
 
         mixed_comp_dist = mixed_comp_dist/sum(mixed_comp_dist)
-        bubbled_model_input = SEPIRInput(SPEC, mixed_comp_list, mixed_comp_dist)
+        bubbled_model_input = deepcopy(self.basic_bubbled_input)
+        bubbled_model_input.composition_distribution = mixed_comp_dist
         bubbled_model_input.k_ext = \
                         (1 - p[1]) * beta_ext * bubbled_model_input.k_ext
 
-        household_population = HouseholdPopulation(
-            mixed_comp_list, mixed_comp_dist, bubbled_model_input)
+        household_population = deepcopy(self.bubbled_household_population)
+        household_population.composition_distribution = mixed_comp_dist
 
         rhs = SEPIRRateEquations(bubbled_model_input, household_population, NoImportModel(5,2))
+
+        print('calculating growth rate, p=',p)
 
         growth_rate = estimate_growth_rate(household_population, rhs, [-0.9*SPEC['recovery_rate'], 5], 1e-2)
         if growth_rate is None:
             growth_rate = 0
 
+        print('initialising, p=',p)
+
         H0 = make_initial_condition_with_recovereds(household_population, rhs, prev, antibody_prev, AR)
+
+        print('solving, p=',p)
 
         no_days = 100
         tspan = (0.0, no_days)
         solution = solve_ivp(rhs, tspan, H0, first_step=0.001, atol=1e-16)
+
+        print('calculating output, p=',p)
 
         t = solution.t
         H = solution.y
@@ -125,9 +149,12 @@ def main(no_of_workers,
         for e in external_mix_range])
 
     print('about to pool')
+    prepool_time = get_time()
 
     with Pool(no_of_workers) as pool:
         results = pool.map(bubble_system, params)
+
+    print('Calculations took', (get_time()-prepool_time)/60, 'minutes.')
 
     growth_rate_data = array([r[0] for r in results]).reshape(
         len(bubble_prob_range),
@@ -154,8 +181,8 @@ def main(no_of_workers,
 if __name__ == '__main__':
     parser = ArgumentParser()
     parser.add_argument('--no_of_workers', type=int, default=4)
-    parser.add_argument('--bubble_prob_vals', type=int, default=[0, 1.0, 0.25])
-    parser.add_argument('--external_mix_vals', type=int, default=[0, 1.0, 0.25])
+    parser.add_argument('--bubble_prob_vals', type=int, default=[0.25, 1.0, 0.5])
+    parser.add_argument('--external_mix_vals', type=int, default=[0.25, 1.0, 0.5])
     args = parser.parse_args()
 
     main(args.no_of_workers,
