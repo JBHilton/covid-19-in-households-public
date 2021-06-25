@@ -1,17 +1,16 @@
 # Compartmental household epidemiological models with age-structure
 
-The models contained in this repository apply the concepts of [compartmental
-models](https://en.wikipedia.org/wiki/Compartmental_models_in_epidemiology) to
-a household. Additionally, the models can incorporate demographic information
-in household composition which can be generalised such as age-structure. This
-can be generalised into any type of risk-structure e.g. patient or staff and
-shielded or non-shielded household member. The purpose of this software is to
-enable quantitative evaluation of health policies in wide range of scenarios.
+This repository is an implementation of household [compartmental
+models](https://en.wikipedia.org/wiki/Compartmental_models_in_epidemiology).
+The models incorporate demographic information through explicit household
+composition. The demographic information is typically age-structure but this
+can be generalised into any risk-structure e.g. patient, staff, shielded
+or non-shielded household member. The purpose of this software is to enable
+quantitative evaluation of health policies in wide range of scenarios.
 
-The repository contains a set of functions and classes as well several examples
+The code contains a set of functions and classes as well several example
 analyses with heterogeneous risk-structure. Functions and classes automate the
-construction of data-structures necessary to define household populations and
-rate equations.
+construction of objects defining household populations and rate equations.
 
 For detailed information on how to use this code refer to the [wiki
 pages](https://github.com/JBHilton/covid-19-in-households-public/wiki). For
