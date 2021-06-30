@@ -25,8 +25,10 @@ if isdir('outputs/long_term_bubbles') is False:
     mkdir('outputs/long_term_bubbles')
 
 MAX_ADULTS = 1 # In this example we assume only single-adult households can join bubbles
-MAX_BUBBLE_SIZE = 7
+MAX_BUBBLE_SIZE = 6
 SPEC = {**TWO_AGE_SEPIR_SPEC_FOR_FITTING, **TWO_AGE_UK_SPEC}
+DOUBLING_TIME = 3
+X0 = log(2) / DOUBLING_TIME
 
 
 composition_list = read_csv(
@@ -40,7 +42,7 @@ if isfile('outputs/long_term_bubbles/beta_ext.pkl') is True:
     with open('outputs/long_term_bubbles/beta_ext.pkl', 'rb') as f:
         beta_ext = load(f)
 else:
-    growth_rate = log(2) / 3 # Doubling time of 3 days
+    growth_rate = log(2) / DOUBLING_TIME # Doubling time of 3 days
     model_input_to_fit = SEPIRInput(SPEC, composition_list, comp_dist)
     household_population_to_fit = HouseholdPopulation(
         composition_list, comp_dist, model_input_to_fit)
@@ -102,7 +104,7 @@ class BubbleAnalysis:
 
         print('calculating growth rate, p=',p)
 
-        growth_rate = estimate_growth_rate(household_population, rhs, [-0.9*SPEC['recovery_rate'], 1], 1e-2)
+        growth_rate = estimate_growth_rate(household_population, rhs, [-0.9*SPEC['recovery_rate'], 1], 1e-2, p[1]*X0)
         if growth_rate is None:
             growth_rate = 0
 

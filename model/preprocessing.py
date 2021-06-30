@@ -914,10 +914,10 @@ def get_multiplier_by_path_integral(r, Q_int, household_population, FOI_by_state
     return multiplier
 
 def get_multiplier_eigenvalue(r, Q_int, household_population, FOI_by_state, index_prob, index_states, no_index_states):
-    mult_start = get_time()
     multiplier = sparse((no_index_states, no_index_states))
     discount_matrix = r * spidentity(Q_int.shape[0]) - Q_int
     reward_mat = FOI_by_state.dot(index_prob)
+    mult_start = get_time()
     for i, index_state in enumerate(index_states):
         col = path_integral_solve(discount_matrix, reward_mat[:, i])
         multiplier += sparse((col[index_states], (range(no_index_states), no_index_states * [i] )), shape=(no_index_states, no_index_states))
@@ -945,7 +945,7 @@ def get_multiplier_by_path_integral_by_block(r, Q_int, household_population, FOI
             multiplier[i, j] = col[adjusted_source_index]
     return multiplier
 
-def estimate_growth_rate(household_population,rhs,interval=[-1, 1],tol=1e-3):
+def estimate_growth_rate(household_population,rhs,interval=[-1, 1],tol=1e-3,x0=1e-3):
 
     reverse_comp_dist = diag(household_population.composition_distribution).dot(household_population.composition_list)
     reverse_comp_dist = reverse_comp_dist.dot(diag(1/reverse_comp_dist.sum(0)))
@@ -987,7 +987,7 @@ def estimate_growth_rate(household_population,rhs,interval=[-1, 1],tol=1e-3):
     def eval_from_r(r_guess):
         return get_multiplier_eigenvalue(r_guess, Q_int, household_population, FOI_by_state, index_prob, index_states, no_index_states) - 1
 
-    root_output = root_scalar(eval_from_r, bracket=[r_min, r_max], method='brentq', xtol=tol)
+    root_output = root_scalar(eval_from_r, bracket=[r_min, r_max], method='brentq', xtol=tol, x0=x0)
 
     r_now = root_output.root
     print('converged in',root_output.iterations,'iterations.')
