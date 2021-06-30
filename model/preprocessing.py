@@ -6,6 +6,7 @@ from numpy import (
         where, zeros, concatenate, vstack, identity, tile, hstack, prod, ix_,
         shape, atleast_2d, diag)
 from numpy.linalg import eig, inv
+from scipy.optimize import root_scalar
 from scipy.sparse import block_diag
 from scipy.sparse import identity as spidentity
 from scipy.sparse.linalg import spsolve
@@ -903,13 +904,45 @@ def path_integral_solve(discount_matrix, reward_by_state):
     sol = spsolve(discount_matrix, reward_by_state)
     return sol
 
-def get_multiplier_by_path_integral(r, Q_int, FOI_by_state, index_prob, index_states, no_index_states):
+def get_multiplier_by_path_integral(r, Q_int, household_population, FOI_by_state, index_prob, index_states, no_index_states):
     multiplier = sparse((no_index_states, no_index_states))
     discount_matrix = r * spidentity(Q_int.shape[0]) - Q_int
     reward_mat = FOI_by_state.dot(index_prob)
     for i, index_state in enumerate(index_states):
         col = path_integral_solve(discount_matrix, reward_mat[:, i])
         multiplier += sparse((col[index_states], (range(no_index_states), no_index_states * [i] )), shape=(no_index_states, no_index_states))
+    return multiplier
+
+def get_multiplier_eigenvalue(r, Q_int, household_population, FOI_by_state, index_prob, index_states, no_index_states):
+    mult_start = get_time()
+    multiplier = sparse((no_index_states, no_index_states))
+    discount_matrix = r * spidentity(Q_int.shape[0]) - Q_int
+    reward_mat = FOI_by_state.dot(index_prob)
+    for i, index_state in enumerate(index_states):
+        col = path_integral_solve(discount_matrix, reward_mat[:, i])
+        multiplier += sparse((col[index_states], (range(no_index_states), no_index_states * [i] )), shape=(no_index_states, no_index_states))
+    mult_end = get_time()
+    print('multiplier calculation took',mult_end-mult_start,'seconds')
+    evalue = (speig(multiplier.T)[0]).real.max()
+    print('eval calculation took',get_time()-mult_end,'seconds')
+    return evalue
+
+def get_multiplier_by_path_integral_by_block(r, Q_int, household_population, FOI_by_state, index_prob, index_states, no_index_states):
+    multiplier = zeros((no_index_states, no_index_states))
+    discount_matrix = r * spidentity(Q_int.shape[0]) - Q_int
+    reward_mat = FOI_by_state.dot(index_prob)
+    for i, source_index in enumerate(index_states):
+        source_comp = household_population.which_composition[source_index]
+        if source_comp==0:
+            source_mat_range = range(household_population.cum_sizes[0])
+            adjusted_source_index = source_index
+        else:
+            source_mat_range = range(household_population.cum_sizes[source_comp-1], household_population.cum_sizes[source_comp])
+            adjusted_source_index = source_index - household_population.cum_sizes[source_comp-1]
+        source_mat = discount_matrix[source_mat_range,:][:,source_mat_range]
+        for j, new_index in enumerate(index_states):
+            col = path_integral_solve(source_mat, reward_mat[source_mat_range, j])
+            multiplier[i, j] = col[adjusted_source_index]
     return multiplier
 
 def estimate_growth_rate(household_population,rhs,interval=[-1, 1],tol=1e-3):
@@ -939,26 +972,34 @@ def estimate_growth_rate(household_population,rhs,interval=[-1, 1],tol=1e-3):
 
     r_min = interval[0]
     r_max = interval[1]
-    multiplier = get_multiplier_by_path_integral(r_min, Q_int, FOI_by_state, index_prob, index_states, no_index_states)
-    eval_min = (speig(multiplier.T)[0]).real.max()
-    multiplier = get_multiplier_by_path_integral(r_max, Q_int, FOI_by_state, index_prob, index_states, no_index_states)
-    eval_max = (speig(multiplier.T)[0]).real.max()
+    # eval_min = get_multiplier_eigenvalue(r_min, Q_int, household_population, FOI_by_state, index_prob, index_states, no_index_states)
+    # # eval_min = (speig(multiplier.T)[0]).real.max()
+    # eval_max = get_multiplier_eigenvalue(r_max, Q_int, household_population, FOI_by_state, index_prob, index_states, no_index_states)
+    # # eval_max = (speig(multiplier.T)[0]).real.max()
+    #
+    # if ((eval_min-1) * (eval_max-1) > 0):
+    #     print('Solution not contained within interval, eval at min is',
+    #           eval_min-1,
+    #           ', eval at max is',
+    #           eval_max-1)
+    #     return None
 
-    if ((eval_min-1) * (eval_max-1) > 0):
-        print('Solution not contained within interval, eval at min is',
-              eval_min-1,
-              ', eval at max is',
-              eval_max-1)
-        return None
+    def eval_from_r(r_guess):
+        return get_multiplier_eigenvalue(r_guess, Q_int, household_population, FOI_by_state, index_prob, index_states, no_index_states) - 1
 
-    while (r_max - r_min > tol):
-        r_now = 0.5 * (r_max + r_min)
-        multiplier = get_multiplier_by_path_integral(r_now, Q_int, FOI_by_state, index_prob, index_states, no_index_states)
-        eval_now = (speig(multiplier.T)[0]).real.max()
-        if ((eval_now-1) * (eval_max-1) > 0):
-            r_max = r_now
-        else:
-            r_min = r_now
+    root_output = root_scalar(eval_from_r, bracket=[r_min, r_max], method='brentq', xtol=tol)
+
+    r_now = root_output.root
+    print('converged in',root_output.iterations,'iterations.')
+
+    # while (r_max - r_min > tol):
+    #     r_now = 0.5 * (r_max + r_min)
+    #     multiplier = get_multiplier_by_path_integral(r_now, Q_int, household_population, FOI_by_state, index_prob, index_states, no_index_states)
+    #     eval_now = (speig(multiplier.T)[0]).real.max()
+    #     if ((eval_now-1) * (eval_max-1) > 0):
+    #         r_max = r_now
+    #     else:
+    #         r_min = r_now
 
     return r_now
 
@@ -987,7 +1028,7 @@ def estimate_beta_ext(household_population,rhs,r):
         index_class = where(rhs.states_exp_only[index_states[i],:]==1)[0]
         index_prob[index_class,i] = reverse_comp_dist[comp_by_index_state[i], index_class]
 
-    multiplier = get_multiplier_by_path_integral(r, Q_int, FOI_by_state, index_prob, index_states, no_index_states)
+    multiplier = get_multiplier_by_path_integral(r, Q_int, household_population, FOI_by_state, index_prob, index_states, no_index_states)
     evalue = (speig(multiplier.T)[0]).real.max()
 
     beta_ext = 1/evalue

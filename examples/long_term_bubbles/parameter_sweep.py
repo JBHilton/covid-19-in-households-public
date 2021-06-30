@@ -102,7 +102,7 @@ class BubbleAnalysis:
 
         print('calculating growth rate, p=',p)
 
-        growth_rate = estimate_growth_rate(household_population, rhs, [-0.9*SPEC['recovery_rate'], 5], 1e-2)
+        growth_rate = estimate_growth_rate(household_population, rhs, [-0.9*SPEC['recovery_rate'], 1], 1e-2)
         if growth_rate is None:
             growth_rate = 0
 
