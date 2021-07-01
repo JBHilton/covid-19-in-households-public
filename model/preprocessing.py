@@ -917,14 +917,12 @@ def get_multiplier_eigenvalue(r, Q_int, household_population, FOI_by_state, inde
     multiplier = sparse((no_index_states, no_index_states))
     discount_matrix = r * spidentity(Q_int.shape[0]) - Q_int
     reward_mat = FOI_by_state.dot(index_prob)
-    mult_start = get_time()
+    # mult_start = get_time()
     for i, index_state in enumerate(index_states):
         col = path_integral_solve(discount_matrix, reward_mat[:, i])
         multiplier += sparse((col[index_states], (range(no_index_states), no_index_states * [i] )), shape=(no_index_states, no_index_states))
-    mult_end = get_time()
-    print('multiplier calculation took',mult_end-mult_start,'seconds')
+    # print('multiplier calculation took',get_time()-mult_start,'seconds.')
     evalue = (speig(multiplier.T)[0]).real.max()
-    print('eval calculation took',get_time()-mult_end,'seconds')
     return evalue
 
 def get_multiplier_by_path_integral_by_block(r, Q_int, household_population, FOI_by_state, index_prob, index_states, no_index_states):
@@ -1063,7 +1061,7 @@ def build_support_bubbles(
         if hh_sizes[hh1] < max_bubble_size:
             mixed_comp_dist[hh1] = (1-bubble_prob) * mixed_comp_dist[hh1]
             bubbled_sizes = hh_sizes + hh_sizes[hh1]
-            permitted_bubbles = where(bubbled_sizes<=max_bubble_size)
+            permitted_bubbles = where(bubbled_sizes<=max_bubble_size)[0]
             bubble_dist = comp_dist / comp_dist[permitted_bubbles].sum() # This scales the entries in the allowed bubble compositions so they sum to one, but keeps the indexing consistent with everything else
             for hh2 in permitted_bubbles:
 
