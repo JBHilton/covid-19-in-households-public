@@ -1,7 +1,7 @@
 from argparse import ArgumentParser
 from numpy import arange, array, atleast_2d, hstack
-from os import makedirs
-from os.path import exists,isfile
+from os import mkdir
+from os.path import isdir,isfile
 from pickle import load, dump
 from pandas import read_csv
 from scipy.integrate import solve_ivp
@@ -25,18 +25,37 @@ from examples.temp_bubbles.common import (
 
 '''If there is not already a results folder assigned to the outputs from this
 script, create one now.'''
-if not exists('outputs/temp_bubbles'):
-    makedirs('outputs/temp_bubbles')
+if isdir('outputs/temp_bubbles') is False:
+    mkdir('outputs/temp_bubbles')
 
-SPEC = {**SINGLE_AGE_UK_SPEC, **SINGLE_AGE_SEIR_SPEC}
-
-# NUMERICAL SETTINGS
-ATOL = 1e-16
-
+SPEC = {**SINGLE_AGE_UK_SPEC, **SINGLE_AGE_SEIR_SPEC_FOR_FITTING}
+X0 = 3 * 1e-2 # Growth rate estimate for mid-December 2020 from ONS
+ATOL = 1e-16 # IVP solver tolerance
 NO_COMPARTMENTS = 4 # We use an SEIR model, hence 4 compartments
-
+HH_TO_MERGE = 3 # Number of households we merge
 MAX_MERGED_SIZE = 10 # We only allow merges where total individuals is at most 12
 MAX_UNMERGED_SIZE = 4 # As usual, we model the chunk of the population in households of size 6 or fewer
+
+comp_dist = read_csv(
+    'inputs/england_hh_size_dist.csv',
+    header=0).to_numpy().squeeze()
+comp_dist = comp_dist[:MAX_UNMERGED_SIZE]
+comp_dist = comp_dist/sum(comp_dist)
+max_hh_size = len(comp_dist)
+composition_list = atleast_2d(arange(1, max_hh_size+1)).T
+
+if isfile('outputs/temp_bubbles/beta_ext.pkl') is True:
+    with open('outputs/temp_bubbles/beta_ext.pkl', 'rb') as f:
+        beta_ext = load(f)
+else:
+    growth_rate = X0
+    model_input_to_fit = SEIRInput(SPEC, composition_list, comp_dist)
+    household_population_to_fit = HouseholdPopulation(
+        composition_list, comp_dist, model_input_to_fit)
+    rhs_to_fit = SEIRRateEquations(model_input_to_fit, household_population_to_fit, NoImportModel(4,1))
+    beta_ext = estimate_beta_ext(household_population_to_fit, rhs_to_fit, growth_rate)
+    with open('outputs/temp_bubbles/beta_ext.pkl', 'wb') as f:
+        dump(beta_ext, f)
 
 
 def create_unmerged_context(p):
@@ -281,24 +300,9 @@ def run_merge(
             ),
             f)
 
-
-comp_dist = read_csv(
-    'inputs/england_hh_size_dist.csv',
-    header=0).to_numpy().squeeze()
-comp_dist = comp_dist[:MAX_UNMERGED_SIZE]
-comp_dist = comp_dist/sum(comp_dist)
-max_hh_size = len(comp_dist)
-composition_list = atleast_2d(arange(1, max_hh_size+1)).T
-
 ave_hh_size = comp_dist.dot(composition_list)[0]
 
-# Number of households we merge
-hh_to_merge = 3
-# This is left over from an earlier formulation, just keep it at 1
-mixing_strength = 1
 
-unmerged_exponents = array([0.0, 0.5, 1.0])
-merged_exponents = array([0.0, 0.5, 1.0])
 
 
 def simulate_merge2(
@@ -410,7 +414,7 @@ def simulate_merge3(
             merged_population,
             hh_dimension,
             pairings,
-            hh_to_merge,
+            HH_TO_MERGE,
             4)
         if switch == 0:
             merge_time = temp_time
@@ -428,7 +432,7 @@ def simulate_merge3(
         merged_population,
         hh_dimension,
         pairings,
-        hh_to_merge,
+        HH_TO_MERGE,
         4)
     tspan = (t0, t_end)
     # print('Integrating over post-merge period...')
@@ -446,9 +450,11 @@ def simulate_merge3(
     return merge_time, merge_H, postmerge_time, postmerge_H
 
 
-def main(no_of_workers):
-    if isfile('threewise_merge_comps.pkl') is True:
-        with open('threewise_merge_comps.pkl', 'rb') as f:
+def main(no_of_workers,
+         unmerged_exponents,
+         merged_exponents):
+    if isfile('outputs/temp_bubbles/threewise_merge_comps.pkl') is True:
+        with open('outputs/temp_bubbles/threewise_merge_comps.pkl', 'rb') as f:
             print('Loading merged composition distribution...')
             merged_comp_list_2, \
                 merged_comp_dist_2, \
@@ -470,7 +476,7 @@ def main(no_of_workers):
             pairings_3 = build_mixed_compositions_threewise(
                 composition_list, comp_dist, MAX_MERGED_SIZE)
 
-        with open('threewise_merge_comps.pkl', 'wb') as f:
+        with open('outputs/temp_bubbles/threewise_merge_comps.pkl', 'wb') as f:
             dump(
                 (
                     merged_comp_list_2,
@@ -511,7 +517,7 @@ def main(no_of_workers):
         unmerged_results[0].population,
         merged_populations[0].merged_population3,
         pairings_3,
-        hh_to_merge,
+        HH_TO_MERGE,
         NO_COMPARTMENTS)
 
     params = []
@@ -528,10 +534,31 @@ def main(no_of_workers):
     with Pool(no_of_workers) as pool:
         pool.map(unpack_paramas_and_run_merge, params)
 
+    growth_rate_data = array([r[0] for r in results]).reshape(
+        len(bubble_prob_range),
+        len(external_mix_range))
+    peak_data = array([r[1] for r in results]).reshape(
+        len(bubble_prob_range),
+        len(external_mix_range))
+    end_data = array([r[2] for r in results]).reshape(
+        len(bubble_prob_range),
+        len(external_mix_range))
+
+    fname = 'outputs/temp_bubbles/results.pkl'
+    with open(fname, 'wb') as f:
+        dump(
+            (peak_data,
+             end_data,
+             unmerged_exponents,
+             merged_exponents),
+            f)
+
 
 if __name__ == '__main__':
     parser = ArgumentParser()
     parser.add_argument('--no_of_workers', type=int, default=2)
+    parser.add_argument('--unmerged_exponents', type=float, default=[0.25, 1.0, 0.5])
+    parser.add_argument('--merged_exponents', type=float, default=[0.25, 1.0, 0.5])
     args = parser.parse_args()
     start = time()
     main(args.no_of_workers)

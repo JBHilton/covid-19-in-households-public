@@ -25,7 +25,7 @@ if isdir('outputs/long_term_bubbles') is False:
     mkdir('outputs/long_term_bubbles')
 
 MAX_ADULTS = 1 # In this example we assume only single-adult households can join bubbles
-MAX_BUBBLE_SIZE = 8
+MAX_BUBBLE_SIZE = 10
 SPEC = {**TWO_AGE_SEPIR_SPEC_FOR_FITTING, **TWO_AGE_UK_SPEC}
 DOUBLING_TIME = 3
 X0 = log(2) / DOUBLING_TIME
@@ -63,8 +63,6 @@ class BubbleAnalysis:
                 MAX_ADULTS,
                 MAX_BUBBLE_SIZE,
                 1)
-
-        print(len(basic_mixed_comp_dist))
 
         basic_mixed_comp_dist = basic_mixed_comp_dist/sum(basic_mixed_comp_dist)
         self.basic_bubbled_input = SEPIRInput(SPEC, basic_mixed_comp_list, basic_mixed_comp_dist)
