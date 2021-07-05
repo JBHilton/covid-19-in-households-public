@@ -976,7 +976,7 @@ def estimate_growth_rate(household_population,rhs,interval=[-1, 1],tol=1e-3,x0=1
 
     index_prob = zeros((household_population.no_risk_groups,no_index_states))
     for i in range(no_index_states):
-        index_class = where(rhs.states_exp_only[index_states[i],:]==1)[0]
+        index_class = where(rhs.states_new_cases_only[index_states[i],:]==1)[0]
         index_prob[index_class,i] = reverse_comp_dist[comp_by_index_state[i], index_class]
 
     r_min = interval[0]
@@ -1035,7 +1035,7 @@ def estimate_beta_ext(household_population,rhs,r):
 
     index_prob = zeros((household_population.no_risk_groups,no_index_states))
     for i in range(no_index_states):
-        index_class = where(rhs.states_exp_only[index_states[i],:]==1)[0]
+        index_class = where(rhs.states_new_cases_only[index_states[i],:]==1)[0]
         index_prob[index_class,i] = reverse_comp_dist[comp_by_index_state[i], index_class]
 
     multiplier = get_multiplier_by_path_integral(r, Q_int, household_population, FOI_by_state, index_prob, index_states, no_index_states)
