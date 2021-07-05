@@ -7,9 +7,9 @@ from pandas import read_csv
 from scipy.integrate import solve_ivp
 from time import time
 from multiprocessing import Pool
-from model.preprocessing import (
+from model.preprocessing import ( estimate_beta_ext,
         SEIRInput, HouseholdPopulation, make_initial_condition_with_recovereds)
-from model.specs import SINGLE_AGE_UK_SPEC, SINGLE_AGE_SEIR_SPEC
+from model.specs import SINGLE_AGE_UK_SPEC, SINGLE_AGE_SEIR_SPEC_FOR_FITTING
 from model.common import SEIRRateEquations
 from model.imports import NoImportModel
 from examples.temp_bubbles.common import (
@@ -67,7 +67,8 @@ class UnmergedContext:
         unmerged_input = SEIRInput(SPEC, composition_list, comp_dist)
         unmerged_input.density_expo = density_exponent
         unmerged_input.k_home = (
-            ave_hh_size ** density_exponent) * unmerged_input.k_home
+            unmerged_input.ave_hh_size ** density_exponent) * unmerged_input.k_home
+        unmerged_input.k_ext = beta_ext * unmerged_input.k_ext
 
         self.population = HouseholdPopulation(
            composition_list,
@@ -105,27 +106,27 @@ class UnmergedContext:
         baseline_H = hstack((self.baseline_H, solution.y))
 
         baseline_S = baseline_H.T.dot(
-            self.population.states[:, 0])/ave_hh_size
+            self.population.states[:, 0])/unmerged_input.ave_hh_size
         baseline_E = baseline_H.T.dot(
-            self.population.states[:, 1])/ave_hh_size
+            self.population.states[:, 1])/unmerged_input.ave_hh_size
         baseline_I = baseline_H.T.dot(
-            self.population.states[:, 2])/ave_hh_size
+            self.population.states[:, 2])/unmerged_input.ave_hh_size
         baseline_R = baseline_H.T.dot(
-            self.population.states[:, 3])/ave_hh_size
+            self.population.states[:, 3])/unmerged_input.ave_hh_size
 
-        self.filename_stem = 'outputs/temp_bubbles/sweep_results_' + str(i)
-        with open(self.filename_stem + '.pkl', 'wb') as f:
-            dump(
-                (
-                    self.population,
-                    baseline_H,
-                    baseline_time,
-                    baseline_S,
-                    baseline_E,
-                    baseline_I,
-                    baseline_R
-                ),
-                f)
+        # self.filename_stem = 'outputs/temp_bubbles/sweep_results_' + str(i)
+        # with open(self.filename_stem + '.pkl', 'wb') as f:
+        #     dump(
+        #         (
+        #             self.population,
+        #             baseline_H,
+        #             baseline_time,
+        #             baseline_S,
+        #             baseline_E,
+        #             baseline_I,
+        #             baseline_R
+        #         ),
+        #         f)
 
 
 def unpack_paramas_and_run_merge(p):
@@ -148,6 +149,7 @@ class MergedSystems:
         merged_input2 = MergedSEIRInput(
                         SPEC, composition_list, comp_dist, 2, 1)
         merged_input2.density_expo = merged_exp
+        merged_input2.k_ext = beta_ext * merged_input2.k_ext
         self.merged_population2 = HouseholdPopulation(
             merged_comp_list_2,
             merged_comp_dist_2,
@@ -161,6 +163,7 @@ class MergedSystems:
         merged_input3 = MergedSEIRInput(
             SPEC, composition_list, comp_dist, 3, 1)
         merged_input3.density_expo = merged_exp
+        merged_input3.k_ext = beta_ext * merged_input3.k_ext
         self.merged_population3 = HouseholdPopulation(
             merged_comp_list_3,
             merged_comp_dist_3,
@@ -201,10 +204,10 @@ def run_merge(
     rhs_merged2 = merged.rhs_merged2
     rhs_merged3 = merged.rhs_merged3
 
-    merge_results.t_merge_1, \
-        merge_results.H_merge_1, \
-        merge_results.t_postmerge_1, \
-        merge_results.H_postmerge_1 = \
+    t_merge_1, \
+        H_merge_1, \
+        t_postmerge_1, \
+        H_postmerge_1 = \
         simulate_merge3(
             unmerged.population,
             merged_population3,
@@ -218,10 +221,10 @@ def run_merge(
             unmerged.baseline_H0,
             merge_start,
             merge_end)
-    merge_results.t_merge_3, \
-        merge_results.H_merge_3, \
-        merge_results.t_postmerge_3, \
-        merge_results.H_postmerge_3 = \
+    t_merge_3, \
+        H_merge_3, \
+        t_postmerge_3, \
+        H_postmerge_3 = \
         simulate_merge2(
             unmerged.population,
             merged_population2,
@@ -231,25 +234,25 @@ def run_merge(
             pairings_2,
             [1],
             0,
-            merge_results.H_postmerge_1[:, -1],
+            H_postmerge_1[:, -1],
             merge_end,
             t_end)
 
     solution = solve_ivp(
         unmerged.rhs,
         (merge_end, t_end),
-        merge_results.H_postmerge_1[:, -1],
+        H_postmerge_1[:, -1],
         first_step=0.001,
         atol=ATOL)
-    merge_results.t_postmerge_1 = hstack(
-        (merge_results.t_postmerge_1, solution.t))
-    merge_results.H_postmerge_1 = hstack(
-        (merge_results.H_postmerge_1, solution.y))
+    t_postmerge_1 = hstack(
+        (t_postmerge_1, solution.t))
+    H_postmerge_1 = hstack(
+        (H_postmerge_1, solution.y))
 
-    merge_results.t_merge_2, \
-        merge_results.H_merge_2, \
-        merge_results.t_postmerge_2, \
-        merge_results.H_postmerge_2 = \
+    t_merge_2, \
+        H_merge_2, \
+        t_postmerge_2, \
+        H_postmerge_2 = \
         simulate_merge2(
             unmerged.population,
             merged_population2,
@@ -262,10 +265,10 @@ def run_merge(
             unmerged.baseline_H0,
             merge_start,
             merge_end)
-    merge_results.t_merge_4, \
-        merge_results.H_merge_4, \
-        merge_results.t_postmerge_4, \
-        merge_results.H_postmerge_4 = \
+    t_merge_4, \
+        H_merge_4, \
+        t_postmerge_4, \
+        H_postmerge_4 = \
         simulate_merge2(
             unmerged.population,
             merged_population2,
@@ -275,33 +278,60 @@ def run_merge(
             pairings_2,
             [1],
             0,
-            merge_results.H_postmerge_2[:, -1],
+            H_postmerge_2[:, -1],
             merge_end,
             t_end)
 
     solution = solve_ivp(
         unmerged.rhs,
         (merge_end, t_end),
-        merge_results.H_postmerge_2[:, -1],
+        H_postmerge_2[:, -1],
         first_step=0.001,
         atol=ATOL)
-    merge_results.t_postmerge_2 = hstack((
-        merge_results.t_postmerge_2, solution.t))
-    merge_results.H_postmerge_2 = hstack((
-        merge_results.H_postmerge_2, solution.y))
+    t_postmerge_2 = hstack((
+        t_postmerge_2, solution.t))
+    H_postmerge_2 = hstack((
+        H_postmerge_2, solution.y))
 
-    filename = unmerged.filename_stem + str(j)
-    with open(filename + '.pkl', 'wb') as f:
-        dump(
-            (
-                merged_population2,
-                merged_population3,
-                merge_results
-            ),
-            f)
+    merge_I_1 = (1/3) * H_merge_1.T.dot(
+        merged_population3.states[:, 2] + merged_population3.states[:, 6] +
+        merged_population3.states[:, 10])/ave_hh_size
+    postmerge_I_1 = H_postmerge_1.T.dot(unmerged_population.states[:, 2])/ave_hh_size
+    peaks_1 = max(hstack((merge_I_1, postmerge_I_1)))
+    merge_R_1 = (1/3) * H_merge_1.T.dot(
+        merged_population3.states[:, 3] + merged_population3.states[:, 7] +
+        merged_population3.states[:,11])/ave_hh_size
+    postmerge_R_1 = H_postmerge_1.T.dot(unmerged_population.states[:, 3])/ave_hh_size
+    R_end_1 = postmerge_R_1[-1]
 
-ave_hh_size = comp_dist.dot(composition_list)[0]
+    merge_I_2 = (1/2) * H_merge_2.T.dot(
+        merged_population2.states[:, 2] + merged_population2.states[:, 6])/ave_hh_size
+    postmerge_I_2 = H_postmerge_2.T.dot(unmerged_population.states[:, 2])/ave_hh_size
+    peaks_2 = max(hstack((merge_I_2, postmerge_I_2)))
+    merge_R_2 = (1/2) * H_merge_2.T.dot(
+        merged_population2.states[:, 3] + merged_population2.states[:, 7])/ave_hh_size
+    postmerge_R_2 = H_postmerge_2.T.dot(unmerged_population.states[:, 3])/ave_hh_size
+    R_end_2 = postmerge_R_2[-1]
 
+    merge_I_3 = (1/2) * H_merge_3.T.dot(
+        merged_population2.states[:, 2] + merged_population2.states[:, 6])/ave_hh_size
+    postmerge_I_3 = H_postmerge_3.T.dot(unmerged_population.states[:, 2])/ave_hh_size
+    peaks_3 = max(hstack((merge_I_3, postmerge_I_3)))
+    merge_R_3 = (1/2) * H_merge_3.T.dot(
+        merged_population2.states[:, 3] + merged_population2.states[:, 7])/ave_hh_size
+    postmerge_R_3 = H_postmerge_3.T.dot(unmerged_population.states[:, 3])/ave_hh_size
+    R_end_3 = postmerge_R_3[-1]
+
+    merge_I_4 = (1/2) * H_merge_4.T.dot(
+        merged_population2.states[:, 2] + merged_population2.states[:, 6])/ave_hh_size
+    postmerge_I_4 = H_postmerge_4.T.dot(unmerged_population.states[:, 2])/ave_hh_size
+    peaks_4 = max(hstack((merge_I_4, postmerge_I_4)))
+    merge_R_4 = (1/2) * H_merge_4.T.dot(
+        merged_population2.states[:, 3] + merged_population2.states[:, 7])/ave_hh_size
+    postmerge_R_4 = H_postmerge_4.T.dot(unmerged_population.states[:, 3])/ave_hh_size
+    R_end_4 = postmerge_R_4[-1]
+
+    return [peaks1, R_end1, peaks2, R_end2, peaks3, R_end3, peaks4, R_end4]
 
 
 
@@ -453,6 +483,10 @@ def simulate_merge3(
 def main(no_of_workers,
          unmerged_exponents,
          merged_exponents):
+
+    unmerged_exponent_range = len(unmerged_exponents)
+    merged_exponent_range = len(merged_exponents)
+
     if isfile('outputs/temp_bubbles/threewise_merge_comps.pkl') is True:
         with open('outputs/temp_bubbles/threewise_merge_comps.pkl', 'rb') as f:
             print('Loading merged composition distribution...')
@@ -532,23 +566,44 @@ def main(no_of_workers,
                 state_match,
                 t0, t_end, merge_start, merge_end))
     with Pool(no_of_workers) as pool:
-        pool.map(unpack_paramas_and_run_merge, params)
+        results = pool.map(unpack_paramas_and_run_merge, params)
 
-    growth_rate_data = array([r[0] for r in results]).reshape(
-        len(bubble_prob_range),
-        len(external_mix_range))
-    peak_data = array([r[1] for r in results]).reshape(
-        len(bubble_prob_range),
-        len(external_mix_range))
-    end_data = array([r[2] for r in results]).reshape(
-        len(bubble_prob_range),
-        len(external_mix_range))
+    peak_data1 = array([r[0] for r in results]).reshape(
+        len(unmerged_exponent_range),
+        len(merged_exponent_range))
+    end_data1 = array([r[1] for r in results]).reshape(
+        len(unmerged_exponent_range),
+        len(merged_exponent_range))
+    peak_data2 = array([r[2] for r in results]).reshape(
+        len(unmerged_exponent_range),
+        len(merged_exponent_range))
+    end_data2 = array([r[3] for r in results]).reshape(
+        len(unmerged_exponent_range),
+        len(merged_exponent_range))
+    peak_data3 = array([r[4] for r in results]).reshape(
+        len(unmerged_exponent_range),
+        len(merged_exponent_range))
+    end_data3 = array([r[5] for r in results]).reshape(
+        len(unmerged_exponent_range),
+        len(merged_exponent_range))
+    peak_data4 = array([r[6] for r in results]).reshape(
+        len(unmerged_exponent_range),
+        len(merged_exponent_range))
+    end_data4 = array([r[7] for r in results]).reshape(
+        len(unmerged_exponent_range),
+        len(merged_exponent_range))
 
     fname = 'outputs/temp_bubbles/results.pkl'
     with open(fname, 'wb') as f:
         dump(
-            (peak_data,
-             end_data,
+            (peak_data1,
+             end_data1,
+             peak_data2,
+             end_data2,
+             peak_data3,
+             end_data3,
+             peak_data4,
+             end_data4,
              unmerged_exponents,
              merged_exponents),
             f)

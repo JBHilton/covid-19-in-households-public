@@ -62,6 +62,16 @@ SINGLE_AGE_SEIR_SPEC = {
     'fit_method' : 'R*'
 }
 
+SINGLE_AGE_SEIR_SPEC_FOR_FITTING = {
+    'compartmental_structure': 'SEIR', # This is which subsystem key to use
+    'AR': 0.45,                     # Secondary attack probability
+    'recovery_rate': 1/7,           # Recovery rate
+    'incubation_rate': 1/5,         # E->I incubation rate
+    'sus': array([1]),          # Relative susceptibility by age/vulnerability class
+    'density_expo' : 0.5, # "Cauchemez parameter"
+    'fit_method' : 'EL'
+}
+
 TWO_AGE_SEIR_SPEC = {
     'compartmental_structure': 'SEIR', # This is which subsystem key to use
     'AR': 0.45,                     # Secondary attack probability

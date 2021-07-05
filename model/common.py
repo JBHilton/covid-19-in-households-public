@@ -758,6 +758,7 @@ class RateEquations:
         self.composition_by_state = household_population.composition_by_state
         self.states_sus_only = household_population.states[:, ::self.no_compartments]
         self.s_present = where(self.states_sus_only.sum(axis=1) > 0)[0]
+        self.states_new_cases_only = household_population.states[:, model_input.new_case_compartment::self.no_compartments]
         self.epsilon = epsilon
         self.inf_compartment_list = subsystem_key[self.compartmental_structure][2]
         self.no_inf_compartments = len(self.inf_compartment_list)

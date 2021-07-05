@@ -934,13 +934,15 @@ def _sedur_subsystem(self, household_spec):
         index_vector))
 
 
-''' Entries in the subsystem key are in the following order: 1, list of cont
+''' Entries in the subsystem key are in the following order: [list of
+compartments, number of compartments, list of compartments which
+contribute to infection, compartment corresponding to new infections].
 '''
 
 subsystem_key = {
-'SIR' : [_sir_subsystem, 3, [1]],
-'SEIR' : [_seir_subsystem, 4, [2]],
-'SEPIR' : [_sepir_subsystem,5, [2,3]],
-'SEPIRQ' : [_sepirq_subsystem,6, [2,3,5]],
-'SEDUR' : [_sedur_subsystem,5, [2,3]],
+'SIR' : [_sir_subsystem, 3, [1], 1],
+'SEIR' : [_seir_subsystem, 4, [2], 1],
+'SEPIR' : [_sepir_subsystem,5, [2,3], 1],
+'SEPIRQ' : [_sepirq_subsystem,6, [2,3,5], 1],
+'SEDUR' : [_sedur_subsystem,5, [2,3], 1],
 }

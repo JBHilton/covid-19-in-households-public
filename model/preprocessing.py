@@ -392,6 +392,9 @@ class HouseholdPopulation(ABC):
     @property
     def composition_by_state(self):
         return self.composition_list[self.which_composition, :]
+    @property
+    def hh_size_by_state(self):
+        return self.composition_list[self.which_composition, :].sum(axis=1)
 
 
 class ConstantDetModel:
@@ -432,6 +435,7 @@ class ModelInput(ABC):
         self.compartmental_structure = spec['compartmental_structure']
         self.inf_compartment_list = subsystem_key[self.compartmental_structure][2]
         self.no_inf_compartments = len(self.inf_compartment_list)
+        self.new_case_compartment = subsystem_key[self.compartmental_structure][3]
 
         self.fine_bds = spec['fine_bds']
         self.coarse_bds = spec['coarse_bds']
@@ -492,7 +496,10 @@ class SIRInput(ModelInput):
         R_int = - log(1 - spec['AR']) * self.dens_adj_ave_hh_size
 
         self.k_home = R_int * self.k_home / home_eig
-        external_scale = spec['R*']/(self.ave_hh_size*spec['AR'])
+        if spec['fit_method'] == 'R*':
+            external_scale = spec['R*'] / (self.ave_hh_size*spec['AR'])
+        else:
+            external_scale = 1
         self.k_ext = external_scale * self.k_ext / ext_eig
 
     @property
@@ -520,7 +527,10 @@ class SEIRInput(ModelInput):
         R_int = - log(1 - spec['AR']) * self.dens_adj_ave_hh_size
 
         self.k_home = R_int * self.k_home / home_eig
-        external_scale = spec['R*']/(self.ave_hh_size*spec['AR'])
+        if spec['fit_method'] == 'R*':
+            external_scale = spec['R*'] / (self.ave_hh_size*spec['AR'])
+        else:
+            external_scale = 1
         self.k_ext = external_scale * self.k_ext / ext_eig
 
     @property
@@ -917,11 +927,11 @@ def get_multiplier_eigenvalue(r, Q_int, household_population, FOI_by_state, inde
     multiplier = sparse((no_index_states, no_index_states))
     discount_matrix = r * spidentity(Q_int.shape[0]) - Q_int
     reward_mat = FOI_by_state.dot(index_prob)
-    # mult_start = get_time()
+    mult_start = get_time()
     for i, index_state in enumerate(index_states):
-        col = path_integral_solve(discount_matrix, reward_mat[:, i])
+        col = spsolve(discount_matrix, reward_mat[:, i])
         multiplier += sparse((col[index_states], (range(no_index_states), no_index_states * [i] )), shape=(no_index_states, no_index_states))
-    # print('multiplier calculation took',get_time()-mult_start,'seconds.')
+    print('multiplier calculation took',get_time()-mult_start,'seconds.')
     evalue = (speig(multiplier.T)[0]).real.max()
     return evalue
 
@@ -955,8 +965,9 @@ def estimate_growth_rate(household_population,rhs,interval=[-1, 1],tol=1e-3,x0=1
                 FOI_by_state += (rhs.ext_matrix_list[ic].dot(
                         rhs.epsilon * states_inf_only.T)).T
     index_states = where(
-    ((rhs.states_exp_only.sum(axis=1)==1) *
-    ((rhs.states_pro_only + rhs.states_inf_only + rhs.states_rec_only).sum(axis=1)==0)))[0]
+    ((rhs.states_new_cases_only.sum(axis=1)==1) *
+    ((rhs.states_sus_only + rhs.states_new_cases_only).sum(axis=1)==\
+    household_population.hh_size_by_state)))[0]
 
     no_index_states = len(index_states)
     comp_by_index_state = household_population.which_composition[index_states]
@@ -1013,8 +1024,9 @@ def estimate_beta_ext(household_population,rhs,r):
                 FOI_by_state += (rhs.ext_matrix_list[ic].dot(
                         rhs.epsilon * states_inf_only.T)).T
     index_states = where(
-    ((rhs.states_exp_only.sum(axis=1)==1) *
-    ((rhs.states_pro_only + rhs.states_inf_only + rhs.states_rec_only).sum(axis=1)==0)))[0]
+    ((rhs.states_new_cases_only.sum(axis=1)==1) *
+    ((rhs.states_sus_only + rhs.states_new_cases_only).sum(axis=1)==\
+    household_population.hh_size_by_state)))[0]
 
     no_index_states = len(index_states)
     comp_by_index_state = household_population.which_composition[index_states]
