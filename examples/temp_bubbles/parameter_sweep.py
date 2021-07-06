@@ -1,5 +1,5 @@
 from argparse import ArgumentParser
-from numpy import arange, array, atleast_2d, hstack
+from numpy import arange, array, atleast_2d, diag, hstack, ones
 from os import mkdir
 from os.path import isdir,isfile
 from pickle import load, dump
@@ -7,14 +7,12 @@ from pandas import read_csv
 from scipy.integrate import solve_ivp
 from time import time
 from multiprocessing import Pool
-from model.preprocessing import ( estimate_beta_ext,
+from model.preprocessing import ( estimate_beta_ext, merge_hh_inputs,
         SEIRInput, HouseholdPopulation, make_initial_condition_with_recovereds)
 from model.specs import SINGLE_AGE_UK_SPEC, SINGLE_AGE_SEIR_SPEC_FOR_FITTING
 from model.common import SEIRRateEquations
 from model.imports import NoImportModel
 from examples.temp_bubbles.common import (
-        DataObject,
-        MergedSEIRInput,
         demerged_initial_condition,
         build_mixed_compositions_pairwise,
         pairwise_merged_initial_condition,
@@ -35,6 +33,7 @@ NO_COMPARTMENTS = 4 # We use an SEIR model, hence 4 compartments
 HH_TO_MERGE = 3 # Number of households we merge
 MAX_MERGED_SIZE = 10 # We only allow merges where total individuals is at most 12
 MAX_UNMERGED_SIZE = 4 # As usual, we model the chunk of the population in households of size 6 or fewer
+GUEST_TRANS_SCALING = 1 # This is strength of guest-host interactions relative to host-host interactions
 
 comp_dist = read_csv(
     'inputs/england_hh_size_dist.csv',
@@ -69,6 +68,7 @@ class UnmergedContext:
         unmerged_input.k_home = (
             unmerged_input.ave_hh_size ** density_exponent) * unmerged_input.k_home
         unmerged_input.k_ext = beta_ext * unmerged_input.k_ext
+        self.input = unmerged_input
 
         self.population = HouseholdPopulation(
            composition_list,
@@ -146,10 +146,11 @@ class MergedSystems:
             merged_comp_dist_3
             ):
 
-        merged_input2 = MergedSEIRInput(
-                        SPEC, composition_list, comp_dist, 2, 1)
+        merged_input2 = SEIRInput(
+                        SPEC, merged_comp_list_2, merged_comp_dist_2)
+        merged_input2 = merge_hh_inputs(merged_input2, 2, GUEST_TRANS_SCALING)
         merged_input2.density_expo = merged_exp
-        merged_input2.k_ext = beta_ext * merged_input2.k_ext
+        self.merged_input2 = merged_input2
         self.merged_population2 = HouseholdPopulation(
             merged_comp_list_2,
             merged_comp_dist_2,
@@ -160,10 +161,11 @@ class MergedSystems:
             self.merged_population2,
             NoImportModel(NO_COMPARTMENTS, 2))
 
-        merged_input3 = MergedSEIRInput(
-            SPEC, composition_list, comp_dist, 3, 1)
+        merged_input3 = SEIRInput(
+                        SPEC, merged_comp_list_3, merged_comp_dist_3)
+        merged_input3 = merge_hh_inputs(merged_input3, 3, GUEST_TRANS_SCALING)
         merged_input3.density_expo = merged_exp
-        merged_input3.k_ext = beta_ext * merged_input3.k_ext
+        self.merged_input3 = merged_input3
         self.merged_population3 = HouseholdPopulation(
             merged_comp_list_3,
             merged_comp_dist_3,
@@ -192,8 +194,6 @@ def run_merge(
     '''This function runs a merge simulation for specified parameters.'''
 
     this_iteration_start = time()
-    # This is just a class I made up to store the results - very hacky!
-    merge_results = DataObject(0)
 
     # STRATEGIES: 1 is form triangles for 2 days, 2 is form pair on
     # 25th and again on 26th, 3 is 1 plus pair on new year's, 4 is 2
@@ -295,43 +295,50 @@ def run_merge(
 
     merge_I_1 = (1/3) * H_merge_1.T.dot(
         merged_population3.states[:, 2] + merged_population3.states[:, 6] +
-        merged_population3.states[:, 10])/ave_hh_size
-    postmerge_I_1 = H_postmerge_1.T.dot(unmerged_population.states[:, 2])/ave_hh_size
+        merged_population3.states[:, 10])/unmerged.input.ave_hh_size
+    postmerge_I_1 = H_postmerge_1.T.dot(unmerged.population.states[:, 2])/unmerged.input.ave_hh_size
     peaks_1 = max(hstack((merge_I_1, postmerge_I_1)))
     merge_R_1 = (1/3) * H_merge_1.T.dot(
         merged_population3.states[:, 3] + merged_population3.states[:, 7] +
-        merged_population3.states[:,11])/ave_hh_size
-    postmerge_R_1 = H_postmerge_1.T.dot(unmerged_population.states[:, 3])/ave_hh_size
+        merged_population3.states[:,11])/unmerged.input.ave_hh_size
+    postmerge_R_1 = H_postmerge_1.T.dot(unmerged.population.states[:, 3])/unmerged.input.ave_hh_size
     R_end_1 = postmerge_R_1[-1]
 
     merge_I_2 = (1/2) * H_merge_2.T.dot(
-        merged_population2.states[:, 2] + merged_population2.states[:, 6])/ave_hh_size
-    postmerge_I_2 = H_postmerge_2.T.dot(unmerged_population.states[:, 2])/ave_hh_size
+        merged_population2.states[:, 2] + merged_population2.states[:, 6])/unmerged.input.ave_hh_size
+    postmerge_I_2 = H_postmerge_2.T.dot(unmerged.population.states[:, 2])/unmerged.input.ave_hh_size
     peaks_2 = max(hstack((merge_I_2, postmerge_I_2)))
     merge_R_2 = (1/2) * H_merge_2.T.dot(
-        merged_population2.states[:, 3] + merged_population2.states[:, 7])/ave_hh_size
-    postmerge_R_2 = H_postmerge_2.T.dot(unmerged_population.states[:, 3])/ave_hh_size
+        merged_population2.states[:, 3] + merged_population2.states[:, 7])/unmerged.input.ave_hh_size
+    postmerge_R_2 = H_postmerge_2.T.dot(unmerged.population.states[:, 3])/unmerged.input.ave_hh_size
     R_end_2 = postmerge_R_2[-1]
 
     merge_I_3 = (1/2) * H_merge_3.T.dot(
-        merged_population2.states[:, 2] + merged_population2.states[:, 6])/ave_hh_size
-    postmerge_I_3 = H_postmerge_3.T.dot(unmerged_population.states[:, 2])/ave_hh_size
+        merged_population2.states[:, 2] + merged_population2.states[:, 6])/unmerged.input.ave_hh_size
+    postmerge_I_3 = H_postmerge_3.T.dot(unmerged.population.states[:, 2])/unmerged.input.ave_hh_size
     peaks_3 = max(hstack((merge_I_3, postmerge_I_3)))
     merge_R_3 = (1/2) * H_merge_3.T.dot(
-        merged_population2.states[:, 3] + merged_population2.states[:, 7])/ave_hh_size
-    postmerge_R_3 = H_postmerge_3.T.dot(unmerged_population.states[:, 3])/ave_hh_size
+        merged_population2.states[:, 3] + merged_population2.states[:, 7])/unmerged.input.ave_hh_size
+    postmerge_R_3 = H_postmerge_3.T.dot(unmerged.population.states[:, 3])/unmerged.input.ave_hh_size
     R_end_3 = postmerge_R_3[-1]
 
     merge_I_4 = (1/2) * H_merge_4.T.dot(
-        merged_population2.states[:, 2] + merged_population2.states[:, 6])/ave_hh_size
-    postmerge_I_4 = H_postmerge_4.T.dot(unmerged_population.states[:, 2])/ave_hh_size
+        merged_population2.states[:, 2] + merged_population2.states[:, 6])/unmerged.input.ave_hh_size
+    postmerge_I_4 = H_postmerge_4.T.dot(unmerged.population.states[:, 2])/unmerged.input.ave_hh_size
     peaks_4 = max(hstack((merge_I_4, postmerge_I_4)))
     merge_R_4 = (1/2) * H_merge_4.T.dot(
-        merged_population2.states[:, 3] + merged_population2.states[:, 7])/ave_hh_size
-    postmerge_R_4 = H_postmerge_4.T.dot(unmerged_population.states[:, 3])/ave_hh_size
+        merged_population2.states[:, 3] + merged_population2.states[:, 7])/unmerged.input.ave_hh_size
+    postmerge_R_4 = H_postmerge_4.T.dot(unmerged.population.states[:, 3])/unmerged.input.ave_hh_size
     R_end_4 = postmerge_R_4[-1]
 
-    return [peaks1, R_end1, peaks2, R_end2, peaks3, R_end3, peaks4, R_end4]
+    return [peaks_1,
+            R_end_1,
+            peaks_2,
+            R_end_2,
+            peaks_3,
+            R_end_3,
+            peaks_4,
+            R_end_4]
 
 
 
@@ -484,9 +491,6 @@ def main(no_of_workers,
          unmerged_exponents,
          merged_exponents):
 
-    unmerged_exponent_range = len(unmerged_exponents)
-    merged_exponent_range = len(merged_exponents)
-
     if isfile('outputs/temp_bubbles/threewise_merge_comps.pkl') is True:
         with open('outputs/temp_bubbles/threewise_merge_comps.pkl', 'rb') as f:
             print('Loading merged composition distribution...')
@@ -569,29 +573,29 @@ def main(no_of_workers,
         results = pool.map(unpack_paramas_and_run_merge, params)
 
     peak_data1 = array([r[0] for r in results]).reshape(
-        len(unmerged_exponent_range),
-        len(merged_exponent_range))
+        len(unmerged_exponents),
+        len(merged_exponents))
     end_data1 = array([r[1] for r in results]).reshape(
-        len(unmerged_exponent_range),
-        len(merged_exponent_range))
+        len(unmerged_exponents),
+        len(merged_exponents))
     peak_data2 = array([r[2] for r in results]).reshape(
-        len(unmerged_exponent_range),
-        len(merged_exponent_range))
+        len(unmerged_exponents),
+        len(merged_exponents))
     end_data2 = array([r[3] for r in results]).reshape(
-        len(unmerged_exponent_range),
-        len(merged_exponent_range))
+        len(unmerged_exponents),
+        len(merged_exponents))
     peak_data3 = array([r[4] for r in results]).reshape(
-        len(unmerged_exponent_range),
-        len(merged_exponent_range))
+        len(unmerged_exponents),
+        len(merged_exponents))
     end_data3 = array([r[5] for r in results]).reshape(
-        len(unmerged_exponent_range),
-        len(merged_exponent_range))
+        len(unmerged_exponents),
+        len(merged_exponents))
     peak_data4 = array([r[6] for r in results]).reshape(
-        len(unmerged_exponent_range),
-        len(merged_exponent_range))
+        len(unmerged_exponents),
+        len(merged_exponents))
     end_data4 = array([r[7] for r in results]).reshape(
-        len(unmerged_exponent_range),
-        len(merged_exponent_range))
+        len(unmerged_exponents),
+        len(merged_exponents))
 
     fname = 'outputs/temp_bubbles/results.pkl'
     with open(fname, 'wb') as f:
@@ -612,9 +616,11 @@ def main(no_of_workers,
 if __name__ == '__main__':
     parser = ArgumentParser()
     parser.add_argument('--no_of_workers', type=int, default=2)
-    parser.add_argument('--unmerged_exponents', type=float, default=[0.25, 1.0, 0.5])
-    parser.add_argument('--merged_exponents', type=float, default=[0.25, 1.0, 0.5])
+    parser.add_argument('--unmerged_exponents', type=float, default=[0.25, 0.75])
+    parser.add_argument('--merged_exponents', type=float, default=[0.25, 0.75])
     args = parser.parse_args()
     start = time()
-    main(args.no_of_workers)
+    main(args.no_of_workers,
+         args.unmerged_exponents,
+         args.merged_exponents)
     print('Execution took',time() - start,'seconds.')

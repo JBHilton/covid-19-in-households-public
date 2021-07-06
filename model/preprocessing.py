@@ -2,9 +2,9 @@
 from abc import ABC
 from copy import copy, deepcopy
 from numpy import (
-        append, arange, around, array, cumsum, log, ndarray, ones, ones_like,
-        where, zeros, concatenate, vstack, identity, tile, hstack, prod, ix_,
-        shape, atleast_2d, diag)
+        append, arange, around, array, cumsum, kron, log, ndarray, ones,
+        ones_like, where, zeros, concatenate, vstack, identity, tile, hstack,
+        prod, ix_, shape, atleast_2d, diag)
 from numpy.linalg import eig, inv
 from scipy.optimize import root_scalar
 from scipy.sparse import block_diag
@@ -510,7 +510,8 @@ class SEIRInput(ModelInput):
     def __init__(self, spec, composition_list, composition_distribution):
         super().__init__(spec, composition_list, composition_distribution)
 
-        self.expandables = ['sus']
+        self.expandables = ['sus',
+                            'inf_scales']
 
         self.sus = spec['sus']
         self.inf_scales = [ones((self.no_age_classes,))]
@@ -932,7 +933,7 @@ def get_multiplier_eigenvalue(r, Q_int, household_population, FOI_by_state, inde
         col = spsolve(discount_matrix, reward_mat[:, i])
         multiplier += sparse((col[index_states], (range(no_index_states), no_index_states * [i] )), shape=(no_index_states, no_index_states))
     print('multiplier calculation took',get_time()-mult_start,'seconds.')
-    evalue = (speig(multiplier.T)[0]).real.max()
+    evalue = (speig(multiplier.T,k=1)[0]).real
     return evalue
 
 def get_multiplier_by_path_integral_by_block(r, Q_int, household_population, FOI_by_state, index_prob, index_states, no_index_states):
@@ -1039,7 +1040,7 @@ def estimate_beta_ext(household_population,rhs,r):
         index_prob[index_class,i] = reverse_comp_dist[comp_by_index_state[i], index_class]
 
     multiplier = get_multiplier_by_path_integral(r, Q_int, household_population, FOI_by_state, index_prob, index_states, no_index_states)
-    evalue = (speig(multiplier.T)[0]).real.max()
+    evalue = (speig(multiplier.T,k=1)[0]).real
 
     beta_ext = 1/evalue
 
@@ -1154,3 +1155,43 @@ def add_vuln_class(model_input,
     expanded_input.no_age_classes = expanded_input.no_age_classes + 1
 
     return expanded_input
+
+def merge_hh_inputs(model_input,
+                    no_hh,
+                    guest_trans_scaling):
+    '''This function expands the model input to account for an additional
+    vulnerable class. We assume that this vulnerable class is identical
+    to members of the class class_to_split, apart from in their mixing
+    behaviour, where we assume that they do not engage in any external
+    mixing. vector_quants lists (as strings) the names of any class-stratified
+    vector quantities which need to be expanded to account for the new class.'''
+
+    merged_input = deepcopy(model_input)
+
+    merged_input.no_age_classes = no_hh * merged_input.no_age_classes
+
+    k_expander = (1-guest_trans_scaling)*diag(ones((no_hh, no_hh))) + \
+                    guest_trans_scaling * ones((no_hh, no_hh))
+
+    merged_input.k_home = kron(k_expander, merged_input.k_home) # Returns tiled matrix of copies of k_home, scaled by elements of k_expander
+    merged_input.k_ext = tile(merged_input.k_ext, (no_hh, no_hh))
+
+    for par_name in model_input.expandables:
+
+        param = getattr(merged_input, par_name)
+
+        if isinstance(param, ndarray):
+            expanded_param = tile(param, no_hh)
+        elif isinstance(param, list):
+            no_params = len(param)
+            expanded_param = []
+            for i in range(no_params):
+                this_param = tile(param[i], no_hh)
+                expanded_param.append(this_param)
+        else:
+            print('Invalid object type in merge_h_inputs.',
+                  'Valid types are arrays or lists, but',
+                  par_name,'is of type',type(param),'.')
+        setattr(merged_input, par_name, expanded_param)
+
+    return merged_input
