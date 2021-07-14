@@ -1,9 +1,11 @@
 ''' This runs a simple example with constant importation where infectious
 individuals get isolated outside of the household'''
 
-from os.path import isfile
+from copy import deepcopy
+from os import mkdir
+from os.path import isdir, isfile
 from pickle import load, dump
-from numpy import arange, array
+from numpy import arange, array, log
 from numpy.linalg import eig
 from numpy.random import rand
 from pandas import read_csv
@@ -11,13 +13,19 @@ from time import time as get_time
 from scipy.integrate import solve_ivp
 from matplotlib.pyplot import subplots
 from matplotlib.cm import get_cmap
-from model.preprocessing import SEPIRQInput, HouseholdPopulation
+from model.preprocessing import SEPIRInput, SEPIRQInput, HouseholdPopulation
 from model.preprocessing import (add_vuln_class, add_vulnerable_hh_members,
-make_initial_condition)
-from model.common import SEPIRQRateEquations
+estimate_beta_ext, make_initial_condition_by_eigenvector, map_SEPIR_to_SEPIRQ)
+from model.common import SEPIRRateEquations, SEPIRQRateEquations
 from model.imports import NoImportModel
 from model.specs import (TWO_AGE_UK_SPEC, TWO_AGE_EXT_SEPIRQ_SPEC,
-TWO_AGE_INT_SEPIRQ_SPEC)
+TWO_AGE_INT_SEPIRQ_SPEC, TWO_AGE_SEPIR_SPEC_FOR_FITTING)
+
+if isdir('outputs/oohi') is False:
+    mkdir('outputs/oohi')
+
+DOUBLING_TIME = 100
+growth_rate = log(2) / DOUBLING_TIME
 
 ext_spec = {**TWO_AGE_UK_SPEC, **TWO_AGE_EXT_SEPIRQ_SPEC}
 int_spec = {**TWO_AGE_UK_SPEC, **TWO_AGE_INT_SEPIRQ_SPEC}
@@ -31,18 +39,51 @@ comp_dist = read_csv(
     'inputs/eng_and_wales_adult_child_vuln_composition_dist.csv',
     header=0).to_numpy().squeeze()
 
+sepir_sepc = {**TWO_AGE_SEPIR_SPEC_FOR_FITTING, **TWO_AGE_UK_SPEC}
+
+
+if isfile('outputs/oohi/beta_ext.pkl') is True:
+    with open('outputs/oohi/beta_ext.pkl', 'rb') as f:
+        beta_ext = load(f)
+else:
+    # List of observed household compositions
+    fitting_comp_list = read_csv(
+        'inputs/eng_and_wales_adult_child_composition_list.csv',
+        header=0).to_numpy()
+    # Proportion of households which are in each composition
+    fitting_comp_dist = read_csv(
+        'inputs/eng_and_wales_adult_child_composition_dist.csv',
+        header=0).to_numpy().squeeze()
+    model_input_to_fit = SEPIRInput(sepir_sepc, fitting_comp_list, fitting_comp_dist)
+    household_population_to_fit = HouseholdPopulation(
+        fitting_comp_list, fitting_comp_dist, model_input_to_fit)
+    rhs_to_fit = SEPIRRateEquations(model_input_to_fit, household_population_to_fit, NoImportModel(5,2))
+    beta_ext = estimate_beta_ext(household_population_to_fit, rhs_to_fit, growth_rate)
+    with open('outputs/oohi/beta_ext.pkl', 'wb') as f:
+        dump(beta_ext, f)
+
 vuln_prop = 2.2/56
 adult_class = 1
 
+pre_npi_input =  SEPIRInput(sepir_sepc, composition_list, comp_dist)
+pre_npi_input.k_ext *= beta_ext
+pre_npi_input = add_vuln_class(pre_npi_input,
+                    vuln_prop,
+                    adult_class)
+
 ext_model_input = SEPIRQInput(ext_spec, composition_list, comp_dist)
+ext_model_input.k_ext = beta_ext * ext_model_input.k_ext
 ext_model_input = add_vuln_class(ext_model_input,
                     vuln_prop,
                     adult_class)
 int_model_input = SEPIRQInput(int_spec, composition_list, comp_dist)
+int_model_input.k_ext = beta_ext * int_model_input.k_ext
 int_model_input = add_vuln_class(int_model_input,
                     vuln_prop,
                     adult_class)
+
 prev = 1e-5
+antiprev = 1e-2
 
 # adherence_rate = 1
 #
@@ -67,9 +108,28 @@ OOHI_rhs = SEPIRQRateEquations(
     OOHI_household_population,
     import_model)
 
-H0 = make_initial_condition(OOHI_household_population, OOHI_rhs, prev)
+pre_npi_household_population = HouseholdPopulation(
+    composition_list, comp_dist, pre_npi_input)
+pre_npi_rhs = SEPIRRateEquations(
+    pre_npi_input,
+    pre_npi_household_population,
+    import_model)
 
-no_days = 30
+map_matrix = map_SEPIR_to_SEPIRQ(pre_npi_household_population,
+                                 OOHI_household_population)
+
+# H0 = make_initial_condition_with_recovereds(OOHI_household_population, OOHI_rhs, prev)
+
+H0_pre_npi = make_initial_condition_by_eigenvector(growth_rate,
+                                                   pre_npi_input,
+                                                   pre_npi_household_population,
+                                                   pre_npi_rhs,
+                                                   prev,
+                                                   antiprev)
+
+H0 = H0_pre_npi.dot(map_matrix)
+
+no_days = 100
 tspan = (0.0, no_days)
 solver_start = get_time()
 solution = solve_ivp(OOHI_rhs, tspan, H0, first_step=0.001, atol=1e-16)
@@ -102,7 +162,7 @@ WHQ_rhs = SEPIRQRateEquations(
     WHQ_household_population,
     import_model)
 
-H0 = make_initial_condition(WHQ_household_population, WHQ_rhs, prev)
+H0 = make_initial_condition_with_recovereds(WHQ_household_population, WHQ_rhs, prev)
 
 tspan = (0.0, no_days)
 solver_start = get_time()
@@ -154,6 +214,6 @@ Q_WHQ = WHQ_H[iso_present,:].T.dot(WHQ_household_population.composition_by_state
 # R_baseline = baseline_H.T.dot(baseline_household_population.states[:, 4::6])
 # Q_baseline = baseline_H.T.dot(baseline_household_population.states[:, 5::6])
 
-with open('isolation_data.pkl','wb') as f:
+with open('outputs/oohi/results.pkl','wb') as f:
     dump((ext_model_input, I_OOHI,R_OOHI,Q_OOHI,OOHI_time,I_WHQ,R_WHQ,Q_WHQ,WHQ_time),f)
     # dump((I_baseline,R_baseline,Q_baseline,baseline_time,I_OOHI,R_OOHI,Q_OOHI,OOHI_time,I_WHQ,R_WHQ,Q_WHQ,WHQ_time),f)

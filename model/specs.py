@@ -113,7 +113,6 @@ TWO_AGE_SEPIR_SPEC_FOR_FITTING = {
 TWO_AGE_INT_SEPIRQ_SPEC = {
     'compartmental_structure': 'SEPIRQ', # This is which subsystem key to use
     'AR': 0.45,                     # Secondary attack probability
-    'R*': 1.1,                      # Household-level reproduction number
     'recovery_rate': 1/4,           # Recovery rate
     'incubation_rate': 1/5,         # E->P incubation rate
     'symp_onset_rate': 1/3,         # P->I prodromal to symptomatic rate
@@ -122,7 +121,7 @@ TWO_AGE_INT_SEPIRQ_SPEC = {
     'inf_iso_rate': 1/0.5 * ones(2,),
     'discharge_rate': 1/14,         # 1 / ave time in isolation
     'iso_method': "int",            # This is either "int" or "ext"
-    'ad_prob': 1,                   # Probability under internal isolation that household members actually isolate
+    'ad_prob': 0.2,                   # Probability under internal isolation that household members actually isolate
     'class_is_isolating':
     array([[True, True, True],
            [True, True, True],
@@ -133,13 +132,12 @@ TWO_AGE_INT_SEPIRQ_SPEC = {
      array([1,1]),          # Prodromal transmission intensity relative to full inf transmission
     'sus': array([1,1]),          # Relative susceptibility by age/vulnerability class
     'density_expo' : 0.5, # "Cauchemez parameter"
-    'fit_method' : 'R*'
+    'fit_method' : 'EL'
 }
 
 TWO_AGE_EXT_SEPIRQ_SPEC = {
     'compartmental_structure': 'SEPIRQ', # This is which subsystem key to use
     'AR': 0.45,                     # Secondary attack probability
-    'R*': 1.1,                      # Household-level reproduction number
     'recovery_rate': 1/4,           # Recovery rate
     'incubation_rate': 1/5,         # E->P incubation rate
     'symp_onset_rate': 1/3,         # P->I prodromal to symptomatic rate
@@ -148,7 +146,7 @@ TWO_AGE_EXT_SEPIRQ_SPEC = {
     'inf_iso_rate': 1/0.5 * ones(2,),
     'discharge_rate': 1/14,         # 1 / ave time in isolation
     'iso_method': "ext",            # This is either "int" or "ext"
-    'ad_prob': 0.2,                   # Probability under internal isolation that household members actually isolate
+    'ad_prob': 0.2,                   # Probability under OOHI that household members actually isolate
     'class_is_isolating':
     array([[False, False, False],
            [False, False, True],
@@ -159,7 +157,7 @@ TWO_AGE_EXT_SEPIRQ_SPEC = {
      array([1,1]),          # Prodromal transmission intensity relative to full inf transmission
     'sus': array([1,1]),          # Relative susceptibility by age/vulnerability class
     'density_expo' : 0.5, # "Cauchemez parameter"
-    'fit_method' : 'R*'
+    'fit_method' : 'EL'
 }
 
 SINGLE_AGE_UK_SPEC = {

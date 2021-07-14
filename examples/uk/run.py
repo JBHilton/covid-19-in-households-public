@@ -1,13 +1,13 @@
 '''This runs the UK-like model with a single set of parameters for 100 days
 '''
-from numpy import log
+from numpy import array, log
 from os import mkdir
 from os.path import isdir, isfile
 from pickle import load, dump
 from pandas import read_csv
 from scipy.integrate import solve_ivp
 from model.preprocessing import ( estimate_beta_ext, estimate_growth_rate,
-        SEPIRInput, HouseholdPopulation, make_initial_condition)
+        SEPIRInput, HouseholdPopulation, make_initial_condition_by_eigenvector)
 from model.specs import TWO_AGE_SEPIR_SPEC_FOR_FITTING, TWO_AGE_UK_SPEC
 from model.common import SEPIRRateEquations
 from model.imports import NoImportModel
@@ -15,6 +15,9 @@ from model.imports import NoImportModel
 
 if isdir('outputs/uk') is False:
     mkdir('outputs/uk')
+
+DOUBLING_TIME = 3
+growth_rate = log(2) / DOUBLING_TIME
 
 # List of observed household compositions
 composition_list = read_csv(
@@ -31,7 +34,6 @@ if isfile('outputs/uk/fitted_model_input.pkl') is True:
         model_input = load(f)
 else:
     SPEC = {**TWO_AGE_SEPIR_SPEC_FOR_FITTING, **TWO_AGE_UK_SPEC}
-    growth_rate = log(2) / 3 # Doubling time of 3 days
     model_input_to_fit = SEPIRInput(SPEC, composition_list, comp_dist)
     household_population_to_fit = HouseholdPopulation(
         composition_list, comp_dist, model_input_to_fit)
@@ -59,7 +61,18 @@ r_est = estimate_growth_rate(household_population, rhs, [0.001, 5], 1e-3)
 print('Estimated growth rate is',r_est,'.')
 print('Estimated doubling time is',log(2) / r_est,'.')
 
-H0 = make_initial_condition(household_population, rhs)
+H0 = make_initial_condition_by_eigenvector(growth_rate, model_input, household_population, rhs, 1e-5, 1e-2)
+S0 = H0.T.dot(household_population.states[:, ::5])
+E0 = H0.T.dot(household_population.states[:, 1::5])
+P0 = H0.T.dot(household_population.states[:, 2::5])
+I0 = H0.T.dot(household_population.states[:, 3::5])
+R0 = H0.T.dot(household_population.states[:, 4::5])
+start_state = (1/model_input.ave_hh_size) * array([S0.sum(),
+                                                   E0.sum(),
+                                                   P0.sum(),
+                                                   I0.sum(),
+                                                   R0.sum()])
+print('Initial state is', start_state,'.')
 
 tspan = (0.0, 365)
 solution = solve_ivp(rhs, tspan, H0, first_step=0.001, atol=1e-16)

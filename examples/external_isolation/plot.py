@@ -5,7 +5,7 @@ from matplotlib.pyplot import subplots
 from matplotlib.cm import get_cmap
 
 
-with open('isolation_data.pkl', 'rb') as f:
+with open('outputs/oohi/results.pkl', 'rb') as f:
     model_input, I_OOHI,R_OOHI,Q_OOHI,OOHI_time,I_WHQ,R_WHQ,Q_WHQ,WHQ_time = load(f)
 class_per_hh = model_input.ave_hh_by_class
 # with open('isolation_data_1e-2_0pt6.pkl', 'rb') as f:

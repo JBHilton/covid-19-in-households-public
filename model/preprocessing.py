@@ -2,14 +2,14 @@
 from abc import ABC
 from copy import copy, deepcopy
 from numpy import (
-        append, arange, around, array, cumsum, kron, log, ndarray, ones,
+        append, arange, around, array, cumsum, insert, kron, log, ndarray, ones,
         ones_like, where, zeros, concatenate, vstack, identity, tile, hstack,
         prod, ix_, shape, atleast_2d, diag)
 from numpy.linalg import eig, inv
 from scipy.optimize import root_scalar
 from scipy.sparse import block_diag
 from scipy.sparse import identity as spidentity
-from scipy.sparse.linalg import spsolve
+from scipy.sparse.linalg import expm, spsolve
 from scipy.sparse.linalg import eigs as speig
 from scipy.special import binom as binom_coeff
 from scipy.stats import binom
@@ -21,6 +21,7 @@ from model.common import (
 from model.imports import import_model_from_spec, NoImportModel
 from model.subsystems import subsystem_key
 
+MAX_OUTBREAK_DURATION = 5 * 365 # Maximum time we suppose an outbreak can last, used in initial condition calculation in place of infinite matrix exponential
 
 def initialise_carehome(
         household_population,
@@ -127,7 +128,7 @@ def make_initial_condition_with_recovereds(
         household_population,
         rhs,
         prev=1.0e-2,
-        antiprev=5.6e-2,
+        antiprev=5.0e-2,
         AR=1.0):
     '''TODO: docstring'''
     fully_sus = where(
@@ -143,10 +144,10 @@ def make_initial_condition_with_recovereds(
             & ((rhs.states_rec_only).sum(axis=1) > 0))[0]
     # This last condition is needed to make sure we don't include any fully
     # susceptible states
-    i_is_one = where(
-        ((rhs.states_inf_only).sum(axis=1) == 1)
+    one_new_case = where(
+        ((rhs.states_new_cases_only).sum(axis=1) == 1)
         & ((
-            rhs.states_sus_only+rhs.states_inf_only).sum(axis=1)
+            rhs.states_sus_only + rhs.states_new_cases_only).sum(axis=1)
             ==
             household_population.states.sum(axis=1))
     )[0]
@@ -154,9 +155,9 @@ def make_initial_condition_with_recovereds(
         household_population.composition_distribution.T.dot(
             household_population.composition_list))
     H0 = zeros(len(household_population.which_composition))
-    inf_comps = household_population.which_composition[i_is_one]
+    inf_comps = household_population.which_composition[one_new_case]
     x = array([])
-    for state in i_is_one:
+    for state in one_new_case:
         x = append(
             x,
             (1/len(inf_comps == household_population.which_composition[state]))
@@ -177,12 +178,75 @@ def make_initial_condition_with_recovereds(
         # base_comp_dist[household_population.which_composition[state]]-=y[-1]
     # y = household_population.composition_distribution[
     #     household_population.which_composition[already_visited]]
-    H0[i_is_one] = ave_hh_size*(prev/sum(x)) * x
+    H0[one_new_case] = ave_hh_size*(prev/sum(x)) * x
     if antiprev>0:
         H0[already_visited] = ave_hh_size*((antiprev/AR)/sum(y)) * y
     H0[fully_sus] = (1-sum(H0)) * household_population.composition_distribution
 
     return H0
+
+def make_initial_condition_by_eigenvector(growth_rate,
+                                         model_input,
+                                         household_population,
+                                         rhs,
+                                         prev=1e-5,
+                                         antiprev=1e-2):
+
+    Q_int = household_population.Q_int
+    Q_exponent = expm(MAX_OUTBREAK_DURATION * Q_int)
+
+    reverse_comp_dist = diag(household_population.composition_distribution).dot(household_population.composition_list)
+    reverse_comp_dist = reverse_comp_dist.dot(diag(1/reverse_comp_dist.sum(0)))
+
+    Q_int = rhs.Q_int
+    FOI_by_state = zeros((Q_int.shape[0],household_population.no_risk_groups))
+    for ic in range(rhs.no_inf_compartments):
+                states_inf_only =  rhs.inf_by_state_list[ic]
+                FOI_by_state += (rhs.ext_matrix_list[ic].dot(
+                        rhs.epsilon * states_inf_only.T)).T
+    index_states = where(
+    ((rhs.states_new_cases_only.sum(axis=1)==1) *
+    ((rhs.states_sus_only + rhs.states_new_cases_only).sum(axis=1)==\
+    household_population.hh_size_by_state)))[0]
+
+    no_index_states = len(index_states)
+    comp_by_index_state = household_population.which_composition[index_states]
+
+    starter_mat = sparse((ones(no_index_states),(range(no_index_states), index_states)),shape=(no_index_states,Q_int.shape[0]))
+
+    index_prob = zeros((household_population.no_risk_groups,no_index_states))
+    for i in range(no_index_states):
+        index_class = where(rhs.states_new_cases_only[index_states[i],:]==1)[0]
+        index_prob[index_class,i] = reverse_comp_dist[comp_by_index_state[i], index_class]
+
+    multiplier = get_multiplier_by_path_integral(growth_rate, Q_int, household_population, FOI_by_state, index_prob, index_states, no_index_states)
+    evals, evects = eig(multiplier.T.todense())
+    hh_profile = sparse(evects[:, 0]).real
+    hh_profile = hh_profile / hh_profile.sum()
+    start_state_profile = hh_profile.T.dot(starter_mat)
+    end_state_profile = start_state_profile.dot(Q_exponent)
+
+    start_state_prev = \
+     start_state_profile.dot(
+     household_population.states[:,
+     model_input.new_case_compartment::household_population.no_epi_compartments]).sum() / \
+     household_population.ave_hh_size
+    end_state_prev = \
+     end_state_profile.dot(
+     household_population.states[:,
+     model_input.R_compartment::household_population.no_epi_compartments]).sum() / \
+     household_population.ave_hh_size
+
+    H0 = (prev / start_state_prev) * start_state_profile.T + \
+         (antiprev / end_state_prev) * end_state_profile.T
+    H0_sum = H0.sum()
+    fully_sus = where(
+        rhs.states_sus_only.sum(axis=1)
+        ==
+        household_population.states.sum(axis=1))[0]
+    H0[fully_sus] = (1 - H0_sum) * household_population.composition_distribution
+
+    return H0.toarray().squeeze()
 
 
 def make_aggregator(coarse_bounds, fine_bounds):
@@ -316,14 +380,14 @@ class HouseholdPopulation(ABC):
         self.ave_hh_size = model_input.ave_hh_size
         self.compartmental_structure = model_input.compartmental_structure
         self.subsystem_function = subsystem_key[self.compartmental_structure][0]
-        self.num_of_epidemiological_compartments = subsystem_key[self.compartmental_structure][1]
+        self.no_epi_compartments = subsystem_key[self.compartmental_structure][1]
         self.model_input = model_input
 
         # TODO: what if composition is given as list?
         self.no_compositions, self.no_risk_groups = composition_list.shape
 
         household_subsystem_specs = [
-            HouseholdSubsystemSpec(c, self.num_of_epidemiological_compartments)
+            HouseholdSubsystemSpec(c, self.no_epi_compartments)
             for c in composition_list]
 
         # This is to remember mapping between states and household compositions
@@ -358,7 +422,7 @@ class HouseholdPopulation(ABC):
         self.offsets = concatenate(([0], cum_sizes))
         self.states = zeros((
             self.total_size,
-            self.num_of_epidemiological_compartments * self.no_risk_groups))
+            self.no_epi_compartments * self.no_risk_groups), dtype=my_int)
         self.index_vector = []
         for i, part in enumerate(model_parts):
             class_list = household_subsystem_specs[i].class_indexes
@@ -366,11 +430,11 @@ class HouseholdPopulation(ABC):
                 this_class = class_list[j]
                 row_idx = slice(self.offsets[i], self.offsets[i+1])
                 dst_col_idx = slice(
-                    self.num_of_epidemiological_compartments*this_class,
-                    self.num_of_epidemiological_compartments*(this_class+1))
+                    self.no_epi_compartments*this_class,
+                    self.no_epi_compartments*(this_class+1))
                 src_col_idx = slice(
-                    self.num_of_epidemiological_compartments*j,
-                    self.num_of_epidemiological_compartments*(j+1))
+                    self.no_epi_compartments*j,
+                    self.no_epi_compartments*(j+1))
                 self.states[row_idx, dst_col_idx] = part[1][:, src_col_idx]
             temp_index_vector = part[6]
             if i>0:
@@ -481,6 +545,8 @@ class SIRInput(ModelInput):
 
         self.expandables = ['sus']
 
+        self.R_compartment = 2
+
         self.sus = spec['sus']
         self.inf_scales = [ones((self.no_age_classes,))] # In the SIR model there is only one infectious compartment
 
@@ -512,6 +578,8 @@ class SEIRInput(ModelInput):
 
         self.expandables = ['sus',
                             'inf_scales']
+
+        self.R_compartment = 3
 
         self.sus = spec['sus']
         self.inf_scales = [ones((self.no_age_classes,))]
@@ -548,6 +616,8 @@ class SEPIRInput(ModelInput):
 
         self.expandables = ['sus',
                          'inf_scales']
+
+        self.R_compartment = 4
 
         self.sus = spec['sus']
         self.inf_scales = [spec['prodromal_trans_scaling'],
@@ -597,6 +667,8 @@ class SEPIRQInput(ModelInput):
         self.expandables = ['sus',
                          'inf_scales',
                          'iso_rates']
+
+        self.R_compartment = 4
 
         self.sus = spec['sus']
         self.inf_scales = [spec['prodromal_trans_scaling'],
@@ -653,6 +725,41 @@ class SEPIRQInput(ModelInput):
     @property
     def gamma(self):
         return self.spec['recovery_rate']
+
+'''The following function constructs a matrix which maps the state (S,E,P,I,R)
+in the SEPIR model to the state (S,E,P,I,R,0) in the SEPIRQ model. This is used
+in the out-of-household-isolation example, where it is reduces the dimension of
+the linear solve which is used to calculate the initial conditions.'''
+def map_SEPIR_to_SEPIRQ(SEPIR_population, SEPIRQ_population):
+
+    no_SEPIR_states = SEPIR_population.Q_int.shape[0]
+    no_SEPIRQ_states = SEPIRQ_population.Q_int.shape[0]
+
+    map_matrix = sparse((no_SEPIR_states, no_SEPIRQ_states))
+
+    long_state = deepcopy(SEPIR_population.states)
+    for cls in range(SEPIR_population.model_input.no_age_classes, 0, -1):
+        long_state = insert(long_state,
+               cls*SEPIR_population.no_epi_compartments,
+               zeros((no_SEPIR_states, ), dtype=my_int),
+               1)
+
+    for i in range(no_SEPIR_states):
+        ls = long_state[i, :]
+        comp_idx = SEPIR_population.which_composition[i]
+        this_comp = SEPIR_population.composition_by_state[i]
+        rp = SEPIRQ_population.reverse_prod[comp_idx]
+        long_rp = zeros((6 * SEPIRQ_population.model_input.no_age_classes, ))
+        present_classes = where(this_comp.ravel() > 0)[0]
+        for cls_no, cls in enumerate(present_classes):
+            long_rp[6*cls:(6*cls + 5)] = rp[6*cls_no:(6*cls_no + 5)]
+        dot_prod = ls.dot(long_rp)
+        SEPIRQ_state_loc = SEPIRQ_population.index_vector[comp_idx][
+            dot_prod][0, 0]
+        map_matrix += sparse(([1], ([i], [SEPIRQ_state_loc])),
+                      shape=(no_SEPIR_states, no_SEPIRQ_states))
+
+    return map_matrix
 
 class StandardModelInput(ModelInput):
     '''TODO: add docstring'''
