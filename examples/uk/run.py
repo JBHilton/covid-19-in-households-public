@@ -61,7 +61,7 @@ r_est = estimate_growth_rate(household_population, rhs, [0.001, 5], 1e-3)
 print('Estimated growth rate is',r_est,'.')
 print('Estimated doubling time is',log(2) / r_est,'.')
 
-H0 = make_initial_condition_by_eigenvector(growth_rate, model_input, household_population, rhs, 1e-5, 1e-2)
+H0 = make_initial_condition_by_eigenvector(growth_rate, model_input, household_population, rhs, 1e-5, 0.0)
 S0 = H0.T.dot(household_population.states[:, ::5])
 E0 = H0.T.dot(household_population.states[:, 1::5])
 P0 = H0.T.dot(household_population.states[:, 2::5])
@@ -74,7 +74,7 @@ start_state = (1/model_input.ave_hh_size) * array([S0.sum(),
                                                    R0.sum()])
 print('Initial state is', start_state,'.')
 
-tspan = (0.0, 30)
+tspan = (0.0, 365)
 solution = solve_ivp(rhs, tspan, H0, first_step=0.001, atol=1e-16)
 
 time = solution.t
