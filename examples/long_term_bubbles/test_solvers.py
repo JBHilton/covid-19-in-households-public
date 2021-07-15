@@ -112,4 +112,3 @@ for i, index_state in enumerate(index_states):
         (rows, i * ones_like(rows))),
         shape=(no_index_states, no_index_states))
 print('Direct solve took {0}s'.format(get_time() - start))
-

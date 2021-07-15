@@ -57,6 +57,7 @@ else:
     model_input_to_fit = SEPIRInput(sepir_sepc, fitting_comp_list, fitting_comp_dist)
     household_population_to_fit = HouseholdPopulation(
         fitting_comp_list, fitting_comp_dist, model_input_to_fit)
+    print('number of states for 2-class pop is',household_population_to_fit.Q_int.shape)
     rhs_to_fit = SEPIRRateEquations(model_input_to_fit, household_population_to_fit, NoImportModel(5,2))
     beta_ext = estimate_beta_ext(household_population_to_fit, rhs_to_fit, growth_rate)
     with open('outputs/oohi/beta_ext.pkl', 'wb') as f:
@@ -115,21 +116,65 @@ pre_npi_rhs = SEPIRRateEquations(
     pre_npi_household_population,
     import_model)
 
-map_matrix = map_SEPIR_to_SEPIRQ(pre_npi_household_population,
-                                 OOHI_household_population)
-
 # H0 = make_initial_condition_with_recovereds(OOHI_household_population, OOHI_rhs, prev)
 
-H0_pre_npi = make_initial_condition_by_eigenvector(growth_rate,
-                                                   pre_npi_input,
-                                                   pre_npi_household_population,
-                                                   pre_npi_rhs,
-                                                   prev,
-                                                   antiprev)
+if isfile('outputs/oohi/H0_pre_npi.pkl') is True:
+    with open('outputs/oohi/H0_pre_npi.pkl', 'rb') as f:
+        H0_pre_npi = load(f)
+else:
+    print('number of states for 3-class pop is',pre_npi_household_population.Q_int.shape)
+    H0_pre_npi = make_initial_condition_by_eigenvector(growth_rate,
+                                                       pre_npi_input,
+                                                       pre_npi_household_population,
+                                                       pre_npi_rhs,
+                                                       prev,
+                                                       antiprev)
+    with open('outputs/oohi/H0_pre_npi.pkl', 'wb') as f:
+        dump(H0_pre_npi, f)
 
-H0 = H0_pre_npi.dot(map_matrix)
 
-no_days = 100
+if isfile('outputs/oohi/map_matrix.pkl') is True:
+    with open('outputs/oohi/map_matrix.pkl', 'rb') as f:
+        map_matrix = load(f)
+else:
+    print('getting map matrix')
+
+    map_matrix = map_SEPIR_to_SEPIRQ(pre_npi_household_population,
+                                 OOHI_household_population)
+    print('got map matrix')
+    with open('outputs/oohi/map_matrix.pkl', 'wb') as f:
+        dump(map_matrix, f)
+S0 = H0_pre_npi.T.dot(pre_npi_household_population.states[:, ::5])
+E0 = H0_pre_npi.T.dot(pre_npi_household_population.states[:, 1::5])
+P0 = H0_pre_npi.T.dot(pre_npi_household_population.states[:, 2::5])
+I0 = H0_pre_npi.T.dot(pre_npi_household_population.states[:, 3::5])
+R0 = H0_pre_npi.T.dot(pre_npi_household_population.states[:, 4::5])
+start_state = (1/pre_npi_input.ave_hh_size) * array([S0.sum(),
+                                                   E0.sum(),
+                                                   P0.sum(),
+                                                   I0.sum(),
+                                                   R0.sum()])
+print('Pre NPI start state is', start_state,'.')
+print('Initial case profile by class is',E0)
+
+H0 = H0_pre_npi * map_matrix
+
+S0 = H0.T.dot(OOHI_household_population.states[:, ::6])
+E0 = H0.T.dot(OOHI_household_population.states[:, 1::6])
+P0 = H0.T.dot(OOHI_household_population.states[:, 2::6])
+I0 = H0.T.dot(OOHI_household_population.states[:, 3::6])
+R0 = H0.T.dot(OOHI_household_population.states[:, 4::6])
+Q0 = H0.T.dot(OOHI_household_population.states[:, 5::6])
+start_state = (1/ext_model_input.ave_hh_size) * array([S0.sum(),
+                                                   E0.sum(),
+                                                   P0.sum(),
+                                                   I0.sum(),
+                                                   R0.sum(),
+                                                   Q0.sum()])
+print('OOHI start state is', start_state,'.')
+print('Initial case profile by class is',E0)
+
+no_days = 30
 tspan = (0.0, no_days)
 solver_start = get_time()
 solution = solve_ivp(OOHI_rhs, tspan, H0, first_step=0.001, atol=1e-16)
@@ -161,8 +206,6 @@ WHQ_rhs = SEPIRQRateEquations(
     int_model_input,
     WHQ_household_population,
     import_model)
-
-H0 = make_initial_condition_with_recovereds(WHQ_household_population, WHQ_rhs, prev)
 
 tspan = (0.0, no_days)
 solver_start = get_time()

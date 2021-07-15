@@ -74,7 +74,7 @@ start_state = (1/model_input.ave_hh_size) * array([S0.sum(),
                                                    R0.sum()])
 print('Initial state is', start_state,'.')
 
-tspan = (0.0, 365)
+tspan = (0.0, 30)
 solution = solve_ivp(rhs, tspan, H0, first_step=0.001, atol=1e-16)
 
 time = solution.t

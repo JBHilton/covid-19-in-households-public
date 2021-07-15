@@ -6,10 +6,12 @@ from numpy import (
         ones_like, where, zeros, concatenate, vstack, identity, tile, hstack,
         prod, ix_, shape, atleast_2d, diag)
 from numpy.linalg import eig, inv
+from scipy.integrate import solve_ivp
 from scipy.optimize import root_scalar
 from scipy.sparse import block_diag
 from scipy.sparse import identity as spidentity
-from scipy.sparse.linalg import expm, spsolve
+from scipy.sparse.linalg import expm, LinearOperator, spilu, spsolve
+from scipy.sparse.linalg import bicgstab as isolve
 from scipy.sparse.linalg import eigs as speig
 from scipy.special import binom as binom_coeff
 from scipy.stats import binom
@@ -21,7 +23,7 @@ from model.common import (
 from model.imports import import_model_from_spec, NoImportModel
 from model.subsystems import subsystem_key
 
-MAX_OUTBREAK_DURATION = 5 * 365 # Maximum time we suppose an outbreak can last, used in initial condition calculation in place of infinite matrix exponential
+MAX_OUTBREAK_DURATION = 365 # Maximum time we suppose an outbreak can last, used in initial condition calculation in place of infinite matrix exponential
 
 def initialise_carehome(
         household_population,
@@ -193,7 +195,6 @@ def make_initial_condition_by_eigenvector(growth_rate,
                                          antiprev=1e-2):
 
     Q_int = household_population.Q_int
-    Q_exponent = expm(MAX_OUTBREAK_DURATION * Q_int)
 
     reverse_comp_dist = diag(household_population.composition_distribution).dot(household_population.composition_list)
     reverse_comp_dist = reverse_comp_dist.dot(diag(1/reverse_comp_dist.sum(0)))
@@ -223,8 +224,13 @@ def make_initial_condition_by_eigenvector(growth_rate,
     evals, evects = eig(multiplier.T.todense())
     hh_profile = sparse(evects[:, 0]).real
     hh_profile = hh_profile / hh_profile.sum()
-    start_state_profile = hh_profile.T.dot(starter_mat)
-    end_state_profile = start_state_profile.dot(Q_exponent)
+    start_state_profile = (hh_profile.T.dot(starter_mat)).toarray().squeeze()
+
+    def internal_evolution(t, X):
+        return (X.T * Q_int).T
+    sol = solve_ivp(internal_evolution, [0, MAX_OUTBREAK_DURATION], start_state_profile, first_step=0.001, atol=1e-16)
+
+    end_state_profile = sol.y[:, -1]
 
     start_state_prev = \
      start_state_profile.dot(
@@ -246,7 +252,7 @@ def make_initial_condition_by_eigenvector(growth_rate,
         household_population.states.sum(axis=1))[0]
     H0[fully_sus] = (1 - H0_sum) * household_population.composition_distribution
 
-    return H0.toarray().squeeze()
+    return H0
 
 
 def make_aggregator(coarse_bounds, fine_bounds):
@@ -1009,15 +1015,6 @@ class CareHomeInput(ModelInput):
     def gamma(self):
         return self.spec['recovery_rate']
 
-def get_multiplier(r, Q_int, FOI_by_state, index_prob, starter_mat):
-    inv_diff = spsolve(r * spidentity(Q_int.shape[0]) - Q_int,
-                       identity(Q_int.shape[0]))
-    step_1 = FOI_by_state.dot(index_prob)
-    step_2 = inv_diff.dot(step_1)
-    step_3 = starter_mat.dot(step_2)
-    step_4 = step_3
-    return step_4
-
 def path_integral_solve(discount_matrix, reward_by_state):
     sol = spsolve(discount_matrix, reward_by_state)
     return sol
@@ -1026,40 +1023,34 @@ def get_multiplier_by_path_integral(r, Q_int, household_population, FOI_by_state
     multiplier = sparse((no_index_states, no_index_states))
     discount_matrix = r * spidentity(Q_int.shape[0]) - Q_int
     reward_mat = FOI_by_state.dot(index_prob)
+    start = get_time()
+    sA_iLU = spilu(discount_matrix)
+    M = LinearOperator(discount_matrix.shape, sA_iLU.solve)
+    print('Precondtioner computed in {0}s'.format(get_time() - start))
+    mult_start = get_time()
     for i, index_state in enumerate(index_states):
-        col = path_integral_solve(discount_matrix, reward_mat[:, i])
+        result = isolve(discount_matrix, reward_mat[:, i], M=M)
+        col = result[0]
         multiplier += sparse((col[index_states], (range(no_index_states), no_index_states * [i] )), shape=(no_index_states, no_index_states))
+    print('multiplier calculation took',get_time()-mult_start,'seconds.')
     return multiplier
 
 def get_multiplier_eigenvalue(r, Q_int, household_population, FOI_by_state, index_prob, index_states, no_index_states):
     multiplier = sparse((no_index_states, no_index_states))
     discount_matrix = r * spidentity(Q_int.shape[0]) - Q_int
     reward_mat = FOI_by_state.dot(index_prob)
+    start = get_time()
+    sA_iLU = spilu(discount_matrix)
+    M = LinearOperator(discount_matrix.shape, sA_iLU.solve)
+    print('Precondtioner computed in {0}s'.format(get_time() - start))
     mult_start = get_time()
     for i, index_state in enumerate(index_states):
-        col = spsolve(discount_matrix, reward_mat[:, i])
+        result = isolve(discount_matrix, reward_mat[:, i], M=M)
+        col = result[0]
         multiplier += sparse((col[index_states], (range(no_index_states), no_index_states * [i] )), shape=(no_index_states, no_index_states))
     print('multiplier calculation took',get_time()-mult_start,'seconds.')
     evalue = (speig(multiplier.T,k=1)[0]).real
     return evalue
-
-def get_multiplier_by_path_integral_by_block(r, Q_int, household_population, FOI_by_state, index_prob, index_states, no_index_states):
-    multiplier = zeros((no_index_states, no_index_states))
-    discount_matrix = r * spidentity(Q_int.shape[0]) - Q_int
-    reward_mat = FOI_by_state.dot(index_prob)
-    for i, source_index in enumerate(index_states):
-        source_comp = household_population.which_composition[source_index]
-        if source_comp==0:
-            source_mat_range = range(household_population.cum_sizes[0])
-            adjusted_source_index = source_index
-        else:
-            source_mat_range = range(household_population.cum_sizes[source_comp-1], household_population.cum_sizes[source_comp])
-            adjusted_source_index = source_index - household_population.cum_sizes[source_comp-1]
-        source_mat = discount_matrix[source_mat_range,:][:,source_mat_range]
-        for j, new_index in enumerate(index_states):
-            col = path_integral_solve(source_mat, reward_mat[source_mat_range, j])
-            multiplier[i, j] = col[adjusted_source_index]
-    return multiplier
 
 def estimate_growth_rate(household_population,rhs,interval=[-1, 1],tol=1e-3,x0=1e-3):
 
@@ -1080,8 +1071,6 @@ def estimate_growth_rate(household_population,rhs,interval=[-1, 1],tol=1e-3,x0=1
     no_index_states = len(index_states)
     comp_by_index_state = household_population.which_composition[index_states]
 
-    # starter_mat = sparse((ones(no_index_states),(range(no_index_states), index_states)),shape=(no_index_states,Q_int.shape[0]))
-
     index_prob = zeros((household_population.no_risk_groups,no_index_states))
     for i in range(no_index_states):
         index_class = where(rhs.states_new_cases_only[index_states[i],:]==1)[0]
@@ -1089,17 +1078,6 @@ def estimate_growth_rate(household_population,rhs,interval=[-1, 1],tol=1e-3,x0=1
 
     r_min = interval[0]
     r_max = interval[1]
-    # eval_min = get_multiplier_eigenvalue(r_min, Q_int, household_population, FOI_by_state, index_prob, index_states, no_index_states)
-    # # eval_min = (speig(multiplier.T)[0]).real.max()
-    # eval_max = get_multiplier_eigenvalue(r_max, Q_int, household_population, FOI_by_state, index_prob, index_states, no_index_states)
-    # # eval_max = (speig(multiplier.T)[0]).real.max()
-    #
-    # if ((eval_min-1) * (eval_max-1) > 0):
-    #     print('Solution not contained within interval, eval at min is',
-    #           eval_min-1,
-    #           ', eval at max is',
-    #           eval_max-1)
-    #     return None
 
     def eval_from_r(r_guess):
         return get_multiplier_eigenvalue(r_guess, Q_int, household_population, FOI_by_state, index_prob, index_states, no_index_states) - 1
@@ -1108,15 +1086,6 @@ def estimate_growth_rate(household_population,rhs,interval=[-1, 1],tol=1e-3,x0=1
 
     r_now = root_output.root
     print('converged in',root_output.iterations,'iterations.')
-
-    # while (r_max - r_min > tol):
-    #     r_now = 0.5 * (r_max + r_min)
-    #     multiplier = get_multiplier_by_path_integral(r_now, Q_int, household_population, FOI_by_state, index_prob, index_states, no_index_states)
-    #     eval_now = (speig(multiplier.T)[0]).real.max()
-    #     if ((eval_now-1) * (eval_max-1) > 0):
-    #         r_max = r_now
-    #     else:
-    #         r_min = r_now
 
     return r_now
 
