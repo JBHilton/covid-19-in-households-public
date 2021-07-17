@@ -174,7 +174,7 @@ start_state = (1/ext_model_input.ave_hh_size) * array([S0.sum(),
 print('OOHI start state is', start_state,'.')
 print('Initial case profile by class is',E0)
 
-no_days = 30
+no_days = 100
 tspan = (0.0, no_days)
 solver_start = get_time()
 solution = solve_ivp(OOHI_rhs, tspan, H0, first_step=0.001, atol=1e-16)

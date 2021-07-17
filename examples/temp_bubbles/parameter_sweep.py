@@ -8,7 +8,7 @@ from scipy.integrate import solve_ivp
 from time import time
 from multiprocessing import Pool
 from model.preprocessing import ( estimate_beta_ext, merge_hh_inputs,
-        SEIRInput, HouseholdPopulation, make_initial_condition_with_recovereds)
+        SEIRInput, HouseholdPopulation, make_initial_condition_by_eigenvector)
 from model.specs import SINGLE_AGE_UK_SPEC, SINGLE_AGE_SEIR_SPEC_FOR_FITTING
 from model.common import SEIRRateEquations
 from model.imports import NoImportModel
@@ -34,6 +34,10 @@ HH_TO_MERGE = 3 # Number of households we merge
 MAX_MERGED_SIZE = 10 # We only allow merges where total individuals is at most 12
 MAX_UNMERGED_SIZE = 4 # As usual, we model the chunk of the population in households of size 6 or fewer
 GUEST_TRANS_SCALING = 1 # This is strength of guest-host interactions relative to host-host interactions
+
+growth_rate = X0
+prev = 1e-2
+antibody_prev = 1e-2
 
 comp_dist = read_csv(
     'inputs/england_hh_size_dist.csv',
@@ -81,8 +85,12 @@ class UnmergedContext:
             self.population,
             NoImportModel(NO_COMPARTMENTS, 1))
 
-        self.H0 = make_initial_condition_with_recovereds(
-            self.population, self.rhs)
+        self.H0 = make_initial_condition_by_eigenvector(growth_rate,
+                                                   unmerged_input,
+                                                   self.population,
+                                                   self.rhs,
+                                                   prev,
+                                                   antibody_prev)
         self.tspan = (t_start, merge_start)
         solution = solve_ivp(
             self.rhs,
@@ -488,8 +496,15 @@ def simulate_merge3(
 
 
 def main(no_of_workers,
-         unmerged_exponents,
-         merged_exponents):
+         unmerged_exponent_vals,
+         merged_exponent_vals):
+
+    unmerged_exponents = arange(unmerged_exponent_vals[0],
+                                unmerged_exponent_vals[1],
+                                unmerged_exponent_vals[2])
+    merged_exponents = arange(merged_exponent_vals[0],
+                                merged_exponent_vals[1],
+                                merged_exponent_vals[2])
 
     if isfile('outputs/temp_bubbles/threewise_merge_comps.pkl') is True:
         with open('outputs/temp_bubbles/threewise_merge_comps.pkl', 'rb') as f:
@@ -615,12 +630,12 @@ def main(no_of_workers,
 
 if __name__ == '__main__':
     parser = ArgumentParser()
-    parser.add_argument('--no_of_workers', type=int, default=2)
-    parser.add_argument('--unmerged_exponents', type=float, default=[0.25, 0.75])
-    parser.add_argument('--merged_exponents', type=float, default=[0.25, 0.75])
+    parser.add_argument('--no_of_workers', type=int, default=8)
+    parser.add_argument('--unmerged_exponent_vals', type=float, default=[0.0, 1.1, 0.25])
+    parser.add_argument('--merged_exponent_vals', type=float, default=[0.0, 1.1, 0.25])
     args = parser.parse_args()
     start = time()
     main(args.no_of_workers,
-         args.unmerged_exponents,
-         args.merged_exponents)
+         args.unmerged_exponent_vals,
+         args.merged_exponent_vals)
     print('Execution took',time() - start,'seconds.')

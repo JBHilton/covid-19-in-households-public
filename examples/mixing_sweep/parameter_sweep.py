@@ -16,15 +16,16 @@ from scipy.integrate import solve_ivp
 from matplotlib.pyplot import subplots
 from matplotlib.cm import get_cmap
 from model.preprocessing import ( estimate_beta_ext, estimate_growth_rate,
-        SEPIRInput, HouseholdPopulation, make_initial_condition_with_recovereds)
+        SEPIRInput, HouseholdPopulation, make_initial_condition_by_eigenvector)
 from model.specs import TWO_AGE_SEPIR_SPEC_FOR_FITTING, TWO_AGE_UK_SPEC
 from model.common import SEPIRRateEquations
-from model.imports import NoImportModel, FixedImportModel
+from model.imports import NoImportModel
 
 if isdir('outputs/mixing_sweep') is False:
     mkdir('outputs/mixing_sweep')
 
-IMPORT_ARRAY = array([1e-5, 1e-5])
+DOUBLING_TIME = 3
+growth_rate = log(2) / DOUBLING_TIME
 
 # List of observed household compositions
 composition_list = read_csv(
@@ -40,7 +41,6 @@ if isfile('outputs/mixing_sweep/beta_ext.pkl') is True:
         beta_ext = load(f)
 else:
     SPEC = {**TWO_AGE_SEPIR_SPEC_FOR_FITTING, **TWO_AGE_UK_SPEC}
-    growth_rate = log(2) / 3 # Doubling time of 3 days
     model_input_to_fit = SEPIRInput(SPEC, composition_list, comp_dist)
     household_population_to_fit = HouseholdPopulation(
         composition_list, comp_dist, model_input_to_fit)
@@ -82,7 +82,7 @@ class MixingAnalysis:
         if growth_rate is None:
             growth_rate = 0
 
-        H0 = make_initial_condition_with_recovereds(household_population, rhs, prev, antibody_prev, AR)
+        H0 = make_initial_condition_by_eigenvector(growth_rate, model_input, household_population, rhs, 1e-5, 0.0)
 
         no_days = 100
         tspan = (0.0, no_days)

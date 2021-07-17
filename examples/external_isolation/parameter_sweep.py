@@ -21,35 +21,54 @@ from model.specs import TWO_AGE_SEPIR_SPEC_FOR_FITTING, TWO_AGE_UK_SPEC
 from model.common import SEPIRRateEquations
 from model.imports import NoImportModel
 
-if isdir('outputs/long_term_bubbles') is False:
-    mkdir('outputs/long_term_bubbles')
+if isdir('outputs/oohi') is False:
+    mkdir('outputs/oohi')
 
-MAX_ADULTS = 1 # In this example we assume only single-adult households can join bubbles
-MAX_BUBBLE_SIZE = 10
-SPEC = {**TWO_AGE_SEPIR_SPEC_FOR_FITTING, **TWO_AGE_UK_SPEC}
-DOUBLING_TIME = 3
-X0 = log(2) / DOUBLING_TIME
+DOUBLING_TIME = 100
+growth_rate = log(2) / DOUBLING_TIME
 
 
+ext_spec = {**TWO_AGE_UK_SPEC, **TWO_AGE_EXT_SEPIRQ_SPEC}
+int_spec = {**TWO_AGE_UK_SPEC, **TWO_AGE_INT_SEPIRQ_SPEC}
+
+# List of observed household compositions
 composition_list = read_csv(
-    'inputs/eng_and_wales_adult_child_composition_list.csv',
+    'inputs/eng_and_wales_adult_child_vuln_composition_list.csv',
     header=0).to_numpy()
+# Proportion of households which are in each composition
 comp_dist = read_csv(
-    'inputs/eng_and_wales_adult_child_composition_dist.csv',
+    'inputs/eng_and_wales_adult_child_vuln_composition_dist.csv',
     header=0).to_numpy().squeeze()
 
-if isfile('outputs/long_term_bubbles/beta_ext.pkl') is True:
-    with open('outputs/long_term_bubbles/beta_ext.pkl', 'rb') as f:
+if isfile('outputs/oohi/beta_ext.pkl') is True:
+    with open('outputs/oohi/beta_ext.pkl', 'rb') as f:
         beta_ext = load(f)
 else:
-    growth_rate = log(2) / DOUBLING_TIME # Doubling time of 3 days
-    model_input_to_fit = SEPIRInput(SPEC, composition_list, comp_dist)
+    # List of observed household compositions
+    fitting_comp_list = read_csv(
+        'inputs/eng_and_wales_adult_child_composition_list.csv',
+        header=0).to_numpy()
+    # Proportion of households which are in each composition
+    fitting_comp_dist = read_csv(
+        'inputs/eng_and_wales_adult_child_composition_dist.csv',
+        header=0).to_numpy().squeeze()
+    model_input_to_fit = SEPIRInput(sepir_sepc, fitting_comp_list, fitting_comp_dist)
     household_population_to_fit = HouseholdPopulation(
-        composition_list, comp_dist, model_input_to_fit)
+        fitting_comp_list, fitting_comp_dist, model_input_to_fit)
+    print('number of states for 2-class pop is',household_population_to_fit.Q_int.shape)
     rhs_to_fit = SEPIRRateEquations(model_input_to_fit, household_population_to_fit, NoImportModel(5,2))
     beta_ext = estimate_beta_ext(household_population_to_fit, rhs_to_fit, growth_rate)
-    with open('outputs/long_term_bubbles/beta_ext.pkl', 'wb') as f:
+    with open('outputs/oohi/beta_ext.pkl', 'wb') as f:
         dump(beta_ext, f)
+
+vuln_prop = 2.2/56
+adult_class = 1
+
+pre_npi_input =  SEPIRInput(sepir_sepc, composition_list, comp_dist)
+pre_npi_input.k_ext *= beta_ext
+pre_npi_input = add_vuln_class(pre_npi_input,
+                    vuln_prop,
+                    adult_class)
 
 prev=1.0e-5 # Starting prevalence
 antibody_prev=0 # Starting antibody prev/immunity
@@ -177,7 +196,7 @@ def main(no_of_workers,
         len(bubble_prob_range),
         len(external_mix_range))
 
-    fname = 'outputs/long_term_bubbles/results.pkl'
+    fname = 'outputs/oohi/results.pkl'
     with open(fname, 'wb') as f:
         dump(
             (growth_rate_data,
@@ -192,8 +211,8 @@ def main(no_of_workers,
 if __name__ == '__main__':
     parser = ArgumentParser()
     parser.add_argument('--no_of_workers', type=int, default=4)
-    parser.add_argument('--bubble_prob_vals', type=int, default=[0.0, 1.0, 0.25])
-    parser.add_argument('--external_mix_vals', type=int, default=[0.0, 1.0, 0.25])
+    parser.add_argument('--det_rate_vals', type=int, default=[0.0, 1.0, 0.25])
+    parser.add_argument('--iso_prob_vals', type=int, default=[0.0, 1.0, 0.25])
     args = parser.parse_args()
 
     main(args.no_of_workers,

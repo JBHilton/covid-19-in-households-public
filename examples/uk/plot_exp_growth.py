@@ -4,6 +4,7 @@ from os import mkdir
 from os.path import isdir
 from pickle import load
 from matplotlib.pyplot import subplots
+from matplotlib.pyplot import yscale
 from matplotlib.cm import get_cmap
 from numpy import exp, log, where
 
@@ -35,11 +36,13 @@ ax.plot(
         total_cases[:t_30_loc],
         label=lgd[0],
         alpha=alpha)
+yscale('log')
 ax.plot(
         t[:t_30_loc],
         total_cases[0] * exp(growth_rate * t[:t_30_loc]),
         label=lgd[1],
         alpha=alpha)
+yscale('log')
 ax.set_ylabel('Time in days')
 ax.set_ylabel('Prevalence')
 ax.legend(ncol=1, bbox_to_anchor=(1,0.50))
