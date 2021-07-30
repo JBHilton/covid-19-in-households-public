@@ -42,11 +42,10 @@ ax.plot(
         total_cases[0] * exp(growth_rate * t[:t_30_loc]),
         label=lgd[1],
         alpha=alpha)
-ax.axis('equal')
 yscale('log')
-ax.set_ylim(total_cases[:t_30_loc].min(), 1.1*total_cases[:t_30_loc].max())
 ax.set_ylabel('Time in days')
 ax.set_ylabel('Prevalence')
+ax.set_ylim(0.1 * total_cases[0], total_cases[0] * exp(growth_rate * t[t_30_loc]))
 ax.legend(ncol=1, loc='upper left')
-
+ax.set_box_aspect(1)
 fig.savefig('plots/uk/exp_growth.png', bbox_inches='tight', dpi=300)
