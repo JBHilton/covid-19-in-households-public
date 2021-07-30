@@ -7,3 +7,5 @@ output*.txt
 *.ipynb_checkpoints*
 *.swp
 *.png
+*.zip
+.DS_Store
