@@ -245,13 +245,18 @@ def make_initial_condition_by_eigenvector(growth_rate,
 
     H0 = (prev / start_state_prev) * start_state_profile.T + \
          (antiprev / end_state_prev) * end_state_profile.T
-    H0_sum = H0.sum()
     fully_sus = where(
         rhs.states_sus_only.sum(axis=1)
         ==
         household_population.states.sum(axis=1))[0]
-    H0[fully_sus] = (1 - H0_sum) * household_population.composition_distribution
+    H0_pre_sus = deepcopy(H0)
+    H0[fully_sus] = household_population.composition_distribution
+    print('H0 sums to',H0.sum())
+    for i in range(len(H0)):
+        this_comp = household_population.which_composition[i]
+        H0[fully_sus[this_comp]] -= H0_pre_sus[i]
 
+    print('H0 sums to',H0.sum())
     return H0
 
 
@@ -1031,7 +1036,11 @@ def get_multiplier_by_path_integral(r, Q_int, household_population, FOI_by_state
     for i, index_state in enumerate(index_states):
         result = isolve(discount_matrix, reward_mat[:, i], M=M)
         col = result[0]
-        multiplier += sparse((col[index_states], (range(no_index_states), no_index_states * [i] )), shape=(no_index_states, no_index_states))
+        multiplier += sparse(
+            (col[index_states],
+            (range(no_index_states),
+            no_index_states * [i] )),
+            shape=(no_index_states, no_index_states))
     print('multiplier calculation took',get_time()-mult_start,'seconds.')
     return multiplier
 
@@ -1047,7 +1056,11 @@ def get_multiplier_eigenvalue(r, Q_int, household_population, FOI_by_state, inde
     for i, index_state in enumerate(index_states):
         result = isolve(discount_matrix, reward_mat[:, i], M=M)
         col = result[0]
-        multiplier += sparse((col[index_states], (range(no_index_states), no_index_states * [i] )), shape=(no_index_states, no_index_states))
+        multiplier += sparse(
+            (col[index_states],
+            (range(no_index_states),
+            no_index_states * [i] )),
+            shape=(no_index_states, no_index_states))
     print('multiplier calculation took',get_time()-mult_start,'seconds.')
     evalue = (speig(multiplier.T,k=1)[0]).real
     return evalue
