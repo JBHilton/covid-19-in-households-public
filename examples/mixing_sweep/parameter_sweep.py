@@ -7,7 +7,7 @@ from os.path import isdir, isfile
 from pickle import load, dump
 from copy import deepcopy
 from multiprocessing import Pool
-from numpy import arange, array, exp, log, sum
+from numpy import arange, array, exp, log, sum, where
 from numpy.linalg import eig
 from numpy.random import rand
 from pandas import read_csv
@@ -94,20 +94,19 @@ class MixingAnalysis:
         ave_hh_size = household_population.composition_distribution.dot(sum(household_population.composition_list, axis=1))
 
         I = (H.T.dot(household_population.states[:, 3::5])).sum(axis=1)/ave_hh_size
-        R_end_array = (H[:, -1].T.dot(household_population.states[:, 4::5]))
-        attack_ratio = R_end_array.dot(
-                            household_population.state_to_comp_matrix) / model_input.hh_size_list
+        R = (H.T.dot(household_population.states[:, 4::5])).sum(axis=1)/ave_hh_size
+        R_end_vec = H[:, -1] * household_population.states[:, 4::5].sum(axis=1)
+        attack_ratio = (household_population.state_to_comp_matrix.T.dot(R_end_vec))
+        attack_ratio = model_input.composition_distribution.dot(attack_ratio / model_input.hh_size_list)
 
         recovered_states = where(
-            (rhs.states_rec_only.sum(axis=1)
-                == around(AR*household_population.states.sum(axis=1)).astype(int)
-                & ((rhs.states_sus_only + rhs.states_rec_only).sum(axis=1)
-                    == household_population.states.sum(axis=1)))
+            ((rhs.states_sus_only + rhs.states_rec_only).sum(axis=1)
+                    == household_population.states.sum(axis=1))
             & ((rhs.states_rec_only).sum(axis=1) > 0))[0]
         hh_outbreak_prop = H[recovered_states, -1].sum()
 
         peaks = 100 * max(I)
-        R_end = 100 * R_end_array.sum()
+        R_end = 100 * R[-1]
 
         return [growth_rate, peaks, R_end, hh_outbreak_prop, attack_ratio]
 
@@ -170,9 +169,9 @@ def main(no_of_workers,
 if __name__ == '__main__':
     parser = ArgumentParser()
     parser.add_argument('--no_of_workers', type=int, default=8)
-    parser.add_argument('--ar_vals', type=int, default=[0.25, 1, 0.25])
-    parser.add_argument('--internal_mix_vals', type=int, default=[0, 1.0, 0.25])
-    parser.add_argument('--external_mix_vals', type=int, default=[0, 1.0, 0.25])
+    parser.add_argument('--ar_vals', type=int, default=[0.5, 1, 0.5])
+    parser.add_argument('--internal_mix_vals', type=int, default=[0.5, 1.0, 0.5])
+    parser.add_argument('--external_mix_vals', type=int, default=[0.5, 1.0, 0.5])
     args = parser.parse_args()
 
     main(args.no_of_workers,
