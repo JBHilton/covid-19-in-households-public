@@ -405,11 +405,6 @@ class HouseholdPopulation(ABC):
         self.which_composition = concatenate([
             i * ones(hsh.total_size, dtype=my_int)
             for i, hsh in enumerate(household_subsystem_specs)])
-        # Post-multiply a state vector by this sparse array to aggregate by
-        # household composition:
-        self.state_to_comp_matrix = sparse((ones(hsh.total_size,),
-                                            (range(hsh.total_size),
-                                            self.which_composition)))
 
         # List of tuples describing model parts which need to be assembled into
         # a complete system. The derived classes will override the processing
@@ -431,6 +426,11 @@ class HouseholdPopulation(ABC):
         cum_sizes = cumsum(array(
             [s.total_size for s in household_subsystem_specs]))
         self.total_size = cum_sizes[-1]
+        # Post-multiply a state vector by this sparse array to aggregate by
+        # household composition:
+        self.state_to_comp_matrix = sparse((ones(self.total_size,),
+                                            (range(self.total_size),
+                                            self.which_composition)))
         self.Q_int = block_diag(
             [part[0] for part in model_parts],
             format='csc')
