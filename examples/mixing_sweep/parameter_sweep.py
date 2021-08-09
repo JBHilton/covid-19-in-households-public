@@ -94,12 +94,22 @@ class MixingAnalysis:
         ave_hh_size = household_population.composition_distribution.dot(sum(household_population.composition_list, axis=1))
 
         I = (H.T.dot(household_population.states[:, 3::5])).sum(axis=1)/ave_hh_size
-        R = (H.T.dot(household_population.states[:, 4::5])).sum(axis=1)/ave_hh_size
+        R_end_array = (H.T.dot(household_population.states[-1, 4::5]))
+        attack_ratio = R_end_array.dot(
+                            household_population.state_to_comp_matrix) / model_input.hh_size_list
+
+        recovered_states = where(
+            (rhs.states_rec_only.sum(axis=1)
+                == around(AR*household_population.states.sum(axis=1)).astype(int)
+                & ((rhs.states_sus_only + rhs.states_rec_only).sum(axis=1)
+                    == household_population.states.sum(axis=1)))
+            & ((rhs.states_rec_only).sum(axis=1) > 0))[0]
+        hh_outbreak_prop = H[recovered_states, -1].sum()
 
         peaks = 100 * max(I)
-        R_end = 100 * R[-1]
+        R_end = 100 * R_end_array.sum()
 
-        return [growth_rate, peaks, R_end]
+        return [growth_rate, peaks, R_end, hh_outbreak_prop, attack_ratio]
 
 def main(no_of_workers,
          ar_vals,
@@ -132,6 +142,14 @@ def main(no_of_workers,
         len(internal_mix_range),
         len(external_mix_range))
     end_data = array([r[2] for r in results]).reshape(
+        len(ar_range),
+        len(internal_mix_range),
+        len(external_mix_range))
+    hh_prop_data = array([r[3] for r in results]).reshape(
+        len(ar_range),
+        len(internal_mix_range),
+        len(external_mix_range))
+    attack_ratio_data = array([r[4] for r in results]).reshape(
         len(ar_range),
         len(internal_mix_range),
         len(external_mix_range))

@@ -405,6 +405,11 @@ class HouseholdPopulation(ABC):
         self.which_composition = concatenate([
             i * ones(hsh.total_size, dtype=my_int)
             for i, hsh in enumerate(household_subsystem_specs)])
+        # Post-multiply a state vector by this sparse array to aggregate by
+        # household composition:
+        self.state_to_comp_matrix = sparse((ones(hsh.total_size,),
+                                            (range(hsh.total_size),
+                                            self.which_composition)))
 
         # List of tuples describing model parts which need to be assembled into
         # a complete system. The derived classes will override the processing
@@ -542,12 +547,13 @@ class ModelInput(ABC):
         self.density_expo = spec['density_expo']
         self.composition_list = composition_list
         self.composition_distribution = composition_distribution
+        self.hh_size_list = composition_list.sum(axis=1)
         self.ave_hh_size = \
             composition_distribution.T.dot(
-            composition_list.sum(axis=1))                                # Average household size
+            self.hh_size_list)                                # Average household size
         self.dens_adj_ave_hh_size = \
             composition_distribution.T.dot((
-            composition_list.sum(axis=1))**self.density_expo)                                # Average household size adjusted for density, needed to get internal transmission rate from secondary attack prob
+            self.hh_size_list)**self.density_expo)                                # Average household size adjusted for density, needed to get internal transmission rate from secondary attack prob
         self.ave_hh_by_class = composition_distribution.T.dot(composition_list)
 
 class SIRInput(ModelInput):
