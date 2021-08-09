@@ -94,7 +94,7 @@ class MixingAnalysis:
         ave_hh_size = household_population.composition_distribution.dot(sum(household_population.composition_list, axis=1))
 
         I = (H.T.dot(household_population.states[:, 3::5])).sum(axis=1)/ave_hh_size
-        R_end_array = (H.T.dot(household_population.states[-1, 4::5]))
+        R_end_array = (H[:, -1].T.dot(household_population.states[:, 4::5]))
         attack_ratio = R_end_array.dot(
                             household_population.state_to_comp_matrix) / model_input.hh_size_list
 
