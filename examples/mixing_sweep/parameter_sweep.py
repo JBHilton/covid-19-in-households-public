@@ -169,9 +169,9 @@ def main(no_of_workers,
 if __name__ == '__main__':
     parser = ArgumentParser()
     parser.add_argument('--no_of_workers', type=int, default=8)
-    parser.add_argument('--ar_vals', type=int, default=[0.5, 1, 0.5])
-    parser.add_argument('--internal_mix_vals', type=int, default=[0.5, 1.0, 0.5])
-    parser.add_argument('--external_mix_vals', type=int, default=[0.5, 1.0, 0.5])
+    parser.add_argument('--ar_vals', type=int, default=[0.25, 1.0, 0.25])
+    parser.add_argument('--internal_mix_vals', type=int, default=[0.0, 1.0, 0.25])
+    parser.add_argument('--external_mix_vals', type=int, default=[0.0, 1.0, 0.25])
     args = parser.parse_args()
 
     main(args.no_of_workers,
