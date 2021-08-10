@@ -222,7 +222,8 @@ def make_initial_condition_by_eigenvector(growth_rate,
 
     multiplier = get_multiplier_by_path_integral(growth_rate, Q_int, household_population, FOI_by_state, index_prob, index_states, no_index_states)
     evals, evects = eig(multiplier.T.todense())
-    hh_profile = sparse(evects[:, 0]).real
+    max_eval_loc = evals.real.argmax()
+    hh_profile = sparse(evects[:, max_eval_loc]).real
     hh_profile = hh_profile / hh_profile.sum()
     start_state_profile = (hh_profile.T.dot(starter_mat)).toarray().squeeze()
 
@@ -251,12 +252,9 @@ def make_initial_condition_by_eigenvector(growth_rate,
         household_population.states.sum(axis=1))[0]
     H0_pre_sus = deepcopy(H0)
     H0[fully_sus] = household_population.composition_distribution
-    print('H0 sums to',H0.sum())
     for i in range(len(H0)):
         this_comp = household_population.which_composition[i]
         H0[fully_sus[this_comp]] -= H0_pre_sus[i]
-
-    print('H0 sums to',H0.sum())
     return H0
 
 

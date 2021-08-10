@@ -20,10 +20,12 @@ with open('outputs/uk/fitted_model_input.pkl', 'rb') as f:
     model_input = load(f)
 
 t = time_series['time']
+t_15_loc = where(t > 15)[0][0]
 t_30_loc = where(t > 30)[0][0]
 total_cases = (time_series['E'] +
                time_series['P'] +
-               time_series['I'] ).sum(1) / model_input.ave_hh_size
+               time_series['I']).sum(1) / model_input.ave_hh_size
+exp_curve = total_cases[t_15_loc] * exp(growth_rate * (t[:t_30_loc+1]-t[t_15_loc]))
 
 lgd=['Fitted simulation results', 'Exponential growth curve']
 
@@ -32,14 +34,14 @@ fig, ax = subplots(1, 1, sharex=True)
 cmap = get_cmap('tab20')
 alpha = 0.5
 ax.plot(
-        t[:t_30_loc],
-        total_cases[:t_30_loc],
+        t[:t_30_loc+1],
+        total_cases[:t_30_loc+1],
         label=lgd[0],
         alpha=alpha)
 yscale('log')
 ax.plot(
-        t[:t_30_loc],
-        total_cases[0] * exp(growth_rate * t[:t_30_loc]),
+        t[:t_30_loc+1],
+        exp_curve,
         label=lgd[1],
         alpha=alpha)
 yscale('log')

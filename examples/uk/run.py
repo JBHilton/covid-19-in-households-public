@@ -56,7 +56,7 @@ else:
 
 rhs = SEPIRRateEquations(model_input, household_population, NoImportModel(5,2))
 
-r_est = estimate_growth_rate(household_population, rhs, [0.001, 5], 1e-3)
+r_est = estimate_growth_rate(household_population, rhs, [0.001, 5], 1e-9)
 
 print('Estimated growth rate is',r_est,'.')
 print('Estimated doubling time is',log(2) / r_est,'.')
@@ -72,8 +72,6 @@ start_state = (1/model_input.ave_hh_size) * array([S0.sum(),
                                                    P0.sum(),
                                                    I0.sum(),
                                                    R0.sum()])
-print('Initial state is', start_state,'.')
-
 tspan = (0.0, 365)
 solution = solve_ivp(rhs, tspan, H0, first_step=0.001, atol=1e-16)
 
