@@ -34,10 +34,10 @@ hh_prop_min = hh_prop.min()
 hh_prop_max = hh_prop.max()
 attack_ratio_min = attack_ratio.min()
 attack_ratio_max = attack_ratio.max()
-for i in range(sip_len):)
+for i in range(sip_len):
     ttl = 'Secondary infection probability ' + str(sip_range[i])
     fig, ax = subplots(1,1,sharex=True)
-    imshow(growth_rate[i,:,:],origin='lower',extent=(0,100,0,100),vmin=r_min,vmax=r_max
+    imshow(growth_rate[i,:,:],origin='lower',extent=(0,100,0,100),vmin=r_min,vmax=r_max)
     ax.set_title(ttl)
     ax.set_ylabel('% reduction in within-household transmission')
     ax.set_xlabel('% reduction in between-household transmission')

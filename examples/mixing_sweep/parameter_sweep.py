@@ -67,6 +67,7 @@ class MixingAnalysis:
         return result
 
     def _implement_mixing(self, p):
+        print('p=',p)
         this_spec = deepcopy(self.basic_spec)
         this_spec['AR'] = p[0]
         model_input = SEPIRInput(this_spec, composition_list, comp_dist)
@@ -78,7 +79,7 @@ class MixingAnalysis:
 
         rhs = SEPIRRateEquations(model_input, household_population, NoImportModel(5,2))
 
-        growth_rate = estimate_growth_rate(household_population, rhs, [-0.9*this_spec['recovery_rate'], 5], 1e-2)
+        growth_rate = estimate_growth_rate(household_population, rhs, [-0.5*this_spec['recovery_rate'], 1], 1e-3)
         if growth_rate is None:
             growth_rate = 0
 
@@ -174,8 +175,8 @@ if __name__ == '__main__':
     parser = ArgumentParser()
     parser.add_argument('--no_of_workers', type=int, default=8)
     parser.add_argument('--ar_vals', type=int, default=[0.25, 1.0, 0.25])
-    parser.add_argument('--internal_mix_vals', type=int, default=[0.0, 1.0, 0.25])
-    parser.add_argument('--external_mix_vals', type=int, default=[0.0, 1.0, 0.25])
+    parser.add_argument('--internal_mix_vals', type=int, default=[0.0, 0.99, 0.1])
+    parser.add_argument('--external_mix_vals', type=int, default=[0.0, 0.99, 0.1])
     args = parser.parse_args()
 
     main(args.no_of_workers,
