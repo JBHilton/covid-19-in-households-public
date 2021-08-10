@@ -114,6 +114,7 @@ def main(no_of_workers,
          ar_vals,
          internal_mix_vals,
          external_mix_vals):
+    main_start = get_time()
     mixing_system = MixingAnalysis()
     results = []
     ar_range = arange(ar_vals[0], ar_vals[1], ar_vals[2])
@@ -159,10 +160,13 @@ def main(no_of_workers,
             (growth_rate_data,
              peak_data,
              end_data,
+             hh_prop_data,
+             attack_ratio_data,
              ar_range,
              internal_mix_range,
              external_mix_range),
             f)
+    print('Parameter sweep took',get_time()-main_start,'seconds.')
 
     return -1
 
