@@ -72,7 +72,7 @@ def make_initial_SEPIRQ_condition(
         household_population,
         rhs,
         prev=1.0e-5,
-        antiprev=6e-2,
+        starting_immunity=6e-2,
         AR=0.78):
     '''TODO: docstring'''
     fully_sus = where(
@@ -121,7 +121,7 @@ def make_initial_SEPIRQ_condition(
     # y = household_population.composition_distribution[
     #     household_population.which_composition[already_visited]]
     H0[i_is_one] = ave_hh_size*(prev/sum(x)) * x
-    H0[already_visited] = ave_hh_size*((antiprev/AR)/sum(y)) * y
+    H0[already_visited] = ave_hh_size*((starting_immunity/AR)/sum(y)) * y
     H0[fully_sus] = (1-sum(H0)) * household_population.composition_distribution
 
     return H0
@@ -130,14 +130,14 @@ def make_initial_condition_with_recovereds(
         household_population,
         rhs,
         prev=1.0e-2,
-        antiprev=5.0e-2,
+        starting_immunity=5.0e-2,
         AR=1.0):
     '''TODO: docstring'''
     fully_sus = where(
         rhs.states_sus_only.sum(axis=1)
         ==
         household_population.states.sum(axis=1))[0]
-    if antiprev>0:
+    if starting_immunity>0:
         already_visited = where(
             (rhs.states_rec_only.sum(axis=1)
                 == around(AR*household_population.states.sum(axis=1)).astype(int)
@@ -166,7 +166,7 @@ def make_initial_condition_with_recovereds(
             * household_population.composition_distribution[
                 household_population.which_composition[state]])
         # base_comp_dist[household_population.which_composition[state]]-=x[-1]
-    if antiprev>0:
+    if starting_immunity>0:
         visited_comps = household_population.which_composition[already_visited]
         y = array([])
         for state in already_visited:
@@ -181,8 +181,8 @@ def make_initial_condition_with_recovereds(
     # y = household_population.composition_distribution[
     #     household_population.which_composition[already_visited]]
     H0[one_new_case] = ave_hh_size*(prev/sum(x)) * x
-    if antiprev>0:
-        H0[already_visited] = ave_hh_size*((antiprev/AR)/sum(y)) * y
+    if starting_immunity>0:
+        H0[already_visited] = ave_hh_size*((starting_immunity/AR)/sum(y)) * y
     H0[fully_sus] = (1-sum(H0)) * household_population.composition_distribution
 
     return H0
@@ -192,7 +192,7 @@ def make_initial_condition_by_eigenvector(growth_rate,
                                          household_population,
                                          rhs,
                                          prev=1e-5,
-                                         antiprev=1e-2):
+                                         starting_immunity=1e-2):
 
     Q_int = household_population.Q_int
 
@@ -245,7 +245,7 @@ def make_initial_condition_by_eigenvector(growth_rate,
      household_population.ave_hh_size
 
     H0 = (prev / start_state_prev) * start_state_profile.T + \
-         (antiprev / end_state_prev) * end_state_profile.T
+         (starting_immunity / end_state_prev) * end_state_profile.T
     fully_sus = where(
         rhs.states_sus_only.sum(axis=1)
         ==
@@ -551,7 +551,7 @@ class ModelInput(ABC):
             self.hh_size_list)                                # Average household size
         self.dens_adj_ave_hh_size = \
             composition_distribution.T.dot((
-            self.hh_size_list)**self.density_expo)                                # Average household size adjusted for density, needed to get internal transmission rate from secondary attack prob
+            self.hh_size_list)**self.density_expo)                                # Average household size adjusted for density, needed to get internal transmission rate from secondary inf prob
         self.ave_hh_by_class = composition_distribution.T.dot(composition_list)
 
 class SIRInput(ModelInput):
@@ -574,11 +574,11 @@ class SIRInput(ModelInput):
              (self.k_ext))
             )[0])
 
-        R_int = - log(1 - spec['AR']) * self.dens_adj_ave_hh_size
+        R_int = - log(1 - spec['SIP']) * self.dens_adj_ave_hh_size
 
         self.k_home = R_int * self.k_home / home_eig
         if spec['fit_method'] == 'R*':
-            external_scale = spec['R*'] / (self.ave_hh_size*spec['AR'])
+            external_scale = spec['R*'] / (self.ave_hh_size*spec['SIP'])
         else:
             external_scale = 1
         self.k_ext = external_scale * self.k_ext / ext_eig
@@ -608,11 +608,11 @@ class SEIRInput(ModelInput):
              (self.k_ext))
             )[0])
 
-        R_int = - log(1 - spec['AR']) * self.dens_adj_ave_hh_size
+        R_int = - log(1 - spec['SIP']) * self.dens_adj_ave_hh_size
 
         self.k_home = R_int * self.k_home / home_eig
         if spec['fit_method'] == 'R*':
-            external_scale = spec['R*'] / (self.ave_hh_size*spec['AR'])
+            external_scale = spec['R*'] / (self.ave_hh_size*spec['SIP'])
         else:
             external_scale = 1
         self.k_ext = external_scale * self.k_ext / ext_eig
@@ -651,12 +651,12 @@ class SEPIRInput(ModelInput):
             (self.k_ext ) * spec['prodromal_trans_scaling'])
             )[0])
 
-        R_int = - log(1 - spec['AR']) * self.dens_adj_ave_hh_size
+        R_int = - log(1 - spec['SIP']) * self.dens_adj_ave_hh_size
 
         self.k_home = R_int * self.k_home / home_eig
 
         if spec['fit_method'] == 'R*':
-            external_scale = spec['R*'] / (self.ave_hh_size*spec['AR'])
+            external_scale = spec['R*'] / (self.ave_hh_size*spec['SIP'])
         else:
             external_scale = 1
         self.k_ext = external_scale * self.k_ext / ext_eig
@@ -703,14 +703,14 @@ class SEPIRQInput(ModelInput):
             (self.k_ext ) * spec['prodromal_trans_scaling'])
             )[0])
 
-        R_int = - log(1 - spec['AR']) * self.dens_adj_ave_hh_size
+        R_int = - log(1 - spec['SIP']) * self.dens_adj_ave_hh_size
 
         self.k_home = R_int * self.k_home / home_eig
 
         if spec['fit_method'] == 'R*':
-            external_scale = spec['R*'] / (self.ave_hh_size*spec['AR'])
+            external_scale = spec['R*'] / (self.ave_hh_size*spec['SIP'])
         else:
-            external_scale = 1 / (self.ave_hh_size*spec['AR'])
+            external_scale = 1 / (self.ave_hh_size*spec['SIP'])
         self.k_ext = external_scale * self.k_ext / ext_eig
 
         # To define the iso_rates property, we add some zeros which act as dummy

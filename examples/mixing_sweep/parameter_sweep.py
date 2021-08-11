@@ -44,14 +44,19 @@ else:
     model_input_to_fit = SEPIRInput(SPEC, composition_list, comp_dist)
     household_population_to_fit = HouseholdPopulation(
         composition_list, comp_dist, model_input_to_fit)
-    rhs_to_fit = SEPIRRateEquations(model_input_to_fit, household_population_to_fit, NoImportModel(5,2))
-    beta_ext = estimate_beta_ext(household_population_to_fit, rhs_to_fit, growth_rate)
+    rhs_to_fit = SEPIRRateEquations(model_input_to_fit,
+                                    household_population_to_fit,
+                                    NoImportModel(5,2))
+    beta_ext = estimate_beta_ext(household_population_to_fit,
+                                 rhs_to_fit,
+                                 growth_rate)
     with open('outputs/mixing_sweep/beta_ext.pkl', 'wb') as f:
         dump(beta_ext, f)
 
 prev=1.0e-5 # Starting prevalence
 antibody_prev=0 # Starting antibody prev/immunity
-AR=1.0 # Starting attack ratio - visited households are fully recovered
+gr_interval = [-0.5*this_spec['recovery_rate'], 1] # Interval used in growth rate estimation
+gr_tol = 1e-3 # Absolute tolerance for growth rate estimation
 
 class MixingAnalysis:
     def __init__(self):
@@ -61,8 +66,10 @@ class MixingAnalysis:
         try:
             result = self._implement_mixing(p)
         except ValueError as err:
-            print('Exception raised for parameters={0}\n\tException: {1}'.format(
-                p, err))
+            print(
+                'Exception raised for parameters={0}\n\tException: {1}'.format(
+                p, err)
+                )
             return 0.0
         return result
 
@@ -77,13 +84,23 @@ class MixingAnalysis:
         household_population = HouseholdPopulation(
             composition_list, comp_dist, model_input)
 
-        rhs = SEPIRRateEquations(model_input, household_population, NoImportModel(5,2))
+        rhs = SEPIRRateEquations(model_input,
+                                 household_population,
+                                 NoImportModel(5,2))
 
-        growth_rate = estimate_growth_rate(household_population, rhs, [-0.5*this_spec['recovery_rate'], 1], 1e-3)
+        growth_rate = estimate_growth_rate(household_population,
+                                           rhs,
+                                           gr_interval,
+                                           gr_tol)
         if growth_rate is None:
             growth_rate = 0
 
-        H0 = make_initial_condition_by_eigenvector(growth_rate, model_input, household_population, rhs, 1e-5, 0.0)
+        H0 = make_initial_condition_by_eigenvector(growth_rate,
+                                                   model_input,
+                                                   household_population,
+                                                   rhs,
+                                                   prev,
+                                                   antibody_prev)
 
         no_days = 100
         tspan = (0.0, no_days)
@@ -92,13 +109,19 @@ class MixingAnalysis:
         t = solution.t
         H = solution.y
 
-        ave_hh_size = household_population.composition_distribution.dot(sum(household_population.composition_list, axis=1))
+        ave_hh_size = household_population.composition_distribution.dot(
+                            sum(household_population.composition_list, axis=1))
 
-        I = (H.T.dot(household_population.states[:, 3::5])).sum(axis=1)/ave_hh_size
-        R = (H.T.dot(household_population.states[:, 4::5])).sum(axis=1)/ave_hh_size
-        R_end_vec = H[:, -1] * household_population.states[:, 4::5].sum(axis=1)
-        attack_ratio = (household_population.state_to_comp_matrix.T.dot(R_end_vec))
-        attack_ratio = model_input.composition_distribution.dot(attack_ratio / model_input.hh_size_list)
+        I = (H.T.dot(household_population.states[:, 3::5])).sum(axis=1)/ \
+                                                                    ave_hh_size
+        R = (H.T.dot(household_population.states[:, 4::5])).sum(axis=1)/ \
+                                                                    ave_hh_size
+        R_end_vec = H[:, -1] * \
+                        household_population.states[:, 4::5].sum(axis=1)
+        attack_ratio = \
+                    (household_population.state_to_comp_matrix.T.dot(R_end_vec))
+        attack_ratio = model_input.composition_distribution.dot(
+                                        attack_ratio / model_input.hh_size_list)
 
         recovered_states = where(
             ((rhs.states_sus_only + rhs.states_rec_only).sum(axis=1)
@@ -112,13 +135,13 @@ class MixingAnalysis:
         return [growth_rate, peaks, R_end, hh_outbreak_prop, attack_ratio]
 
 def main(no_of_workers,
-         ar_vals,
+         sip_vals,
          internal_mix_vals,
          external_mix_vals):
     main_start = get_time()
     mixing_system = MixingAnalysis()
     results = []
-    ar_range = arange(ar_vals[0], ar_vals[1], ar_vals[2])
+    sip_range = arange(sip_vals[0], sip_vals[1], sip_vals[2])
     internal_mix_range = arange(internal_mix_vals[0],
                                 internal_mix_vals[1],
                                 internal_mix_vals[2])
@@ -127,7 +150,7 @@ def main(no_of_workers,
                                 external_mix_vals[2])
     params = array([
         [a, i, e]
-        for a in ar_range
+        for a in sip_range
         for i in internal_mix_range
         for e in external_mix_range])
 
@@ -135,23 +158,23 @@ def main(no_of_workers,
         results = pool.map(mixing_system, params)
 
     growth_rate_data = array([r[0] for r in results]).reshape(
-        len(ar_range),
+        len(sip_range),
         len(internal_mix_range),
         len(external_mix_range))
     peak_data = array([r[1] for r in results]).reshape(
-        len(ar_range),
+        len(sip_range),
         len(internal_mix_range),
         len(external_mix_range))
     end_data = array([r[2] for r in results]).reshape(
-        len(ar_range),
+        len(sip_range),
         len(internal_mix_range),
         len(external_mix_range))
     hh_prop_data = array([r[3] for r in results]).reshape(
-        len(ar_range),
+        len(sip_range),
         len(internal_mix_range),
         len(external_mix_range))
     attack_ratio_data = array([r[4] for r in results]).reshape(
-        len(ar_range),
+        len(sip_range),
         len(internal_mix_range),
         len(external_mix_range))
 
@@ -163,7 +186,7 @@ def main(no_of_workers,
              end_data,
              hh_prop_data,
              attack_ratio_data,
-             ar_range,
+             sip_range,
              internal_mix_range,
              external_mix_range),
             f)
@@ -174,12 +197,16 @@ def main(no_of_workers,
 if __name__ == '__main__':
     parser = ArgumentParser()
     parser.add_argument('--no_of_workers', type=int, default=8)
-    parser.add_argument('--ar_vals', type=int, default=[0.25, 1.0, 0.25])
-    parser.add_argument('--internal_mix_vals', type=int, default=[0.0, 0.99, 0.1])
-    parser.add_argument('--external_mix_vals', type=int, default=[0.0, 0.99, 0.1])
+    parser.add_argument('--sip_vals', type=int, default=[0.25, 1.0, 0.25])
+    parser.add_argument('--internal_mix_vals',
+                        type=int,
+                        default=[0.0, 0.99, 0.1])
+    parser.add_argument('--external_mix_vals',
+                        type=int,
+                        default=[0.0, 0.99, 0.1])
     args = parser.parse_args()
 
     main(args.no_of_workers,
-         args.ar_vals,
+         args.sip_vals,
          args.internal_mix_vals,
          args.external_mix_vals)

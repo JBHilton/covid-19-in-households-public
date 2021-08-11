@@ -71,7 +71,7 @@ pre_npi_input = add_vuln_class(pre_npi_input,
                     adult_class)
 
 prev=1.0e-5 # Starting prevalence
-antibody_prev=0 # Starting antibody prev/immunity
+starting_immunity=0 # Starting antibody prev/immunity
 
 class BubbleAnalysis:
     def __init__(self):
@@ -138,7 +138,7 @@ class BubbleAnalysis:
                                                    bubbled_model_input,
                                                    household_population,
                                                    rhs, prev,
-                                                   antibody_prev)
+                                                   starting_immunity)
 
         print('solving, p=',p)
 

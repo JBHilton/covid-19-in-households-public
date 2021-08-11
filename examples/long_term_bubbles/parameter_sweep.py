@@ -15,8 +15,9 @@ from time import time as get_time
 from scipy.integrate import solve_ivp
 from matplotlib.pyplot import subplots
 from matplotlib.cm import get_cmap
-from model.preprocessing import ( build_support_bubbles, estimate_beta_ext, estimate_growth_rate,
-        SEPIRInput, HouseholdPopulation, make_initial_condition_by_eigenvector)
+from model.preprocessing import ( build_support_bubbles, estimate_beta_ext,
+        estimate_growth_rate, SEPIRInput, HouseholdPopulation,
+        make_initial_condition_by_eigenvector)
 from model.specs import TWO_AGE_SEPIR_SPEC_FOR_FITTING, TWO_AGE_UK_SPEC
 from model.common import SEPIRRateEquations
 from model.imports import NoImportModel
@@ -46,13 +47,19 @@ else:
     model_input_to_fit = SEPIRInput(SPEC, composition_list, comp_dist)
     household_population_to_fit = HouseholdPopulation(
         composition_list, comp_dist, model_input_to_fit)
-    rhs_to_fit = SEPIRRateEquations(model_input_to_fit, household_population_to_fit, NoImportModel(5,2))
-    beta_ext = estimate_beta_ext(household_population_to_fit, rhs_to_fit, growth_rate)
+    rhs_to_fit = SEPIRRateEquations(model_input_to_fit,
+                                    household_population_to_fit,
+                                    NoImportModel(5,2))
+    beta_ext = estimate_beta_ext(household_population_to_fit,
+                                 rhs_to_fit,
+                                 growth_rate)
     with open('outputs/long_term_bubbles/beta_ext.pkl', 'wb') as f:
         dump(beta_ext, f)
 
 prev=1.0e-5 # Starting prevalence
-antibody_prev=0 # Starting antibody prev/immunity
+starting_immunity=0 # Starting antibody prev/immunity
+gr_interval = [-0.5*this_spec['recovery_rate'], 1] # Interval used in growth rate estimation
+gr_tol = 1e-3 # Absolute tolerance for growth rate estimation
 
 class BubbleAnalysis:
     def __init__(self):
@@ -64,20 +71,28 @@ class BubbleAnalysis:
                 1)
 
         basic_mixed_comp_dist = basic_mixed_comp_dist/sum(basic_mixed_comp_dist)
-        self.basic_bubbled_input = SEPIRInput(SPEC, basic_mixed_comp_list, basic_mixed_comp_dist)
+        self.basic_bubbled_input = SEPIRInput(SPEC,
+                                              basic_mixed_comp_list,
+                                              basic_mixed_comp_dist)
 
         self.bubbled_household_population = HouseholdPopulation(
-            basic_mixed_comp_list, basic_mixed_comp_dist, self.basic_bubbled_input)
+                                                        basic_mixed_comp_list,
+                                                        basic_mixed_comp_dist,
+                                                        self.basic_bubbled_input)
 
-        rhs = SEPIRRateEquations(self.basic_bubbled_input, self.bubbled_household_population, NoImportModel(5,2))
+        rhs = SEPIRRateEquations(self.basic_bubbled_input,
+                                 self.bubbled_household_population,
+                                 NoImportModel(5,2))
 
     def __call__(self, p):
         print('now calling')
         try:
             result = self._implement_bubbles(p)
         except ValueError as err:
-            print('Exception raised for parameters={0}\n\tException: {1}'.format(
-                p, err))
+            print(
+                'Exception raised for parameters={0}\n\tException: {1}'.format(
+                p, err)
+                )
             return 0.0
         return result
 
@@ -107,8 +122,8 @@ class BubbleAnalysis:
 
         growth_rate = estimate_growth_rate(household_population,
                                            rhs,
-                                           [-0.5*SPEC['recovery_rate'], 1],
-                                           1e-2,
+                                           gr_interval,
+                                           gr_tol,
                                            (1 - p[1]) * X0)
         if growth_rate is None:
             growth_rate = 0
@@ -119,7 +134,7 @@ class BubbleAnalysis:
                                                    bubbled_model_input,
                                                    household_population,
                                                    rhs, prev,
-                                                   antibody_prev)
+                                                   starting_immunity)
 
         print('solving, p=',p)
 
@@ -136,11 +151,23 @@ class BubbleAnalysis:
                                                 household_population.ave_hh_size
         R = (H.T.dot(household_population.states[:, 4::5])).sum(axis=1)/ \
                                                 household_population.ave_hh_size
+        R_end_vec = H[:, -1] * \
+                        household_population.states[:, 4::5].sum(axis=1)
+        attack_ratio = \
+                    (household_population.state_to_comp_matrix.T.dot(R_end_vec))
+        attack_ratio = model_input.composition_distribution.dot(
+                                        attack_ratio / model_input.hh_size_list)
+
+        recovered_states = where(
+            ((rhs.states_sus_only + rhs.states_rec_only).sum(axis=1)
+                    == household_population.states.sum(axis=1))
+            & ((rhs.states_rec_only).sum(axis=1) > 0))[0]
+        hh_outbreak_prop = H[recovered_states, -1].sum()
 
         peaks = 100 * max(I)
         R_end = 100 * R[-1]
 
-        return [growth_rate, peaks, R_end]
+        return [growth_rate, peaks, R_end, attack_ratio, hh_outbreak_prop]
 
 def main(no_of_workers,
          bubble_prob_vals,
@@ -176,6 +203,14 @@ def main(no_of_workers,
     end_data = array([r[2] for r in results]).reshape(
         len(bubble_prob_range),
         len(external_mix_range))
+    hh_prop_data = array([r[3] for r in results]).reshape(
+        len(ar_range),
+        len(internal_mix_range),
+        len(external_mix_range))
+    attack_ratio_data = array([r[4] for r in results]).reshape(
+        len(ar_range),
+        len(internal_mix_range),
+        len(external_mix_range))
 
     fname = 'outputs/long_term_bubbles/results.pkl'
     with open(fname, 'wb') as f:
@@ -183,6 +218,8 @@ def main(no_of_workers,
             (growth_rate_data,
              peak_data,
              end_data,
+             hh_prop_data,
+             attack_ratio_data,
              bubble_prob_range,
              external_mix_range),
             f)
@@ -192,8 +229,12 @@ def main(no_of_workers,
 if __name__ == '__main__':
     parser = ArgumentParser()
     parser.add_argument('--no_of_workers', type=int, default=4)
-    parser.add_argument('--bubble_prob_vals', type=int, default=[0.0, 1.0, 0.25])
-    parser.add_argument('--external_mix_vals', type=int, default=[0.0, 1.0, 0.25])
+    parser.add_argument('--bubble_prob_vals',
+                        type=int,
+                        default=[0.0, 1.0, 0.25])
+    parser.add_argument('--external_mix_vals',
+                        type=int,
+                        default=[0.0, 1.0, 0.25])
     args = parser.parse_args()
 
     main(args.no_of_workers,

@@ -15,7 +15,7 @@ def draw_random_two_age_SEPIR_specs(spec,
                       R_pars = [1, 2]):
 
     rand_spec = deepcopy(spec)
-    rand_spec['AR'] = \
+    rand_spec['SIP'] = \
         AR_pars[0] +(AR_pars[1] - AR_pars[0]) * rand(1,) # SAR unif, default [0.25, 0.75]
     rand_spec['recovery_rate'] = 1 / (
                                         rec_pars[0] +
@@ -43,7 +43,7 @@ def draw_random_two_age_SEPIR_specs(spec,
 
 TWO_AGE_SIR_SPEC = {
     'compartmental_structure': 'SIR', # This is which subsystem key to use
-    'AR': 0.45,                     # Secondary attack probability
+    'SIP': 0.45,                     # Secondary inf probability
     'R*': 1.1,                      # Household-level reproduction number
     'recovery_rate': 1/12,           # Recovery rate
     'sus': array([1,1]),          # Relative susceptibility by age/vulnerability class
@@ -53,7 +53,7 @@ TWO_AGE_SIR_SPEC = {
 
 SINGLE_AGE_SEIR_SPEC = {
     'compartmental_structure': 'SEIR', # This is which subsystem key to use
-    'AR': 0.45,                     # Secondary attack probability
+    'SIP': 0.45,                     # Secondary inf probability
     'R*': 1.1,                      # Household-level reproduction number
     'recovery_rate': 1/7,           # Recovery rate
     'incubation_rate': 1/5,         # E->I incubation rate
@@ -64,7 +64,7 @@ SINGLE_AGE_SEIR_SPEC = {
 
 SINGLE_AGE_SEIR_SPEC_FOR_FITTING = {
     'compartmental_structure': 'SEIR', # This is which subsystem key to use
-    'AR': 0.45,                     # Secondary attack probability
+    'SIP': 0.45,                     # Secondary inf probability
     'recovery_rate': 1/7,           # Recovery rate
     'incubation_rate': 1/5,         # E->I incubation rate
     'sus': array([1]),          # Relative susceptibility by age/vulnerability class
@@ -74,7 +74,7 @@ SINGLE_AGE_SEIR_SPEC_FOR_FITTING = {
 
 TWO_AGE_SEIR_SPEC = {
     'compartmental_structure': 'SEIR', # This is which subsystem key to use
-    'AR': 0.45,                     # Secondary attack probability
+    'SIP': 0.45,                     # Secondary inf probability
     'R*': 1.1,                      # Household-level reproduction number
     'recovery_rate': 1/7,           # Recovery rate
     'incubation_rate': 1/5,         # E->I incubation rate
@@ -85,7 +85,7 @@ TWO_AGE_SEIR_SPEC = {
 
 TWO_AGE_SEPIR_SPEC = {
     'compartmental_structure': 'SEPIR', # This is which subsystem key to use
-    'AR': 0.45,                     # Secondary attack probability
+    'SIP': 0.45,                     # Secondary inf probability
     'R*': 1.1,                      # Household-level reproduction number
     'recovery_rate': 1/4,           # Recovery rate
     'incubation_rate': 1/5,         # E->P incubation rate
@@ -99,7 +99,7 @@ TWO_AGE_SEPIR_SPEC = {
 
 TWO_AGE_SEPIR_SPEC_FOR_FITTING = {
     'compartmental_structure': 'SEPIR', # This is which subsystem key to use
-    'AR': 0.45,                     # Secondary attack probability
+    'SIP': 0.45,                     # Secondary inf probability
     'recovery_rate': 1/4,           # Recovery rate
     'incubation_rate': 1/5,         # E->P incubation rate
     'symp_onset_rate': 1/3,         # P->I prodromal to symptomatic rate
@@ -112,7 +112,7 @@ TWO_AGE_SEPIR_SPEC_FOR_FITTING = {
 
 TWO_AGE_INT_SEPIRQ_SPEC = {
     'compartmental_structure': 'SEPIRQ', # This is which subsystem key to use
-    'AR': 0.45,                     # Secondary attack probability
+    'SIP': 0.45,                     # Secondary inf probability
     'recovery_rate': 1/4,           # Recovery rate
     'incubation_rate': 1/5,         # E->P incubation rate
     'symp_onset_rate': 1/3,         # P->I prodromal to symptomatic rate
@@ -137,7 +137,7 @@ TWO_AGE_INT_SEPIRQ_SPEC = {
 
 TWO_AGE_EXT_SEPIRQ_SPEC = {
     'compartmental_structure': 'SEPIRQ', # This is which subsystem key to use
-    'AR': 0.45,                     # Secondary attack probability
+    'SIP': 0.45,                     # Secondary inf probability
     'recovery_rate': 1/4,           # Recovery rate
     'incubation_rate': 1/5,         # E->P incubation rate
     'symp_onset_rate': 1/3,         # P->I prodromal to symptomatic rate

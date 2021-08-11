@@ -37,7 +37,7 @@ GUEST_TRANS_SCALING = 1 # This is strength of guest-host interactions relative t
 
 growth_rate = X0
 prev = 1e-2
-antibody_prev = 1e-2
+starting_immunity = 1e-2
 
 comp_dist = read_csv(
     'inputs/england_hh_size_dist.csv',
@@ -90,7 +90,7 @@ class UnmergedContext:
                                                    self.population,
                                                    self.rhs,
                                                    prev,
-                                                   antibody_prev)
+                                                   starting_immunity)
         self.tspan = (t_start, merge_start)
         solution = solve_ivp(
             self.rhs,
