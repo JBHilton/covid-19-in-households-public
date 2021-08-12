@@ -545,14 +545,20 @@ class ModelInput(ABC):
         self.density_expo = spec['density_expo']
         self.composition_list = composition_list
         self.composition_distribution = composition_distribution
-        self.hh_size_list = composition_list.sum(axis=1)
-        self.ave_hh_size = \
-            composition_distribution.T.dot(
-            self.hh_size_list)                                # Average household size
-        self.dens_adj_ave_hh_size = \
-            composition_distribution.T.dot((
-            self.hh_size_list)**self.density_expo)                                # Average household size adjusted for density, needed to get internal transmission rate from secondary inf prob
-        self.ave_hh_by_class = composition_distribution.T.dot(composition_list)
+
+    @property
+    def hh_size_list(self):
+        return self.composition_list.sum(axis=1)
+    @property
+    def ave_hh_size(self):
+        return self.composition_distribution.T.dot(self.hh_size_list) # Average household size
+    @property
+    def dens_adj_ave_hh_size(self):
+        return self.composition_distribution.T.dot(
+                                        (self.hh_size_list)**self.density_expo)  # Average household size adjusted for density, needed to get internal transmission rate from secondary inf prob
+    @property
+    def ave_hh_by_class(self):
+        return self.composition_distribution.T.dot(self.composition_list)
 
 class SIRInput(ModelInput):
     def __init__(self, spec, composition_list, composition_distribution):

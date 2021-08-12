@@ -58,7 +58,7 @@ else:
 
 prev=1.0e-5 # Starting prevalence
 starting_immunity=0 # Starting antibody prev/immunity
-gr_interval = [-0.5*this_spec['recovery_rate'], 1] # Interval used in growth rate estimation
+gr_interval = [-0.5*SPEC['recovery_rate'], 1] # Interval used in growth rate estimation
 gr_tol = 1e-3 # Absolute tolerance for growth rate estimation
 
 class BubbleAnalysis:
@@ -155,8 +155,8 @@ class BubbleAnalysis:
                         household_population.states[:, 4::5].sum(axis=1)
         attack_ratio = \
                     (household_population.state_to_comp_matrix.T.dot(R_end_vec))
-        attack_ratio = model_input.composition_distribution.dot(
-                                        attack_ratio / model_input.hh_size_list)
+        attack_ratio = bubbled_model_input.composition_distribution.dot(
+                                attack_ratio / bubbled_model_input.hh_size_list)
 
         recovered_states = where(
             ((rhs.states_sus_only + rhs.states_rec_only).sum(axis=1)
@@ -204,12 +204,10 @@ def main(no_of_workers,
         len(bubble_prob_range),
         len(external_mix_range))
     hh_prop_data = array([r[3] for r in results]).reshape(
-        len(ar_range),
-        len(internal_mix_range),
+        len(bubble_prob_range),
         len(external_mix_range))
     attack_ratio_data = array([r[4] for r in results]).reshape(
-        len(ar_range),
-        len(internal_mix_range),
+        len(bubble_prob_range),
         len(external_mix_range))
 
     fname = 'outputs/long_term_bubbles/results.pkl'
@@ -228,7 +226,7 @@ def main(no_of_workers,
 
 if __name__ == '__main__':
     parser = ArgumentParser()
-    parser.add_argument('--no_of_workers', type=int, default=4)
+    parser.add_argument('--no_of_workers', type=int, default=8)
     parser.add_argument('--bubble_prob_vals',
                         type=int,
                         default=[0.0, 1.0, 0.25])
