@@ -85,6 +85,11 @@ class UnmergedContext:
             self.population,
             NoImportModel(NO_COMPARTMENTS, 1))
 
+        self.recovered_states = where(
+            ((self.rhs.states_sus_only + self.rhs.states_rec_only).sum(axis=1)
+                    == household_population.states.sum(axis=1))
+            & ((self.rhs.states_rec_only).sum(axis=1) > 0))[0]
+
         self.H0 = make_initial_condition_by_eigenvector(growth_rate,
                                                    unmerged_input,
                                                    self.population,
@@ -311,6 +316,12 @@ def run_merge(
         merged_population3.states[:,11])/unmerged.input.ave_hh_size
     postmerge_R_1 = H_postmerge_1.T.dot(unmerged.population.states[:, 3])/unmerged.input.ave_hh_size
     R_end_1 = postmerge_R_1[-1]
+    R_end_vec_1 = H_postmerge_1[:, -1] * \
+                    unmerged.population.states[:, 3].sum(axis=1)
+    ar_1 = (unmerged.population.state_to_comp_matrix.T.dot(R_end_vec_1))
+    ar_1 = unmerged.input.composition_distribution.dot(
+                                    ar_1 / unmerged.input.hh_size_list)
+    hh_prop_1 = H[unmerged.recovered_states, -1].sum()
 
     merge_I_2 = (1/2) * H_merge_2.T.dot(
         merged_population2.states[:, 2] + merged_population2.states[:, 6])/unmerged.input.ave_hh_size
@@ -320,6 +331,12 @@ def run_merge(
         merged_population2.states[:, 3] + merged_population2.states[:, 7])/unmerged.input.ave_hh_size
     postmerge_R_2 = H_postmerge_2.T.dot(unmerged.population.states[:, 3])/unmerged.input.ave_hh_size
     R_end_2 = postmerge_R_2[-1]
+    R_end_vec_2 = H_postmerge_2[:, -1] * \
+                    unmerged.population.states[:, 3].sum(axis=1)
+    ar_2 = (unmerged.population.state_to_comp_matrix.T.dot(R_end_vec_2))
+    ar_2 = unmerged.input.composition_distribution.dot(
+                                    ar_2 / unmerged.input.hh_size_list)
+    hh_prop_2 = H[unmerged.recovered_states, -1].sum()
 
     merge_I_3 = (1/2) * H_merge_3.T.dot(
         merged_population2.states[:, 2] + merged_population2.states[:, 6])/unmerged.input.ave_hh_size
@@ -329,6 +346,12 @@ def run_merge(
         merged_population2.states[:, 3] + merged_population2.states[:, 7])/unmerged.input.ave_hh_size
     postmerge_R_3 = H_postmerge_3.T.dot(unmerged.population.states[:, 3])/unmerged.input.ave_hh_size
     R_end_3 = postmerge_R_3[-1]
+    R_end_vec_3 = H_postmerge_3[:, -1] * \
+                    unmerged.population.states[:, 3].sum(axis=1)
+    ar_3 = (unmerged.population.state_to_comp_matrix.T.dot(R_end_vec_3))
+    ar_3 = unmerged.input.composition_distribution.dot(
+                                    ar_3 / unmerged.input.hh_size_list)
+    hh_prop_3 = H[unmerged.recovered_states, -1].sum()
 
     merge_I_4 = (1/2) * H_merge_4.T.dot(
         merged_population2.states[:, 2] + merged_population2.states[:, 6])/unmerged.input.ave_hh_size
@@ -338,15 +361,29 @@ def run_merge(
         merged_population2.states[:, 3] + merged_population2.states[:, 7])/unmerged.input.ave_hh_size
     postmerge_R_4 = H_postmerge_4.T.dot(unmerged.population.states[:, 3])/unmerged.input.ave_hh_size
     R_end_4 = postmerge_R_4[-1]
+    R_end_vec_4 = H_postmerge_4[:, -1] * \
+                    unmerged.population.states[:, 3].sum(axis=1)
+    ar_4 = (unmerged.population.state_to_comp_matrix.T.dot(R_end_vec_4))
+    ar_4 = unmerged.input.composition_distribution.dot(
+                                    ar_4 / unmerged.input.hh_size_list)
+    hh_prop_4 = H[unmerged.recovered_states, -1].sum()
 
     return [peaks_1,
             R_end_1,
+            ar_1,
+            hh_prop_1,
             peaks_2,
             R_end_2,
+            ar_2,
+            hh_prop_2,
             peaks_3,
             R_end_3,
+            ar_3,
+            hh_prop_3,
             peaks_4,
-            R_end_4]
+            R_end_4,
+            ar_4,
+            hh_prop_4]
 
 
 
@@ -593,22 +630,46 @@ def main(no_of_workers,
     end_data1 = array([r[1] for r in results]).reshape(
         len(unmerged_exponents),
         len(merged_exponents))
-    peak_data2 = array([r[2] for r in results]).reshape(
+    ar_data1 = array([r[2] for r in results]).reshape(
         len(unmerged_exponents),
         len(merged_exponents))
-    end_data2 = array([r[3] for r in results]).reshape(
+    hh_prop_data1 = array([r[3] for r in results]).reshape(
         len(unmerged_exponents),
         len(merged_exponents))
-    peak_data3 = array([r[4] for r in results]).reshape(
+    peak_data2= array([r[4] for r in results]).reshape(
         len(unmerged_exponents),
         len(merged_exponents))
-    end_data3 = array([r[5] for r in results]).reshape(
+    end_data2 = array([r[5] for r in results]).reshape(
         len(unmerged_exponents),
         len(merged_exponents))
-    peak_data4 = array([r[6] for r in results]).reshape(
+    ar_data2 = array([r[6] for r in results]).reshape(
         len(unmerged_exponents),
         len(merged_exponents))
-    end_data4 = array([r[7] for r in results]).reshape(
+    hh_prop_data2 = array([r[7] for r in results]).reshape(
+        len(unmerged_exponents),
+        len(merged_exponents))
+    peak_data3 = array([r[8] for r in results]).reshape(
+        len(unmerged_exponents),
+        len(merged_exponents))
+    end_data3 = array([r[9] for r in results]).reshape(
+        len(unmerged_exponents),
+        len(merged_exponents))
+    ar_data3 = array([r[10] for r in results]).reshape(
+        len(unmerged_exponents),
+        len(merged_exponents))
+    hh_prop_data3 = array([r[11] for r in results]).reshape(
+        len(unmerged_exponents),
+        len(merged_exponents))
+    peak_data4 = array([r[12] for r in results]).reshape(
+        len(unmerged_exponents),
+        len(merged_exponents))
+    end_data4 = array([r[13] for r in results]).reshape(
+        len(unmerged_exponents),
+        len(merged_exponents))
+    ar_data4 = array([r[14] for r in results]).reshape(
+        len(unmerged_exponents),
+        len(merged_exponents))
+    hh_prop_data4 = array([r[15] for r in results]).reshape(
         len(unmerged_exponents),
         len(merged_exponents))
 
@@ -617,12 +678,20 @@ def main(no_of_workers,
         dump(
             (peak_data1,
              end_data1,
+             ar_data1,
+             hh_prop_data1,
              peak_data2,
              end_data2,
+             ar_data2,
+             hh_prop_data2,
              peak_data3,
              end_data3,
+             ar_data3,
+             hh_prop_data3,
              peak_data4,
              end_data4,
+             ar_data_4,
+             hh_prop_data4,
              unmerged_exponents,
              merged_exponents),
             f)
