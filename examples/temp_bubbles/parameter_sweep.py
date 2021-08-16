@@ -232,7 +232,7 @@ def run_merge(
             0,
             unmerged.baseline_H0,
             merge_start,
-            merge_start + 1)
+            merge_end)
     solution = solve_ivp(
         unmerged.rhs,
         (merge_start + 1, t_end),
@@ -342,7 +342,7 @@ def run_merge(
     postmerge_R_0 = H_postmerge_0.T.dot(unmerged.population.states[:, 3])/unmerged.input.ave_hh_size
     R_end_0 = postmerge_R_0[-1]
     R_end_vec_0 = H_postmerge_0[:, -1] * \
-                    unmerged.population.states[:, 3].sum(axis=1)
+                    unmerged.population.states[:, 3]
     ar_0 = (unmerged.population.state_to_comp_matrix.T.dot(R_end_vec_0))
     ar_0 = unmerged.input.composition_distribution.dot(
                                     ar_0 / unmerged.input.hh_size_list)
