@@ -1,5 +1,5 @@
 from argparse import ArgumentParser
-from numpy import arange, array, atleast_2d, diag, hstack, ones
+from numpy import arange, array, atleast_2d, diag, hstack, ones, where
 from os import mkdir
 from os.path import isdir,isfile
 from pickle import load, dump
@@ -87,7 +87,7 @@ class UnmergedContext:
 
         self.recovered_states = where(
             ((self.rhs.states_sus_only + self.rhs.states_rec_only).sum(axis=1)
-                    == household_population.states.sum(axis=1))
+                    == self.population.states.sum(axis=1))
             & ((self.rhs.states_rec_only).sum(axis=1) > 0))[0]
 
         self.H0 = make_initial_condition_by_eigenvector(growth_rate,
@@ -127,19 +127,18 @@ class UnmergedContext:
         baseline_R = baseline_H.T.dot(
             self.population.states[:, 3])/unmerged_input.ave_hh_size
 
-        # self.filename_stem = 'outputs/temp_bubbles/sweep_results_' + str(i)
-        # with open(self.filename_stem + '.pkl', 'wb') as f:
-        #     dump(
-        #         (
-        #             self.population,
-        #             baseline_H,
-        #             baseline_time,
-        #             baseline_S,
-        #             baseline_E,
-        #             baseline_I,
-        #             baseline_R
-        #         ),
-        #         f)
+        with open('baseline.pkl', 'wb') as f:
+            dump(
+                (
+                    self.population,
+                    baseline_H,
+                    baseline_time,
+                    baseline_S,
+                    baseline_E,
+                    baseline_I,
+                    baseline_R
+                ),
+                f)
 
 
 def unpack_paramas_and_run_merge(p):
@@ -317,11 +316,11 @@ def run_merge(
     postmerge_R_1 = H_postmerge_1.T.dot(unmerged.population.states[:, 3])/unmerged.input.ave_hh_size
     R_end_1 = postmerge_R_1[-1]
     R_end_vec_1 = H_postmerge_1[:, -1] * \
-                    unmerged.population.states[:, 3].sum(axis=1)
+                    unmerged.population.states[:, 3]
     ar_1 = (unmerged.population.state_to_comp_matrix.T.dot(R_end_vec_1))
     ar_1 = unmerged.input.composition_distribution.dot(
                                     ar_1 / unmerged.input.hh_size_list)
-    hh_prop_1 = H[unmerged.recovered_states, -1].sum()
+    hh_prop_1 = H_postmerge_1[unmerged.recovered_states, -1].sum()
 
     merge_I_2 = (1/2) * H_merge_2.T.dot(
         merged_population2.states[:, 2] + merged_population2.states[:, 6])/unmerged.input.ave_hh_size
@@ -332,11 +331,11 @@ def run_merge(
     postmerge_R_2 = H_postmerge_2.T.dot(unmerged.population.states[:, 3])/unmerged.input.ave_hh_size
     R_end_2 = postmerge_R_2[-1]
     R_end_vec_2 = H_postmerge_2[:, -1] * \
-                    unmerged.population.states[:, 3].sum(axis=1)
+                    unmerged.population.states[:, 3]
     ar_2 = (unmerged.population.state_to_comp_matrix.T.dot(R_end_vec_2))
     ar_2 = unmerged.input.composition_distribution.dot(
                                     ar_2 / unmerged.input.hh_size_list)
-    hh_prop_2 = H[unmerged.recovered_states, -1].sum()
+    hh_prop_2 = H_postmerge_2[unmerged.recovered_states, -1].sum()
 
     merge_I_3 = (1/2) * H_merge_3.T.dot(
         merged_population2.states[:, 2] + merged_population2.states[:, 6])/unmerged.input.ave_hh_size
@@ -347,11 +346,11 @@ def run_merge(
     postmerge_R_3 = H_postmerge_3.T.dot(unmerged.population.states[:, 3])/unmerged.input.ave_hh_size
     R_end_3 = postmerge_R_3[-1]
     R_end_vec_3 = H_postmerge_3[:, -1] * \
-                    unmerged.population.states[:, 3].sum(axis=1)
+                    unmerged.population.states[:, 3]
     ar_3 = (unmerged.population.state_to_comp_matrix.T.dot(R_end_vec_3))
     ar_3 = unmerged.input.composition_distribution.dot(
                                     ar_3 / unmerged.input.hh_size_list)
-    hh_prop_3 = H[unmerged.recovered_states, -1].sum()
+    hh_prop_3 = H_postmerge_3[unmerged.recovered_states, -1].sum()
 
     merge_I_4 = (1/2) * H_merge_4.T.dot(
         merged_population2.states[:, 2] + merged_population2.states[:, 6])/unmerged.input.ave_hh_size
@@ -362,11 +361,11 @@ def run_merge(
     postmerge_R_4 = H_postmerge_4.T.dot(unmerged.population.states[:, 3])/unmerged.input.ave_hh_size
     R_end_4 = postmerge_R_4[-1]
     R_end_vec_4 = H_postmerge_4[:, -1] * \
-                    unmerged.population.states[:, 3].sum(axis=1)
+                    unmerged.population.states[:, 3]
     ar_4 = (unmerged.population.state_to_comp_matrix.T.dot(R_end_vec_4))
     ar_4 = unmerged.input.composition_distribution.dot(
                                     ar_4 / unmerged.input.hh_size_list)
-    hh_prop_4 = H[unmerged.recovered_states, -1].sum()
+    hh_prop_4 = H_postmerge_4[unmerged.recovered_states, -1].sum()
 
     return [peaks_1,
             R_end_1,
@@ -690,7 +689,7 @@ def main(no_of_workers,
              hh_prop_data3,
              peak_data4,
              end_data4,
-             ar_data_4,
+             ar_data4,
              hh_prop_data4,
              unmerged_exponents,
              merged_exponents),
