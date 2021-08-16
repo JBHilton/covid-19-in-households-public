@@ -346,7 +346,7 @@ def run_merge(
     ar_0 = (unmerged.population.state_to_comp_matrix.T.dot(R_end_vec_0))
     ar_0 = unmerged.input.composition_distribution.dot(
                                     ar_0 / unmerged.input.hh_size_list)
-    hh_prop_0 = H[unmerged.recovered_states, -1].sum()
+    hh_prop_0 = H_postmerge_0[unmerged.recovered_states, -1].sum()
 
     merge_I_1 = (1/3) * H_merge_1.T.dot(
         merged_population3.states[:, 2] + merged_population3.states[:, 6] +
@@ -670,59 +670,75 @@ def main(no_of_workers,
     with Pool(no_of_workers) as pool:
         results = pool.map(unpack_paramas_and_run_merge, params)
 
-    peak_data1 = array([r[0] for r in results]).reshape(
+    peak_data0 = array([r[0] for r in results]).reshape(
         len(unmerged_exponents),
         len(merged_exponents))
-    end_data1 = array([r[1] for r in results]).reshape(
+    end_data0 = array([r[1] for r in results]).reshape(
         len(unmerged_exponents),
         len(merged_exponents))
-    ar_data1 = array([r[2] for r in results]).reshape(
+    ar_data0 = array([r[2] for r in results]).reshape(
         len(unmerged_exponents),
         len(merged_exponents))
-    hh_prop_data1 = array([r[3] for r in results]).reshape(
+    hh_prop_data0 = array([r[3] for r in results]).reshape(
         len(unmerged_exponents),
         len(merged_exponents))
-    peak_data2= array([r[4] for r in results]).reshape(
+    peak_data1= array([r[4] for r in results]).reshape(
         len(unmerged_exponents),
         len(merged_exponents))
-    end_data2 = array([r[5] for r in results]).reshape(
+    end_data1 = array([r[5] for r in results]).reshape(
         len(unmerged_exponents),
         len(merged_exponents))
-    ar_data2 = array([r[6] for r in results]).reshape(
+    ar_data1 = array([r[6] for r in results]).reshape(
         len(unmerged_exponents),
         len(merged_exponents))
-    hh_prop_data2 = array([r[7] for r in results]).reshape(
+    hh_prop_data1 = array([r[7] for r in results]).reshape(
         len(unmerged_exponents),
         len(merged_exponents))
-    peak_data3 = array([r[8] for r in results]).reshape(
+    peak_data2 = array([r[8] for r in results]).reshape(
         len(unmerged_exponents),
         len(merged_exponents))
-    end_data3 = array([r[9] for r in results]).reshape(
+    end_data2 = array([r[9] for r in results]).reshape(
         len(unmerged_exponents),
         len(merged_exponents))
-    ar_data3 = array([r[10] for r in results]).reshape(
+    ar_data2 = array([r[10] for r in results]).reshape(
         len(unmerged_exponents),
         len(merged_exponents))
-    hh_prop_data3 = array([r[11] for r in results]).reshape(
+    hh_prop_data2 = array([r[11] for r in results]).reshape(
         len(unmerged_exponents),
         len(merged_exponents))
-    peak_data4 = array([r[12] for r in results]).reshape(
+    peak_data3 = array([r[12] for r in results]).reshape(
         len(unmerged_exponents),
         len(merged_exponents))
-    end_data4 = array([r[13] for r in results]).reshape(
+    end_data3 = array([r[13] for r in results]).reshape(
         len(unmerged_exponents),
         len(merged_exponents))
-    ar_data4 = array([r[14] for r in results]).reshape(
+    ar_data3 = array([r[14] for r in results]).reshape(
         len(unmerged_exponents),
         len(merged_exponents))
-    hh_prop_data4 = array([r[15] for r in results]).reshape(
+    hh_prop_data3 = array([r[15] for r in results]).reshape(
+        len(unmerged_exponents),
+        len(merged_exponents))
+    peak_data4 = array([r[16] for r in results]).reshape(
+        len(unmerged_exponents),
+        len(merged_exponents))
+    end_data4 = array([r[17] for r in results]).reshape(
+        len(unmerged_exponents),
+        len(merged_exponents))
+    ar_data4 = array([r[18] for r in results]).reshape(
+        len(unmerged_exponents),
+        len(merged_exponents))
+    hh_prop_data4 = array([r[19] for r in results]).reshape(
         len(unmerged_exponents),
         len(merged_exponents))
 
     fname = 'outputs/temp_bubbles/results.pkl'
     with open(fname, 'wb') as f:
         dump(
-            (peak_data1,
+            (peak_data0,
+             end_data0,
+             ar_data0,
+             hh_prop_data0,
+             peak_data1,
              end_data1,
              ar_data1,
              hh_prop_data1,
