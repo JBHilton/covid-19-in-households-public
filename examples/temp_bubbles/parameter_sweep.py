@@ -211,11 +211,39 @@ def run_merge(
     # STRATEGIES: 1 is form triangles for 2 days, 2 is form pair on
     # 25th and again on 26th, 3 is 1 plus pair on new year's, 4 is 2
     # plus pair on new year's
+    # Strategy 0 is the actual policy of a 2-household bubble on Christmas day only
 
     merged_population2 = merged.merged_population2
     merged_population3 = merged.merged_population3
     rhs_merged2 = merged.rhs_merged2
     rhs_merged3 = merged.rhs_merged3
+
+    t_merge_0, \
+        H_merge_0, \
+        t_postmerge_0, \
+        H_postmerge_0 = \
+        simulate_merge2(
+            unmerged.population,
+            merged_population2,
+            unmerged.rhs,
+            rhs_merged2,
+            hh_dimension,
+            pairings_2,
+            [1],
+            0,
+            unmerged.baseline_H0,
+            merge_start,
+            merge_start + 1)
+    solution = solve_ivp(
+        unmerged.rhs,
+        (merge_start + 1, t_end),
+        H_postmerge_0[:, -1],
+        first_step=0.001,
+        atol=ATOL)
+    t_postmerge_0 = hstack(
+        (t_postmerge_0, solution.t))
+    H_postmerge_0 = hstack(
+        (H_postmerge_0, solution.y))
 
     t_merge_1, \
         H_merge_1, \
@@ -306,6 +334,21 @@ def run_merge(
     H_postmerge_2 = hstack((
         H_postmerge_2, solution.y))
 
+    merge_I_0 = (1/2) * H_merge_0.T.dot(
+        merged_population2.states[:, 2] + merged_population2.states[:, 6])/unmerged.input.ave_hh_size
+    postmerge_I_0 = H_postmerge_0.T.dot(unmerged.population.states[:, 2])/unmerged.input.ave_hh_size
+    peaks_0 = max(hstack((merge_I_0, postmerge_I_0)))
+    merge_R_0 = (1/2) * H_merge_0.T.dot(
+        merged_population2.states[:, 3] + merged_population2.states[:, 7])/unmerged.input.ave_hh_size
+    postmerge_R_0 = H_postmerge_0.T.dot(unmerged.population.states[:, 3])/unmerged.input.ave_hh_size
+    R_end_0 = postmerge_R_0[-1]
+    R_end_vec_0 = H_postmerge_0[:, -1] * \
+                    unmerged.population.states[:, 3].sum(axis=1)
+    ar_0 = (unmerged.population.state_to_comp_matrix.T.dot(R_end_vec_0))
+    ar_0 = unmerged.input.composition_distribution.dot(
+                                    ar_0 / unmerged.input.hh_size_list)
+    hh_prop_0 = H[unmerged.recovered_states, -1].sum()
+
     merge_I_1 = (1/3) * H_merge_1.T.dot(
         merged_population3.states[:, 2] + merged_population3.states[:, 6] +
         merged_population3.states[:, 10])/unmerged.input.ave_hh_size
@@ -368,7 +411,11 @@ def run_merge(
                                     ar_4 / unmerged.input.hh_size_list)
     hh_prop_4 = H[unmerged.recovered_states, -1].sum()
 
-    return [peaks_1,
+    return [peaks_0,
+            R_end_0,
+            ar_0,
+            hh_prop_0,
+            peaks_1,
             R_end_1,
             ar_1,
             hh_prop_1,
