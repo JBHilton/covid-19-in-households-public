@@ -67,7 +67,7 @@ ax.set_xlabel('% reduction in between-household transmission')
 
 cbar = colorbar(label="% of households infected during projection",fraction=0.046, pad=0.04)
 
-fig.savefig('plots/mixing_sweep/hh_prop.png',bbox_inches='tight', dpi=300)
+fig.savefig('plots/long_term_bubbles/hh_prop.png',bbox_inches='tight', dpi=300)
 close()
 
 fig, ax = subplots(1,1,sharex=True)
@@ -77,5 +77,5 @@ ax.set_xlabel('% reduction in between-household transmission')
 
 cbar = colorbar(label="% attack rate in infected households",fraction=0.046, pad=0.04)
 
-fig.savefig('plots/mixing_sweep/attack_ratio.png',bbox_inches='tight', dpi=300)
+fig.savefig('plots/long_term_bubbles/attack_ratio.png',bbox_inches='tight', dpi=300)
 close()
