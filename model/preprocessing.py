@@ -723,9 +723,9 @@ class SEPIRQInput(ModelInput):
         # entries so that the index of the isolation rates match the
         # corresponding compartmental indices.
         self.iso_rates = [ zeros((self.no_age_classes,)),
-                           spec['exp_iso_rate'],
-                           spec['pro_iso_rate'],
-                           spec['inf_iso_rate'],
+                           array(spec['exp_iso_rate']),
+                           array(spec['pro_iso_rate']),
+                           array(spec['inf_iso_rate']),
                            zeros((self.no_age_classes,)),
                            zeros((self.no_age_classes,)) ]
         self.adult_bd = spec['adult_bd']

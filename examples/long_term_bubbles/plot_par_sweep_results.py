@@ -62,8 +62,8 @@ close()
 
 fig, ax = subplots(1,1,sharex=True)
 imshow(hh_prop,origin='lower',extent=(0,1,0,1),vmin=hh_prop_min,vmax=hh_prop_max)
-ax.set_ylabel('% reduction in within-household transmission')
 ax.set_xlabel('% reduction in between-household transmission')
+ax.set_ylabel('% uptake of support bubbles')
 
 cbar = colorbar(label="% of households infected during projection",fraction=0.046, pad=0.04)
 
@@ -72,8 +72,8 @@ close()
 
 fig, ax = subplots(1,1,sharex=True)
 imshow(attack_ratio,origin='lower',extent=(0,1,0,1),vmin=attack_ratio_min,vmax=attack_ratio_max)
-ax.set_ylabel('% reduction in within-household transmission')
 ax.set_xlabel('% reduction in between-household transmission')
+ax.set_ylabel('% uptake of support bubbles')
 
 cbar = colorbar(label="% attack rate in infected households",fraction=0.046, pad=0.04)
 
