@@ -1,10 +1,10 @@
-'''This plots the bubble results
+'''This plots the mixing sweep results
 '''
 from os import mkdir
 from os.path import isdir
 from pickle import load
 from numpy import arange, array, atleast_2d, hstack, sum, where, zeros
-from matplotlib.pyplot import axes, close, colorbar, imshow, set_cmap, subplots
+from matplotlib.pyplot import axes, close, imshow, set_cmap, subplots
 from mpl_toolkits.axes_grid1 import make_axes_locatable
 from examples.temp_bubbles.common import DataObject
 from seaborn import heatmap
@@ -37,160 +37,161 @@ hh_prop_max = hh_prop.max()
 attack_ratio_min = attack_ratio.min()
 attack_ratio_max = attack_ratio.max()
 
-fig, (ax1, ax2, ax3) = subplots(1, 3)
-axim=ax1.imshow(growth_rate[0,:,:],
+fig, axes = subplots(1, 3, sharex=True)
+axim=axes[0].imshow(growth_rate[0,:,:],
                 origin='lower',
                 extent=(0,1,0,1),
                 vmin=r_min,
                 vmax=r_max)
-ax2.imshow(growth_rate[1,:,:],
+axes[1].imshow(growth_rate[1,:,:],
                 origin='lower',
                 extent=(0,1,0,1),
                 vmin=r_min,
                 vmax=r_max)
-ax3.imshow(growth_rate[2,:,:],
+axes[2].imshow(growth_rate[2,:,:],
                 origin='lower',
                 extent=(0,1,0,1),
                 vmin=r_min,
                 vmax=r_max)
-ax1.set_ylabel('% reduction in\n within-household transmission')
-ax1.set_xlabel('% reduction in\n between-household\n transmission')
-ax2.set_xlabel('% reduction in\n between-household\n transmission')
-ax3.set_xlabel('% reduction in\n between-household\n transmission')
-ax2.get_yaxis().set_ticks([])
-ax3.get_yaxis().set_ticks([])
-divider = make_axes_locatable(ax3)
+axes[0].set_ylabel('% reduction in\n within-household transmission')
+for ax in axes:
+    ax.set_xlabel('% reduction in\n between-household\n transmission')
+axes[1].set_xlabel('% reduction in\n between-household\n transmission')
+axes[2].set_xlabel('% reduction in\n between-household\n transmission')
+axes[1].get_yaxis().set_ticks([])
+axes[2].get_yaxis().set_ticks([])
+divider = make_axes_locatable(axes[2])
 cax = divider.append_axes("right", size="5%", pad=0.05)
-cbar = colorbar(axim, label="Growth rate", cax=cax)
-ax3.set_ylim(ax2.get_ylim())
+fig.colorbar(axim, label="Growth rate", cax=cax)
+axes[2].set_ylim(axes[1].get_ylim())
 
 fig.savefig('plots/mixing_sweep/growth_rate.png',
             bbox_inches='tight',
             dpi=300)
 close()
 
-fig, (ax1, ax2, ax3) = subplots(1, 3)
-axim=ax1.imshow(peaks[0,:,:],
+fig, axes = subplots(1, 3)
+axim=axes[0].imshow(peaks[0,:,:],
                 origin='lower',
                 extent=(0,1,0,1),
                 vmin=peak_min,
                 vmax=peak_max)
-ax2.imshow(peaks[1,:,:],
+axes[1].imshow(peaks[1,:,:],
                 origin='lower',
                 extent=(0,1,0,1),
                 vmin=peak_min,
                 vmax=peak_max)
-ax3.imshow(peaks[2,:,:],
+axes[2].imshow(peaks[2,:,:],
                 origin='lower',
                 extent=(0,1,0,1),
                 vmin=peak_min,
                 vmax=peak_max)
-ax1.set_ylabel('% reduction in\n within-household transmission')
-ax1.set_xlabel('% reduction in\n between-household\n transmission')
-ax2.set_xlabel('% reduction in\n between-household\n transmission')
-ax3.set_xlabel('% reduction in\n between-household\n transmission')
-ax2.get_yaxis().set_ticks([])
-ax3.get_yaxis().set_ticks([])
-divider = make_axes_locatable(ax3)
+axes[0].set_ylabel('% reduction in\n within-household transmission')
+axes[0].set_xlabel('% reduction in\n between-household\n transmission')
+axes[1].set_xlabel('% reduction in\n between-household\n transmission')
+axes[2].set_xlabel('% reduction in\n between-household\n transmission')
+axes[1].get_yaxis().set_ticks([])
+axes[2].get_yaxis().set_ticks([])
+divider = make_axes_locatable(axes[2])
 cax = divider.append_axes("right", size="5%", pad=0.05)
-cbar = colorbar(axim, label="Peak % prevalence", cax=cax)
-ax3.set_ylim(ax2.get_ylim())
+fig.colorbar(axim, label="Peak % prevalence", cax=cax)
+axes[2].set_ylim(axes[1].get_ylim())
 
 fig.savefig('plots/mixing_sweep/peaks.png',
             bbox_inches='tight',
             dpi=300)
 close()
 
-fig, (ax1, ax2, ax3) = subplots(1, 3)
-axim=ax1.imshow(R_end[0,:,:],
+fig, axes = subplots(1, 3)
+axim=axes[0].imshow(R_end[0,:,:],
                 origin='lower',
                 extent=(0,1,0,1),
                 vmin=R_end_min,
                 vmax=R_end_max)
-ax2.imshow(R_end[1,:,:],
+axes[1].imshow(R_end[1,:,:],
                 origin='lower',
                 extent=(0,1,0,1),
                 vmin=R_end_min,
                 vmax=R_end_max)
-ax3.imshow(R_end[2,:,:],
+axes[2].imshow(R_end[2,:,:],
                 origin='lower',
                 extent=(0,1,0,1),
                 vmin=R_end_min,
                 vmax=R_end_max)
-ax1.set_ylabel('% reduction in\n within-household transmission')
-ax1.set_xlabel('% reduction in\n between-household\n transmission')
-ax2.set_xlabel('% reduction in\n between-household\n transmission')
-ax3.set_xlabel('% reduction in\n between-household\n transmission')
-ax2.get_yaxis().set_ticks([])
-ax3.get_yaxis().set_ticks([])
-divider = make_axes_locatable(ax3)
+axes[0].set_ylabel('% reduction in\n within-household transmission')
+axes[0].set_xlabel('% reduction in\n between-household\n transmission')
+axes[1].set_xlabel('% reduction in\n between-household\n transmission')
+axes[2].set_xlabel('% reduction in\n between-household\n transmission')
+axes[1].get_yaxis().set_ticks([])
+axes[2].get_yaxis().set_ticks([])
+divider = make_axes_locatable(axes[2])
 cax = divider.append_axes("right", size="5%", pad=0.05)
-cbar = colorbar(axim, label="% population immunity at end of simulation", cax=cax)
-ax3.set_ylim(ax2.get_ylim())
+fig.colorbar(axim, label="% population immunity at end of simulation", cax=cax)
+axes[2].set_ylim(axes[1].get_ylim())
 
 fig.savefig('plots/mixing_sweep/R_end.png',
             bbox_inches='tight',
             dpi=300)
 close()
 
-fig, (ax1, ax2, ax3) = subplots(1, 3)
-axim=ax1.imshow(hh_prop[0,:,:],
+fig, axes = subplots(1, 3)
+axim=axes[0].imshow(hh_prop[0,:,:],
                 origin='lower',
                 extent=(0,1,0,1),
                 vmin=hh_prop_min,
                 vmax=hh_prop_max)
-ax2.imshow(hh_prop[1,:,:],
+axes[1].imshow(hh_prop[1,:,:],
                 origin='lower',
                 extent=(0,1,0,1),
                 vmin=hh_prop_min,
                 vmax=hh_prop_max)
-ax3.imshow(hh_prop[2,:,:],
+axes[2].imshow(hh_prop[2,:,:],
                 origin='lower',
                 extent=(0,1,0,1),
                 vmin=hh_prop_min,
                 vmax=hh_prop_max)
-ax1.set_ylabel('% reduction in\n within-household transmission')
-ax1.set_xlabel('% reduction in\n between-household\n transmission')
-ax2.set_xlabel('% reduction in\n between-household\n transmission')
-ax3.set_xlabel('% reduction in\n between-household\n transmission')
-ax2.get_yaxis().set_ticks([])
-ax3.get_yaxis().set_ticks([])
-divider = make_axes_locatable(ax3)
+axes[0].set_ylabel('% reduction in\n within-household transmission')
+axes[0].set_xlabel('% reduction in\n between-household\n transmission')
+axes[1].set_xlabel('% reduction in\n between-household\n transmission')
+axes[2].set_xlabel('% reduction in\n between-household\n transmission')
+axes[1].get_yaxis().set_ticks([])
+axes[2].get_yaxis().set_ticks([])
+divider = make_axes_locatable(axes[2])
 cax = divider.append_axes("right", size="5%", pad=0.05)
-cbar = colorbar(axim, label="% of households infected", cax=cax)
-ax3.set_ylim(ax2.get_ylim())
+fig.colorbar(axim, label="% of households infected", cax=cax)
+axes[2].set_ylim(axes[1].get_ylim())
 
 fig.savefig('plots/mixing_sweep/hh_prop.png',
             bbox_inches='tight',
             dpi=300)
 close()
 
-fig, (ax1, ax2, ax3) = subplots(1, 3)
-axim=ax1.imshow(attack_ratio[0,:,:],
+fig, axes = subplots(1, 3)
+axim=axes[0].imshow(attack_ratio[0,:,:],
                 origin='lower',
                 extent=(0,1,0,1),
                 vmin=attack_ratio_min,
                 vmax=attack_ratio_max)
-ax2.imshow(attack_ratio[1,:,:],
+axes[1].imshow(attack_ratio[1,:,:],
                 origin='lower',
                 extent=(0,1,0,1),
                 vmin=attack_ratio_min,
                 vmax=attack_ratio_max)
-ax3.imshow(attack_ratio[2,:,:],
+axes[2].imshow(attack_ratio[2,:,:],
                 origin='lower',
                 extent=(0,1,0,1),
                 vmin=attack_ratio_min,
                 vmax=attack_ratio_max)
-ax1.set_ylabel('% reduction in\n within-household transmission')
-ax1.set_xlabel('% reduction in\n between-household\n transmission')
-ax2.set_xlabel('% reduction in\n between-household\n transmission')
-ax3.set_xlabel('% reduction in\n between-household\n transmission')
-ax2.get_yaxis().set_ticks([])
-ax3.get_yaxis().set_ticks([])
-divider = make_axes_locatable(ax3)
+axes[0].set_ylabel('% reduction in\n within-household transmission')
+axes[0].set_xlabel('% reduction in\n between-household\n transmission')
+axes[1].set_xlabel('% reduction in\n between-household\n transmission')
+axes[2].set_xlabel('% reduction in\n between-household\n transmission')
+axes[1].get_yaxis().set_ticks([])
+axes[2].get_yaxis().set_ticks([])
+divider = make_axes_locatable(axes[2])
 cax = divider.append_axes("right", size="5%", pad=0.05)
-cbar = colorbar(axim, label="% attack ratio", cax=cax)
-ax3.set_ylim(ax2.get_ylim())
+fig.colorbar(axim, label="% attack ratio", cax=cax)
+axes[2].set_ylim(axes[1].get_ylim())
 
 fig.savefig('plots/mixing_sweep/attack_ratio.png',
             bbox_inches='tight',
