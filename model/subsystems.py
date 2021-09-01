@@ -6,9 +6,8 @@ these are used to create some functions for implementing common comprtmental
 
 from copy import copy, deepcopy
 from numpy import (
-        append, arange, around, array, cumprod, cumsum, ones, ones_like, sum, where,
-        zeros, concatenate, vstack, identity, tile, hstack, prod, ix_,
-        atleast_2d, diag)
+        arange, around, array, atleast_2d, concatenate, cumprod, diag, ix_,
+        ones, prod, sum, where, zeros)
 from numpy import int64 as my_int
 from scipy.sparse import csc_matrix as sparse
 
@@ -48,7 +47,8 @@ def state_recursor(
                 + k * con_reps,
                 block * b_size +
                 (k + 1) * con_reps)
-            states[repeat_range, no_compartments*age_class:no_compartments*(age_class+1)] = \
+            states[repeat_range,
+                no_compartments*age_class:no_compartments*(age_class+1)] = \
                 ones(
                     (con_reps, 1),
                     dtype=my_int) \
@@ -158,9 +158,11 @@ def inf_events(from_compartment,
                 inf_event_col,
                 inf_event_class):
 
-    # This function adds infection events to a within-household transition matrix, allowing for multiple infectious classes
+    # This function adds infection events to a within-household transition
+    # matrix, allowing for multiple infectious classes
 
-    no_inf_compartments = len(inf_compartment_list) # Total number of compartments contributing to within-household infection
+    # Total number of compartments contributing to within-household infection:
+    no_inf_compartments = len(inf_compartment_list)
 
     for i in range(len(class_idx)):
         from_present = where(states[:, no_compartments*i+from_compartment] > 0)[0]
@@ -171,8 +173,10 @@ def inf_events(from_compartment,
             old_state = copy(states[from_present[k], :])
             old_infs = zeros(len(class_idx))
             for ic in range(no_inf_compartments):
-                old_infs += (old_state[inf_compartment_list[ic] + no_compartments * arange(len(class_idx))] /
-                                                (composition[class_idx]**density_expo)) * inf_scales[ic]
+                old_infs += \
+                    (old_state[inf_compartment_list[ic] +
+                                no_compartments * arange(len(class_idx))] /
+                    (composition[class_idx]**density_expo)) * inf_scales[ic]
             inf_rate[k] = old_state[no_compartments*i] * (
                 r_home[i, :].dot( old_infs ))
             new_state = old_state.copy()
@@ -191,6 +195,9 @@ def inf_events(from_compartment,
 
     return Q_int, inf_event_row, inf_event_col, inf_event_class
 
+''' The next function is used to set up the infection events in the SEPIRQ
+model, where some members may be temporarily absent, changing the current
+size of the household '''
 def size_adj_inf_events(from_compartment,
                 to_compartment,
                 inf_compartment_list,
@@ -210,12 +217,12 @@ def size_adj_inf_events(from_compartment,
                 inf_event_col,
                 inf_event_class):
 
-    # This function adds infection events to a within-household transition matrix, allowing for multiple infectious classes
-
-    no_inf_compartments = len(inf_compartment_list) # Total number of compartments contributing to within-household infection
+     # Total number of compartments contributing to within-household infection
+     no_inf_compartments = len(inf_compartment_list)
 
     for i in range(len(class_idx)):
-        from_present = where(states[:, no_compartments*i+from_compartment] > 0)[0]
+        from_present = \
+            where(states[:, no_compartments*i+from_compartment] > 0)[0]
 
         inf_to = zeros(len(from_present), dtype=my_int)
         inf_rate = zeros(len(from_present))
@@ -223,8 +230,9 @@ def size_adj_inf_events(from_compartment,
             old_state = copy(states[from_present[k], :])
             old_infs = zeros(len(class_idx))
             for ic in range(no_inf_compartments):
-                old_infs += (old_state[inf_compartment_list[ic] + no_compartments * arange(len(class_idx))] /
-                                                (iso_adjusted_comp[k]**density_expo)) * inf_scales[ic]
+                old_infs += (old_state[inf_compartment_list[ic] + \
+                            no_compartments * arange(len(class_idx))] /
+                        (iso_adjusted_comp[k]**density_expo)) * inf_scales[ic]
             inf_rate[k] = old_state[no_compartments*i] * (
                 r_home[i, :].dot( old_infs ))
             new_state = old_state.copy()
@@ -254,16 +262,19 @@ def progression_events(from_compartment,
                 matrix_shape,
                 Q_int):
 
-    # This function adds a single set of progression events to a within-household transition matrix
+    # This function adds a single set of progression events to a
+    # within-household transition matrix
 
     for i in range(len(class_idx)):
-        from_present = where(states[:, no_compartments*i+from_compartment] > 0)[0]
+        from_present = \
+            where(states[:, no_compartments*i+from_compartment] > 0)[0]
 
         prog_to = zeros(len(from_present), dtype=my_int)
         prog_rate = zeros(len(from_present))
         for k in range(len(from_present)):
             old_state = copy(states[from_present[k], :])
-            prog_rate[k] = pc_rate * old_state[no_compartments*i+from_compartment]
+            prog_rate[k] = \
+                pc_rate * old_state[no_compartments*i+from_compartment]
             new_state = copy(old_state)
             new_state[no_compartments*i+from_compartment] -= 1
             new_state[no_compartments*i+to_compartment] += 1
@@ -292,13 +303,15 @@ def stratified_progression_events(from_compartment,
     class.'''
 
     for i in range(len(class_idx)):
-        from_present = where(states[:, no_compartments*i+from_compartment] > 0)[0]
+        from_present = \
+            where(states[:, no_compartments*i+from_compartment] > 0)[0]
 
         prog_to = zeros(len(from_present), dtype=my_int)
         prog_rate = zeros(len(from_present))
         for k in range(len(from_present)):
             old_state = copy(states[from_present[k], :])
-            prog_rate[k] = pc_rate_by_class[i] * old_state[no_compartments*i+from_compartment]
+            prog_rate[k] = pc_rate_by_class[i] * \
+                old_state[no_compartments*i+from_compartment]
             new_state = copy(old_state)
             new_state[no_compartments*i+from_compartment] -= 1
             new_state[no_compartments*i+to_compartment] += 1
@@ -332,19 +345,31 @@ def isolation_events(from_compartment,
     class.'''
 
     for i in range(len(class_idx)):
-        if (class_is_isolating[class_idx[i],class_idx]).any(): # This checks whether class i is meant to isolate and whether any of the vulnerable classes are present
-
-            if iso_method=='int' or (i<adult_bd) or not children_present: # If isolating internally, i is a child class, or there are no children around, anyone can isolate
-                iso_permitted = where((states[:,no_compartments*i+from_compartment] > 0)*(states[:, no_compartments*i+to_compartment] == 0))[0]
-            else: # If children are present adults_isolating must stay below no_adults-1 so the children still have a guardian
-                iso_permitted = where((states[:, no_compartments*i+from_compartment] > 0)*(adults_isolating<no_adults-1))[0]
-            iso_present = where(states[:, no_compartments*i+to_compartment] > 0)[0]
+        # The following if statement checks whether class i is meant to isolate
+        # and whether any of the vulnerable classes are present
+        if (class_is_isolating[class_idx[i],class_idx]).any():
+            # If isolating internally, i is a child class, or there are no
+            # children around, anyone can isolate
+            if iso_method=='int' or (i<adult_bd) or not children_present:
+                iso_permitted = \
+                    where((states[:,no_compartments*i+from_compartment] > 0) * \
+                    (states[:, no_compartments*i+to_compartment] == 0))[0]
+             # If children are present adults_isolating must stay below
+             # no_adults-1 so the children still have a guardian
+            else:
+                iso_permitted = \
+                    where(
+                        (states[:, no_compartments*i+from_compartment] > 0) * \
+                        (adults_isolating<no_adults-1))[0]
+            iso_present = \
+                where(states[:, no_compartments*i+to_compartment] > 0)[0]
 
             iso_to = zeros(len(iso_permitted), dtype=my_int)
             iso_rate = zeros(len(iso_permitted))
             for k in range(len(iso_permitted)):
                 old_state = copy(states[iso_permitted[k], :])
-                iso_rate[k] = iso_rate_by_class[i] * old_state[no_compartments*i+from_compartment]
+                iso_rate[k] = iso_rate_by_class[i] * \
+                    old_state[no_compartments*i+from_compartment]
                 new_state = copy(old_state)
                 new_state[no_compartments*i+from_compartment] -= 1
                 new_state[no_compartments*i+to_compartment] += 1
@@ -676,14 +701,20 @@ def _sepirq_subsystem(self, household_spec):
 
     iso_pos = q_comp + no_compartments * arange(len(class_idx))
     if iso_method == "ext":
-        iso_adjusted_comp = composition[class_idx] - states[:,iso_pos] # This is number of people of each age class present in the household given some may isolate
-        iso_adjusted_comp[iso_adjusted_comp==0] = 1 # Replace zeros with ones - we only ever use this as a denominator whose numerator will be zero anyway if it should be zero
+        # This is number of people of each age class present in the household
+        # given some may isolate
+        iso_adjusted_comp = composition[class_idx] - states[:,iso_pos]
+        # Replace zeros with ones - we only ever use this as a denominator
+        # whose numerator will be zero anyway if it should be zero
+        iso_adjusted_comp[iso_adjusted_comp==0] = 1
         if (iso_adjusted_comp<1).any():
             pdb.set_trace()
     else:
-        iso_adjusted_comp = composition[class_idx] - zeros(states[:,iso_pos].shape)
-    adults_isolating = states[:,no_compartments*adult_bd+q_comp::no_compartments].sum(axis=1) # Number of adults isolating by state
-
+        iso_adjusted_comp = \
+            composition[class_idx] - zeros(states[:,iso_pos].shape)
+    # Number of adults isolating by state
+    adults_isolating = \
+        states[:,no_compartments*adult_bd+q_comp::no_compartments].sum(axis=1)
     Q_int = sparse(household_spec.matrix_shape,)
     inf_event_row = array([], dtype=my_int)
     inf_event_col = array([], dtype=my_int)
@@ -694,24 +725,25 @@ def _sepirq_subsystem(self, household_spec):
     else:
         inf_comps = [p_comp, i_comp]
 
-    Q_int, inf_event_row, inf_event_col, inf_event_class = size_adj_inf_events(s_comp,
-                e_comp,
-                inf_comps,
-                inf_scales,
-                r_home,
-                iso_adjusted_comp,
-                density_expo,
-                no_compartments,
-                composition,
-                states,
-                index_vector,
-                reverse_prod,
-                class_idx,
-                matrix_shape,
-                Q_int,
-                inf_event_row,
-                inf_event_col,
-                inf_event_class)
+    Q_int, inf_event_row, inf_event_col, inf_event_class = \
+                size_adj_inf_events(s_comp,
+                                    e_comp,
+                                    inf_comps,
+                                    inf_scales,
+                                    r_home,
+                                    iso_adjusted_comp,
+                                    density_expo,
+                                    no_compartments,
+                                    composition,
+                                    states,
+                                    index_vector,
+                                    reverse_prod,
+                                    class_idx,
+                                    matrix_shape,
+                                    Q_int,
+                                    inf_event_row,
+                                    inf_event_col,
+                                    inf_event_class)
     Q_int = progression_events(e_comp,
                     p_comp,
                     alpha_1,

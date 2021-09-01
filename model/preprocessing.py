@@ -2,28 +2,28 @@
 from abc import ABC
 from copy import copy, deepcopy
 from numpy import (
-        append, arange, around, array, cumsum, insert, kron, log, ndarray, ones,
-        ones_like, where, zeros, concatenate, vstack, identity, tile, hstack,
-        prod, ix_, shape, atleast_2d, diag)
-from numpy.linalg import eig, inv
+        append, arange, around, array, concatenate, cumsum, diag, hstack,
+        identity, insert, ix_, kron, log, ndarray, ones, ones_like, prod,
+        shape, tile, vstack, where, zeros)
+from numpy.linalg import eig
+from pandas import read_excel, read_csv
 from scipy.integrate import solve_ivp
 from scipy.optimize import root_scalar
 from scipy.sparse import block_diag
 from scipy.sparse import identity as spidentity
-from scipy.sparse.linalg import expm, LinearOperator, spilu, spsolve
+from scipy.sparse.linalg import LinearOperator, spilu, spsolve
 from scipy.sparse.linalg import bicgstab as isolve
 from scipy.sparse.linalg import eigs as speig
 from scipy.special import binom as binom_coeff
 from scipy.stats import binom
 from time import time as get_time
-from pandas import read_excel, read_csv
 from tqdm import tqdm
-from model.common import (
-        within_household_spread, sparse, my_int, build_state_matrix)
-from model.imports import import_model_from_spec, NoImportModel
+from model.common import ( sparse, my_int )
+from model.imports import import_model_from_spec
 from model.subsystems import subsystem_key
 
-MAX_OUTBREAK_DURATION = 365 # Maximum time we suppose an outbreak can last, used in initial condition calculation in place of infinite matrix exponential
+MAX_OUTBREAK_DURATION = 365 # Duration used for integration of within-hh
+                            # dynamics in Euler-Lotka calculation
 
 def initialise_carehome(
         household_population,
@@ -196,7 +196,8 @@ def make_initial_condition_by_eigenvector(growth_rate,
 
     Q_int = household_population.Q_int
 
-    reverse_comp_dist = diag(household_population.composition_distribution).dot(household_population.composition_list)
+    reverse_comp_dist = diag(household_population.composition_distribution). \
+                        dot(household_population.composition_list)
     reverse_comp_dist = reverse_comp_dist.dot(diag(1/reverse_comp_dist.sum(0)))
 
     Q_int = rhs.Q_int
@@ -213,14 +214,23 @@ def make_initial_condition_by_eigenvector(growth_rate,
     no_index_states = len(index_states)
     comp_by_index_state = household_population.which_composition[index_states]
 
-    starter_mat = sparse((ones(no_index_states),(range(no_index_states), index_states)),shape=(no_index_states,Q_int.shape[0]))
+    starter_mat = sparse((ones(no_index_states),
+                        (range(no_index_states), index_states)),
+                        shape=(no_index_states,Q_int.shape[0]))
 
     index_prob = zeros((household_population.no_risk_groups,no_index_states))
     for i in range(no_index_states):
         index_class = where(rhs.states_new_cases_only[index_states[i],:]==1)[0]
-        index_prob[index_class,i] = reverse_comp_dist[comp_by_index_state[i], index_class]
+        index_prob[index_class,i] = reverse_comp_dist[comp_by_index_state[i],
+                                                        index_class]
 
-    multiplier = get_multiplier_by_path_integral(growth_rate, Q_int, household_population, FOI_by_state, index_prob, index_states, no_index_states)
+    multiplier = get_multiplier_by_path_integral(growth_rate,
+                                                Q_int,
+                                                household_population,
+                                                FOI_by_state,
+                                                index_prob,
+                                                index_states,
+                                                no_index_states)
     evals, evects = eig(multiplier.T.todense())
     max_eval_loc = evals.real.argmax()
     hh_profile = sparse(evects[:, max_eval_loc]).real
@@ -229,20 +239,26 @@ def make_initial_condition_by_eigenvector(growth_rate,
 
     def internal_evolution(t, X):
         return (X.T * Q_int).T
-    sol = solve_ivp(internal_evolution, [0, MAX_OUTBREAK_DURATION], start_state_profile, first_step=0.001, atol=1e-16)
+    sol = solve_ivp(internal_evolution,
+                    [0, MAX_OUTBREAK_DURATION],
+                    start_state_profile,
+                    first_step=0.001,
+                    atol=1e-16)
 
     end_state_profile = sol.y[:, -1]
 
     start_state_prev = \
      start_state_profile.dot(
      household_population.states[:,
-     model_input.new_case_compartment::household_population.no_epi_compartments]).sum() / \
+     model_input.new_case_compartment::household_population.no_epi_compartments]
+     ).sum() / \
      household_population.ave_hh_size
     end_state_prev = \
      end_state_profile.dot(
      household_population.states[:,
-     model_input.R_compartment::household_population.no_epi_compartments]).sum() / \
-     household_population.ave_hh_size
+        model_input.R_compartment::household_population.no_epi_compartments]
+        ).sum() / \
+        household_population.ave_hh_size
 
     H0 = (prev / start_state_prev) * start_state_profile.T + \
          (starting_immunity / end_state_prev) * end_state_profile.T
@@ -389,7 +405,8 @@ class HouseholdPopulation(ABC):
         self.ave_hh_size = model_input.ave_hh_size
         self.compartmental_structure = model_input.compartmental_structure
         self.subsystem_function = subsystem_key[self.compartmental_structure][0]
-        self.no_epi_compartments = subsystem_key[self.compartmental_structure][1]
+        self.no_epi_compartments = \
+                                subsystem_key[self.compartmental_structure][1]
         self.model_input = model_input
 
         # TODO: what if composition is given as list?
@@ -511,9 +528,12 @@ class ModelInput(ABC):
         self.spec = deepcopy(spec)
 
         self.compartmental_structure = spec['compartmental_structure']
-        self.inf_compartment_list = subsystem_key[self.compartmental_structure][2]
-        self.no_inf_compartments = len(self.inf_compartment_list)
-        self.new_case_compartment = subsystem_key[self.compartmental_structure][3]
+        self.inf_compartment_list = \
+            subsystem_key[self.compartmental_structure][2]
+        self.no_inf_compartments = \
+            len(self.inf_compartment_list)
+        self.new_case_compartment = \
+            subsystem_key[self.compartmental_structure][3]
 
         self.fine_bds = spec['fine_bds']
         self.coarse_bds = spec['coarse_bds']
@@ -521,10 +541,13 @@ class ModelInput(ABC):
 
         self.pop_pyramid = read_csv(
             spec['pop_pyramid_file_name'], index_col=0)
-        self.pop_pyramid = (self.pop_pyramid['F'] + self.pop_pyramid['M']).to_numpy()
+        self.pop_pyramid = \
+        (self.pop_pyramid['F'] + self.pop_pyramid['M']).to_numpy()
 
         if self.no_age_classes==1:
-            self.k_home = array([[1]]) # If we have no age structure, we use a 1x1 array as the contact "matrix"
+            # Use a 1x1 unit matrix for
+            # non-age-structured models
+            self.k_home = array([[1]])
             self.k_ext = array([[1]])
         else:
             self.k_home = read_excel(
@@ -551,11 +574,14 @@ class ModelInput(ABC):
         return self.composition_list.sum(axis=1)
     @property
     def ave_hh_size(self):
-        return self.composition_distribution.T.dot(self.hh_size_list) # Average household size
+        # Average household size
+        return self.composition_distribution.T.dot(self.hh_size_list)
     @property
     def dens_adj_ave_hh_size(self):
+          # Average household size adjusted for density,
+          # needed to get internal transmission rate from secondary inf prob
         return self.composition_distribution.T.dot(
-                                        (self.hh_size_list)**self.density_expo)  # Average household size adjusted for density, needed to get internal transmission rate from secondary inf prob
+                                        (self.hh_size_list)**self.density_expo)
     @property
     def ave_hh_by_class(self):
         return self.composition_distribution.T.dot(self.composition_list)
@@ -569,7 +595,9 @@ class SIRInput(ModelInput):
         self.R_compartment = 2
 
         self.sus = spec['sus']
-        self.inf_scales = [ones((self.no_age_classes,))] # In the SIR model there is only one infectious compartment
+        self.inf_scales = [ones((self.no_age_classes,))] # In the SIR model
+                                                         # there is only one
+                                                         # infectious comp
 
         home_eig = max(eig(
             self.sus * ((1/spec['recovery_rate']) *
@@ -1034,7 +1062,13 @@ def path_integral_solve(discount_matrix, reward_by_state):
     sol = spsolve(discount_matrix, reward_by_state)
     return sol
 
-def get_multiplier_by_path_integral(r, Q_int, household_population, FOI_by_state, index_prob, index_states, no_index_states):
+def get_multiplier_by_path_integral(r,
+                                    Q_int,
+                                    household_population,
+                                    FOI_by_state,
+                                    index_prob,
+                                    index_states,
+                                    no_index_states):
     multiplier = sparse((no_index_states, no_index_states))
     discount_matrix = r * spidentity(Q_int.shape[0]) - Q_int
     reward_mat = FOI_by_state.dot(index_prob)
@@ -1054,7 +1088,13 @@ def get_multiplier_by_path_integral(r, Q_int, household_population, FOI_by_state
     print('multiplier calculation took',get_time()-mult_start,'seconds.')
     return multiplier
 
-def get_multiplier_eigenvalue(r, Q_int, household_population, FOI_by_state, index_prob, index_states, no_index_states):
+def get_multiplier_eigenvalue(r,
+                              Q_int,
+                              household_population,
+                              FOI_by_state,
+                              index_prob,
+                              index_states,
+                              no_index_states):
     multiplier = sparse((no_index_states, no_index_states))
     discount_matrix = r * spidentity(Q_int.shape[0]) - Q_int
     reward_mat = FOI_by_state.dot(index_prob)
@@ -1075,9 +1115,13 @@ def get_multiplier_eigenvalue(r, Q_int, household_population, FOI_by_state, inde
     evalue = (speig(multiplier.T,k=1)[0]).real
     return evalue
 
-def estimate_growth_rate(household_population,rhs,interval=[-1, 1],tol=1e-3,x0=1e-3):
+def estimate_growth_rate(household_population,
+                         rhs,interval=[-1, 1],
+                         tol=1e-3,
+                         x0=1e-3):
 
-    reverse_comp_dist = diag(household_population.composition_distribution).dot(household_population.composition_list)
+    reverse_comp_dist = diag(household_population.composition_distribution). \
+        dot(household_population.composition_list)
     reverse_comp_dist = reverse_comp_dist.dot(diag(1/reverse_comp_dist.sum(0)))
 
     Q_int = rhs.Q_int
@@ -1097,13 +1141,20 @@ def estimate_growth_rate(household_population,rhs,interval=[-1, 1],tol=1e-3,x0=1
     index_prob = zeros((household_population.no_risk_groups,no_index_states))
     for i in range(no_index_states):
         index_class = where(rhs.states_new_cases_only[index_states[i],:]==1)[0]
-        index_prob[index_class,i] = reverse_comp_dist[comp_by_index_state[i], index_class]
+        index_prob[index_class,i] = \
+            reverse_comp_dist[comp_by_index_state[i], index_class]
 
     r_min = interval[0]
     r_max = interval[1]
 
     def eval_from_r(r_guess):
-        return get_multiplier_eigenvalue(r_guess, Q_int, household_population, FOI_by_state, index_prob, index_states, no_index_states) - 1
+        return get_multiplier_eigenvalue(r_guess,
+                                         Q_int,
+                                         household_population,
+                                         FOI_by_state,
+                                         index_prob,
+                                         index_states,
+                                         no_index_states) - 1
 
     root_output = root_scalar(eval_from_r, bracket=[r_min, r_max], method='brentq', xtol=tol, x0=x0)
 
@@ -1114,7 +1165,9 @@ def estimate_growth_rate(household_population,rhs,interval=[-1, 1],tol=1e-3,x0=1
 
 def estimate_beta_ext(household_population,rhs,r):
 
-    reverse_comp_dist = diag(household_population.composition_distribution).dot(household_population.composition_list)
+    reverse_comp_dist = \
+        diag(household_population.composition_distribution). \
+        dot(household_population.composition_list)
     reverse_comp_dist = reverse_comp_dist.dot(diag(1/reverse_comp_dist.sum(0)))
 
     Q_int = rhs.Q_int
@@ -1131,14 +1184,24 @@ def estimate_beta_ext(household_population,rhs,r):
     no_index_states = len(index_states)
     comp_by_index_state = household_population.which_composition[index_states]
 
-    starter_mat = sparse((ones(no_index_states),(range(no_index_states), index_states)),shape=(no_index_states,Q_int.shape[0]))
+    starter_mat = sparse(
+                        (ones(no_index_states),
+                        (range(no_index_states), index_states)),
+                        shape=(no_index_states,Q_int.shape[0]))
 
     index_prob = zeros((household_population.no_risk_groups,no_index_states))
     for i in range(no_index_states):
         index_class = where(rhs.states_new_cases_only[index_states[i],:]==1)[0]
-        index_prob[index_class,i] = reverse_comp_dist[comp_by_index_state[i], index_class]
+        index_prob[index_class,i] = \
+            reverse_comp_dist[comp_by_index_state[i], index_class]
 
-    multiplier = get_multiplier_by_path_integral(r, Q_int, household_population, FOI_by_state, index_prob, index_states, no_index_states)
+    multiplier = get_multiplier_by_path_integral(r,
+                                                 Q_int,
+                                                 household_population,
+                                                 FOI_by_state,
+                                                 index_prob,
+                                                 index_states,
+                                                 no_index_states)
     evalue = (speig(multiplier.T,k=1)[0]).real
 
     beta_ext = 1/evalue
@@ -1151,10 +1214,10 @@ def build_support_bubbles(
         max_adults,
         max_bubble_size,
         bubble_prob):
-    '''This function returns the composition list and distribution which results
-    from a support bubble policy. max_adults specifies the maximum number of adults
-    which can be present in a household for that household to be
-    elligible to join a support bubble. The 2-age class structure with
+    '''This function returns the composition list and distribution which
+    results from a support bubble policy. max_adults specifies the maximum
+    number of adults which can be present in a household for that household to
+    be elligible to join a support bubble. The 2-age class structure with
     children in age class 0 and adults in age class 1 is "hard-wired" into this
     function as we only use the function for this specific example.'''
 
@@ -1174,7 +1237,10 @@ def build_support_bubbles(
             mixed_comp_dist[hh1] = (1-bubble_prob) * mixed_comp_dist[hh1]
             bubbled_sizes = hh_sizes + hh_sizes[hh1]
             permitted_bubbles = where(bubbled_sizes<=max_bubble_size)[0]
-            bubble_dist = comp_dist / comp_dist[permitted_bubbles].sum() # This scales the entries in the allowed bubble compositions so they sum to one, but keeps the indexing consistent with everything else
+            # bubble_dist scales the entries in the allowed bubble compositions
+            # so they sum to one, but keeps the indexing consistent with
+            # everything else
+            bubble_dist = comp_dist / comp_dist[permitted_bubbles].sum()
             for hh2 in permitted_bubbles:
 
                 bubbled_comp = composition_list[hh1,] + composition_list[hh2,]
@@ -1186,9 +1252,10 @@ def build_support_bubbles(
                                                bubble_dist[hh2]
                 else:
                     mixed_comp_list = vstack((mixed_comp_list, bubbled_comp))
-                    mixed_comp_dist = append(mixed_comp_dist, array([bubble_prob *
-                                           comp_dist[hh1] *
-                                           bubble_dist[hh2]]))
+                    mixed_comp_dist = append(mixed_comp_dist,
+                                            array([bubble_prob *
+                                            comp_dist[hh1] *
+                                            bubble_dist[hh2]]))
     return mixed_comp_list, mixed_comp_dist
 
 def add_vuln_class(model_input,
@@ -1272,7 +1339,9 @@ def merge_hh_inputs(model_input,
     k_expander = (1-guest_trans_scaling)*diag(ones((no_hh, no_hh))) + \
                     guest_trans_scaling * ones((no_hh, no_hh))
 
-    merged_input.k_home = kron(k_expander, merged_input.k_home) # Returns tiled matrix of copies of k_home, scaled by elements of k_expander
+    # Next line creates a tiled matrix of copies of k_home, scaled by elements
+    # of k_expander
+    merged_input.k_home = kron(k_expander, merged_input.k_home)
     merged_input.k_ext = tile(merged_input.k_ext, (no_hh, no_hh))
 
     for par_name in model_input.expandables:
