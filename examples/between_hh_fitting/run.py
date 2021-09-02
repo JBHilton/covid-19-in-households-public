@@ -1,3 +1,5 @@
+from os import mkdir
+from os.path import isdir
 from argparse import ArgumentParser
 from copy import deepcopy
 from multiprocessing import Pool
@@ -20,6 +22,9 @@ from model.specs import (draw_random_two_age_SEPIR_specs, TWO_AGE_SEPIR_SPEC,
     TWO_AGE_SEPIR_SPEC_FOR_FITTING, TWO_AGE_UK_SPEC)
 from model.common import SEPIRRateEquations
 from model.imports import NoImportModel
+
+if isdir('outputs/between_hh_fitting') is False:
+    mkdir('outputs/between_hh_fitting')
 
 class BetaEstimator:
     def __init__(self):
@@ -77,15 +82,15 @@ def main(no_of_workers, no_samples):
     print('Output beta=', beta_out)
     print('RMSE=', sqrt(mean(beta_out-beta_in)**2))
 
-    with open('beta_estimate_output.pkl', 'wb') as f:
+    with open('outputs/between_hh_fitting/results.pkl', 'wb') as f:
         dump((beta_in, beta_out), f)
 
     return -1
 
 if __name__ == '__main__':
     parser = ArgumentParser()
-    parser.add_argument('--no_of_workers', type=int, default=10)
-    parser.add_argument('--no_samples', type=int, default=4)
+    parser.add_argument('--no_of_workers', type=int, default=4)
+    parser.add_argument('--no_samples', type=int, default=100)
     args = parser.parse_args()
 
     main(args.no_of_workers, args.no_samples)
