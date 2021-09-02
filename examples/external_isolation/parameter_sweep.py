@@ -185,7 +185,7 @@ class OOHIAnalysis:
                         model_input.ave_hh_by_class[2]
         iso_peak = 100 * max(Q.sum(axis=1)) / model_input.ave_hh_size
         Q_all = Q.sum(axis=1) / model_input.ave_hh_size
-        cum_iso = trapezoid(Q_all, t)
+        cum_iso = 100 * trapezoid(Q_all, t)
 
         return [vuln_peak, vuln_end, iso_peak, cum_iso]
 
