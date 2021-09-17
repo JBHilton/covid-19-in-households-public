@@ -33,17 +33,17 @@ ci_max = cum_iso.max()
 fig, (ax1, ax2) = subplots(1,2,sharex=True)
 axim=ax1.imshow(vuln_peaks[0,:,:],
            origin='lower',
-           extent=(0,1,0,1),
+           extent=(iso_rate_range[0],iso_rate_range[1],0,1),
            vmin=vp_min,
            vmax=vp_max)
-ax1.set_xlabel('% reduction in between-household transmission')
-ax1.set_ylabel('% uptake of support bubbles')
+ax1.set_xlabel('Detection rate')
+ax1.set_ylabel('Adherence probability')
 ax2.imshow(vuln_peaks[1,:,:],
            origin='lower',
-           extent=(0,1,0,1),
+           extent=(iso_rate_range[0],iso_rate_range[1],0,1),
            vmin=vp_min,
            vmax=vp_max)
-ax2.set_xlabel('% reduction in between-household transmission')
+ax2.set_xlabel('Detection rate')
 
 ax2.get_yaxis().set_ticks([])
 divider = make_axes_locatable(ax2)
@@ -59,17 +59,17 @@ close()
 fig, (ax1, ax2) = subplots(1,2,sharex=True)
 axim=ax1.imshow(vuln_end[0,:,:],
            origin='lower',
-           extent=(0,1,0,1),
+           extent=(iso_rate_range[0],iso_rate_range[1],0,1),
            vmin=ve_min,
            vmax=ve_max)
-ax1.set_xlabel('% reduction in between-household transmission')
-ax1.set_ylabel('% uptake of support bubbles')
+ax1.set_xlabel('Detection rate')
+ax1.set_ylabel('Adherence probability')
 ax2.imshow(vuln_end[1,:,:],
            origin='lower',
-           extent=(0,1,0,1),
+           extent=(iso_rate_range[0],iso_rate_range[1],0,1),
            vmin=ve_min,
            vmax=ve_max)
-ax2.set_xlabel('% reduction in between-household transmission')
+ax2.set_xlabel('Detection rate')
 
 ax2.get_yaxis().set_ticks([])
 divider = make_axes_locatable(ax2)
@@ -86,17 +86,17 @@ close()
 fig, (ax1, ax2) = subplots(1,2,sharex=True)
 axim=ax1.imshow(iso_peaks[0,:,:],
            origin='lower',
-           extent=(0,1,0,1),
+           extent=(iso_rate_range[0],iso_rate_range[1],0,1),
            vmin=ip_min,
            vmax=ip_max)
-ax1.set_xlabel('% reduction in between-household transmission')
-ax1.set_ylabel('% uptake of support bubbles')
+ax1.set_xlabel('Detection rate')
+ax1.set_ylabel('Adherence probability')
 ax2.imshow(iso_peaks[1,:,:],
            origin='lower',
-           extent=(0,1,0,1),
+           extent=(iso_rate_range[0],iso_rate_range[1],0,1),
            vmin=ip_min,
            vmax=ip_max)
-ax2.set_xlabel('% reduction in between-household transmission')
+ax2.set_xlabel('Detection rate')
 
 ax2.get_yaxis().set_ticks([])
 divider = make_axes_locatable(ax2)
@@ -113,17 +113,17 @@ close()
 fig, (ax1, ax2) = subplots(1,2,sharex=True)
 axim=ax1.imshow(cum_iso[0,:,:],
            origin='lower',
-           extent=(0,1,0,1),
+           extent=(iso_rate_range[0],iso_rate_range[1],0,1),
            vmin=ci_min,
            vmax=ci_max)
-ax1.set_xlabel('% reduction in between-household transmission')
-ax1.set_ylabel('% uptake of support bubbles')
+ax1.set_xlabel('Detection rate')
+ax1.set_ylabel('Adherence probability')
 ax2.imshow(cum_iso[1,:,:],
            origin='lower',
-           extent=(0,1,0,1),
+           extent=(iso_rate_range[0],iso_rate_range[1],0,1),
            vmin=ci_min,
            vmax=ci_max)
-ax2.set_xlabel('% reduction in between-household transmission')
+ax2.set_xlabel('Detection rate')
 
 ax2.get_yaxis().set_ticks([])
 divider = make_axes_locatable(ax2)
