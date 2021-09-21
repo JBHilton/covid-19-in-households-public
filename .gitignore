@@ -9,3 +9,5 @@ output*.txt
 *.png
 *.zip
 .DS_Store
+__init__.py
+__init__.pyc

@@ -21,7 +21,7 @@ map_SEPIR_to_SEPIRQ,SEPIRInput, SEPIRQInput)
 from model.common import SEPIRRateEquations, SEPIRQRateEquations
 from model.imports import NoImportModel
 from model.specs import (TWO_AGE_UK_SPEC, TWO_AGE_EXT_SEPIRQ_SPEC,
-TWO_AGE_SEPIR_SPEC_FOR_FITTING)
+TWO_AGE_INT_SEPIRQ_SPEC, TWO_AGE_SEPIR_SPEC_FOR_FITTING)
 
 if isdir('outputs/oohi') is False:
     mkdir('outputs/oohi')
@@ -30,7 +30,8 @@ DOUBLING_TIME = 100
 growth_rate = log(2) / DOUBLING_TIME
 
 SEPIR_SPEC = {**TWO_AGE_SEPIR_SPEC_FOR_FITTING, **TWO_AGE_UK_SPEC}
-OOHI_SPEC = {**TWO_AGE_UK_SPEC, **TWO_AGE_EXT_SEPIRQ_SPEC}
+EXT_SPEC = {**TWO_AGE_UK_SPEC, **TWO_AGE_EXT_SEPIRQ_SPEC}
+INT_SPEC = {**TWO_AGE_UK_SPEC, **TWO_AGE_INT_SEPIRQ_SPEC}
 
 relative_iso_rates = [1.0, 1.0, 0.5]
 
@@ -118,16 +119,28 @@ class OOHIAnalysis:
     def _simulate_isolation(self, p):
         print('p=',p)
 
-        this_spec = deepcopy(OOHI_SPEC)
-        this_spec['exp_iso_rate'] = p[0] * relative_iso_rates[0] * ones(2,)
-        this_spec['pro_iso_rate'] = p[0] * relative_iso_rates[1] * ones(2,)
-        this_spec['inf_iso_rate'] = p[0] * relative_iso_rates[2] * ones(2,)
-        this_spec['ad_prob'] = p[1]
-        model_input = SEPIRQInput(this_spec, composition_list, comp_dist)
-        model_input.k_ext = beta_ext * model_input.k_ext
-        model_input = add_vuln_class(model_input,
-                            vuln_prop,
-                            adult_class)
+        if p[0]==0:
+            this_spec = deepcopy(EXT_SPEC)
+            this_spec['exp_iso_rate'] = p[1] * relative_iso_rates[0] * ones(2,)
+            this_spec['pro_iso_rate'] = p[1] * relative_iso_rates[1] * ones(2,)
+            this_spec['inf_iso_rate'] = p[1] * relative_iso_rates[2] * ones(2,)
+            this_spec['ad_prob'] = p[2]
+            model_input = SEPIRQInput(this_spec, composition_list, comp_dist)
+            model_input.k_ext = beta_ext * model_input.k_ext
+            model_input = add_vuln_class(model_input,
+                                vuln_prop,
+                                adult_class)
+        else:
+            this_spec = deepcopy(INT_SPEC)
+            this_spec['exp_iso_rate'] = p[1] * relative_iso_rates[0] * ones(2,)
+            this_spec['pro_iso_rate'] = p[1] * relative_iso_rates[1] * ones(2,)
+            this_spec['inf_iso_rate'] = p[1] * relative_iso_rates[2] * ones(2,)
+            this_spec['ad_prob'] = p[2]
+            model_input = SEPIRQInput(this_spec, composition_list, comp_dist)
+            model_input.k_ext = beta_ext * model_input.k_ext
+            model_input = add_vuln_class(model_input,
+                                vuln_prop,
+                                adult_class)
 
         household_population = HouseholdPopulation(
             composition_list, comp_dist, model_input)
@@ -157,7 +170,14 @@ class OOHIAnalysis:
         I = H.T.dot(household_population.states[:, 3::6])
         R = H.T.dot(household_population.states[:, 4::6])
 
-        Q = H.T.dot(household_population.states[:, 5::6])
+        if p[0] == 0:
+            Q = H.T.dot(household_population.states[:, 5::6])
+        else:
+            states_iso_only = household_population.states[:,5::6]
+            total_iso_by_state = states_iso_only.sum(axis=1)
+            iso_present = total_iso_by_state>0
+            Q = H[iso_present,:].T.dot(
+                household_population.composition_by_state[iso_present,:])
 
         vuln_peak = 100 * max(I[:, 2]) / \
                         model_input.ave_hh_by_class[2]
@@ -175,7 +195,7 @@ def main(no_of_workers,
     print('using',no_of_workers,'cores')
     oohi_system = OOHIAnalysis()
     results = []
-
+    iso_method_range = [0, 1] # 0 is external, 1 is internal. We code this as integers to avoid problems with typing of the parameters.
     iso_rate_range = arange(iso_rate_vals[0],
                                 iso_rate_vals[1],
                                 iso_rate_vals[2])
@@ -183,7 +203,8 @@ def main(no_of_workers,
                                 iso_prob_vals[1],
                                 iso_prob_vals[2])
     params = array([
-        [b, e]
+        [m, b, e]
+        for m in iso_method_range
         for b in iso_rate_range
         for e in iso_prob_range])
 
@@ -196,15 +217,19 @@ def main(no_of_workers,
     print('Calculations took', (get_time()-prepool_time)/60, 'minutes.')
 
     vuln_peak_data = array([r[0] for r in results]).reshape(
+        len(iso_method_range),
         len(iso_rate_range),
         len(iso_prob_range))
     vuln_end_data = array([r[1] for r in results]).reshape(
+        len(iso_method_range),
         len(iso_rate_range),
         len(iso_prob_range))
     iso_peak_data = array([r[2] for r in results]).reshape(
+        len(iso_method_range),
         len(iso_rate_range),
         len(iso_prob_range))
     cum_iso_data = array([r[3] for r in results]).reshape(
+        len(iso_method_range),
         len(iso_rate_range),
         len(iso_prob_range))
 
