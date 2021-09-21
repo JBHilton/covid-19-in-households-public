@@ -13,13 +13,11 @@ from model.specs import SINGLE_AGE_UK_SPEC, SINGLE_AGE_SEIR_SPEC_FOR_FITTING
 from model.common import SEIRRateEquations
 from model.imports import NoImportModel
 from examples.temp_bubbles.common import (
-        demerged_initial_condition,
         build_mixed_compositions_pairwise,
-        pairwise_merged_initial_condition,
-        pairwise_demerged_initial_condition,
-        match_merged_states_to_unmerged,
         build_mixed_compositions_threewise,
-        initialise_merged_system_threewise)
+        demerged_initial_condition,
+        initialise_merged_system,
+        match_merged_states_to_unmerged)
 
 '''If there is not already a results folder assigned to the outputs from this
 script, create one now.'''
@@ -30,7 +28,6 @@ SPEC = {**SINGLE_AGE_UK_SPEC, **SINGLE_AGE_SEIR_SPEC_FOR_FITTING}
 X0 = 3 * 1e-2 # Growth rate estimate for mid-December 2020 from ONS
 ATOL = 1e-16 # IVP solver tolerance
 NO_COMPARTMENTS = 4 # We use an SEIR model, hence 4 compartments
-HH_TO_MERGE = 3 # Number of households we merge
 MAX_MERGED_SIZE = 10 # We only allow merges where total individuals is at most 12
 MAX_UNMERGED_SIZE = 4 # As usual, we model the chunk of the population in households of size 6 or fewer
 GUEST_TRANS_SCALING = 1 # This is strength of guest-host interactions relative to host-host interactions
@@ -197,7 +194,8 @@ def run_merge(
         hh_dimension,
         unmerged,
         merged,
-        state_match,
+        state_match_2,
+        state_match_3,
         t_start,
         t_end,
         merge_start,
@@ -228,6 +226,7 @@ def run_merge(
             rhs_merged2,
             hh_dimension,
             pairings_2,
+            state_match_2,
             [1],
             0,
             unmerged.baseline_H0,
@@ -255,7 +254,7 @@ def run_merge(
             rhs_merged3,
             hh_dimension,
             pairings_3,
-            state_match,
+            state_match_3,
             [2],
             0,
             unmerged.baseline_H0,
@@ -272,6 +271,7 @@ def run_merge(
             rhs_merged2,
             hh_dimension,
             pairings_2,
+            state_match_2,
             [1],
             0,
             H_postmerge_1[:, -1],
@@ -300,6 +300,7 @@ def run_merge(
             rhs_merged2,
             hh_dimension,
             pairings_2,
+            state_match_2,
             [1, 1],
             1,
             unmerged.baseline_H0,
@@ -316,6 +317,7 @@ def run_merge(
             rhs_merged2,
             hh_dimension,
             pairings_2,
+            state_match_2,
             [1],
             0,
             H_postmerge_2[:, -1],
@@ -440,20 +442,22 @@ def simulate_merge2(
         rhs_merged,
         hh_dimension,
         pairings,
+        state_match,
         duration_list,
         switches,
         premerge_H0,
         t0,
         t_end):
+
+    hh_to_merge = 2
+
     for switch in range(switches+1):
         # print('Initialising merge number',switch,'...')
-        H0 = pairwise_merged_initial_condition(
+        H0 = initialise_merged_system(
             premerge_H0,
             unmerged_population,
             merged_population,
-            hh_dimension,
-            pairings,
-            4)
+            state_match)
         tspan = (t0, t0 + duration_list[switch])
         # print('Integrating over merge period number',switch,'...')
         solution = solve_ivp(
@@ -466,12 +470,13 @@ def simulate_merge2(
         temp_time = solution.t
         temp_H = solution.y
         t0 = t0 + duration_list[switch]
-        premerge_H0 = pairwise_demerged_initial_condition(
+        premerge_H0 = demerged_initial_condition(
             temp_H[:, -1],
             unmerged_population,
             merged_population,
             hh_dimension,
             pairings,
+            hh_to_merge,
             4)
         if switch == 0:
             merge_time = temp_time
@@ -481,12 +486,13 @@ def simulate_merge2(
             merge_H = hstack((merge_H, temp_H))
 
     # print('Initialising post-merge period...')
-    H0 = pairwise_demerged_initial_condition(
+    H0 = demerged_initial_condition(
         merge_H[:, -1],
         unmerged_population,
         merged_population,
         hh_dimension,
         pairings,
+        hh_to_merge,
         4)
     tspan = (t0, t_end)
     # print('Integrating over post-merge period...')
@@ -516,9 +522,12 @@ def simulate_merge3(
         premerge_H0,
         t0,
         t_end):
+
+    hh_to_merge = 3
+
     for switch in range(switches+1):
         # print('Initialising merge number',switch,'...')
-        H0 = initialise_merged_system_threewise(
+        H0 = initialise_merged_system(
             premerge_H0,
             unmerged_population,
             merged_population,
@@ -542,7 +551,7 @@ def simulate_merge3(
             merged_population,
             hh_dimension,
             pairings,
-            HH_TO_MERGE,
+            hh_to_merge,
             4)
         if switch == 0:
             merge_time = temp_time
@@ -560,7 +569,7 @@ def simulate_merge3(
         merged_population,
         hh_dimension,
         pairings,
-        HH_TO_MERGE,
+        hh_to_merge,
         4)
     tspan = (t0, t_end)
     # print('Integrating over post-merge period...')
@@ -649,11 +658,17 @@ def main(no_of_workers,
     with Pool(no_of_workers) as pool:
         merged_populations = pool.map(create_merged_systems, params)
 
-    state_match = match_merged_states_to_unmerged(
+    state_match_2 = match_merged_states_to_unmerged(
+        unmerged_results[0].population,
+        merged_populations[0].merged_population2,
+        pairings_2,
+        2,
+        NO_COMPARTMENTS)
+    state_match_3 = match_merged_states_to_unmerged(
         unmerged_results[0].population,
         merged_populations[0].merged_population3,
         pairings_3,
-        HH_TO_MERGE,
+        3,
         NO_COMPARTMENTS)
 
     params = []
@@ -665,7 +680,7 @@ def main(no_of_workers,
                 hh_dimension,
                 unmerged_results[i],
                 merged_populations[j],
-                state_match,
+                state_match_2, state_match_3,
                 t0, t_end, merge_start, merge_end))
     with Pool(no_of_workers) as pool:
         results = pool.map(unpack_paramas_and_run_merge, params)
