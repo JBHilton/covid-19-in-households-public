@@ -17,6 +17,7 @@ with open('outputs/oohi/results.pkl','rb') as f:
      vuln_end,
      iso_peaks,
      cum_iso,
+     iso_method_range,
      iso_rate_range,
      iso_prob_range) = load(f)
 
@@ -29,16 +30,23 @@ ip_max = iso_peaks.max()
 ci_min = cum_iso.min()
 ci_max = cum_iso.max()
 
-fig, ax = subplots(1,1,sharex=True)
-axim=ax.imshow(vuln_peaks,
+fig, (ax1, ax2) = subplots(1,2,sharex=True)
+axim=ax1.imshow(vuln_peaks[0,:,:],
            origin='lower',
            extent=(iso_rate_range[0],iso_rate_range[1],0,1),
            vmin=vp_min,
            vmax=vp_max)
-ax.set_xlabel('Detection rate')
-ax.set_ylabel('Adherence probability')
+ax1.set_xlabel('Detection rate')
+ax1.set_ylabel('Adherence probability')
+ax2.imshow(vuln_peaks[1,:,:],
+           origin='lower',
+           extent=(iso_rate_range[0],iso_rate_range[1],0,1),
+           vmin=vp_min,
+           vmax=vp_max)
+ax2.set_xlabel('Detection rate')
 
-divider = make_axes_locatable(ax)
+ax2.get_yaxis().set_ticks([])
+divider = make_axes_locatable(ax2)
 cax = divider.append_axes("right", size="5%", pad=0.05)
 cbar = colorbar(axim,
                 label="Peak % prevalence in vulnerable population",
@@ -48,16 +56,23 @@ fig.savefig('plots/oohi/vuln_peaks.png',
             dpi=300)
 close()
 
-fig, ax = subplots(1,1,sharex=True)
-axim=ax.imshow(vuln_end,
+fig, (ax1, ax2) = subplots(1,2,sharex=True)
+axim=ax1.imshow(vuln_end[0,:,:],
            origin='lower',
            extent=(iso_rate_range[0],iso_rate_range[1],0,1),
            vmin=ve_min,
            vmax=ve_max)
-ax.set_xlabel('Detection rate')
-ax.set_ylabel('Adherence probability')
+ax1.set_xlabel('Detection rate')
+ax1.set_ylabel('Adherence probability')
+ax2.imshow(vuln_end[1,:,:],
+           origin='lower',
+           extent=(iso_rate_range[0],iso_rate_range[1],0,1),
+           vmin=ve_min,
+           vmax=ve_max)
+ax2.set_xlabel('Detection rate')
 
-divider = make_axes_locatable(ax)
+ax2.get_yaxis().set_ticks([])
+divider = make_axes_locatable(ax2)
 cax = divider.append_axes("right", size="5%", pad=0.05)
 cbar = colorbar(axim,
                 label="Cumulative % infected in vulnerable population",
@@ -68,16 +83,23 @@ fig.savefig('plots/oohi/cum_vuln_cases.png',
             dpi=300)
 close()
 
-fig, ax = subplots(1,1,sharex=True)
-axim=ax.imshow(iso_peaks,
+fig, (ax1, ax2) = subplots(1,2,sharex=True)
+axim=ax1.imshow(iso_peaks[0,:,:],
            origin='lower',
            extent=(iso_rate_range[0],iso_rate_range[1],0,1),
            vmin=ip_min,
            vmax=ip_max)
-ax.set_xlabel('Detection rate')
-ax.set_ylabel('Adherence probability')
+ax1.set_xlabel('Detection rate')
+ax1.set_ylabel('Adherence probability')
+ax2.imshow(iso_peaks[1,:,:],
+           origin='lower',
+           extent=(iso_rate_range[0],iso_rate_range[1],0,1),
+           vmin=ip_min,
+           vmax=ip_max)
+ax2.set_xlabel('Detection rate')
 
-divider = make_axes_locatable(ax)
+ax2.get_yaxis().set_ticks([])
+divider = make_axes_locatable(ax2)
 cax = divider.append_axes("right", size="5%", pad=0.05)
 cbar = colorbar(axim,
                 label="Peak % population isolating",
@@ -88,16 +110,23 @@ fig.savefig('plots/oohi/iso_peak.png',
             dpi=300)
 close()
 
-fig, ax = subplots(1,1,sharex=True)
-axim=ax.imshow(cum_iso,
+fig, (ax1, ax2) = subplots(1,2,sharex=True)
+axim=ax1.imshow(cum_iso[0,:,:],
            origin='lower',
            extent=(iso_rate_range[0],iso_rate_range[1],0,1),
            vmin=ci_min,
            vmax=ci_max)
-ax.set_xlabel('Detection rate')
-ax.set_ylabel('Adherence probability')
+ax1.set_xlabel('Detection rate')
+ax1.set_ylabel('Adherence probability')
+ax2.imshow(cum_iso[1,:,:],
+           origin='lower',
+           extent=(iso_rate_range[0],iso_rate_range[1],0,1),
+           vmin=ci_min,
+           vmax=ci_max)
+ax2.set_xlabel('Detection rate')
 
-divider = make_axes_locatable(ax)
+ax2.get_yaxis().set_ticks([])
+divider = make_axes_locatable(ax2)
 cax = divider.append_axes("right", size="5%", pad=0.05)
 cbar = colorbar(axim,
                 label="Cumulative % isolating",

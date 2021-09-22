@@ -215,7 +215,6 @@ def main(no_of_workers,
              vuln_end_data,
              iso_peak_data,
              cum_iso_data,
-             iso_method_range,
              iso_rate_range,
              iso_prob_range),
             f)
