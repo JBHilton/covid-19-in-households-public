@@ -32,7 +32,7 @@ ci_max = cum_iso.max()
 fig, ax = subplots(1,1,sharex=True)
 axim=ax.imshow(vuln_peaks,
            origin='lower',
-           extent=(iso_rate_range[0],iso_rate_range[1],0,1),
+           extent=(iso_rate_range[0],iso_rate_range[-1],0,1),
            vmin=vp_min,
            vmax=vp_max)
 ax.set_xlabel('Detection rate')
@@ -51,7 +51,7 @@ close()
 fig, ax = subplots(1,1,sharex=True)
 axim=ax.imshow(vuln_end,
            origin='lower',
-           extent=(iso_rate_range[0],iso_rate_range[1],0,1),
+           extent=(iso_rate_range[0],iso_rate_range[-1],0,1),
            vmin=ve_min,
            vmax=ve_max)
 ax.set_xlabel('Detection rate')
@@ -71,7 +71,7 @@ close()
 fig, ax = subplots(1,1,sharex=True)
 axim=ax.imshow(iso_peaks,
            origin='lower',
-           extent=(iso_rate_range[0],iso_rate_range[1],0,1),
+           extent=(iso_rate_range[0],iso_rate_range[-1],0,1),
            vmin=ip_min,
            vmax=ip_max)
 ax.set_xlabel('Detection rate')
@@ -91,7 +91,7 @@ close()
 fig, ax = subplots(1,1,sharex=True)
 axim=ax.imshow(cum_iso,
            origin='lower',
-           extent=(iso_rate_range[0],iso_rate_range[1],0,1),
+           extent=(iso_rate_range[0],iso_rate_range[-1],0,1),
            vmin=ci_min,
            vmax=ci_max)
 ax.set_xlabel('Detection rate')
