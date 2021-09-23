@@ -104,9 +104,11 @@ class OOHIAnalysis:
                                             starting_immunity)
 
         basic_npi_spec = deepcopy(OOHI_SPEC)
-        basic_npi_input = SEPIRQInput(basic_npi_spec, composition_list, comp_dist)
-        basic_npi_input.k_ext = beta_ext * model_input.k_ext
-        basic_npi_input = add_vuln_class(model_input,
+        basic_npi_input = SEPIRQInput(basic_npi_spec,
+                                    composition_list,
+                                    comp_dist)
+        basic_npi_input.k_ext = beta_ext * basic_npi_input.k_ext
+        basic_npi_input = add_vuln_class(basic_npi_input,
                             vuln_prop,
                             adult_class)
         basic_npi_population = HouseholdPopulation(
@@ -115,8 +117,14 @@ class OOHIAnalysis:
             with open('outputs/oohi/map_matrix.pkl', 'rb') as f:
                 self.map_matrix = load(f)
         else:
-            self.map_matrix = map_SEPIR_to_SEPIRQ(self.pre_npi_household_population,
-                                         basic_npi_household_population)
+            print('calculating map matrix...')
+            map_mat_start = get_time()
+            self.map_matrix = map_SEPIR_to_SEPIRQ(
+                                        self.pre_npi_household_population,
+                                        basic_npi_population)
+            print('map matrix calculation took',
+                    (get_time()-map_mat_start),
+                    'seconds')
 
     def __call__(self, p):
         print('now calling')
