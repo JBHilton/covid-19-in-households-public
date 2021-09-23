@@ -136,8 +136,13 @@ class OOHIAnalysis:
             household_population,
             import_model)
 
-        map_matrix = map_SEPIR_to_SEPIRQ(self.pre_npi_household_population,
-                                     household_population)
+        if isfile('outputs/oohi/map_matrix.pkl') is True:
+            with open('outputs/oohi/map_matrix.pkl', 'rb') as f:
+                map_matrix = load(f)
+        else:
+            map_matrix = map_SEPIR_to_SEPIRQ(self.pre_npi_household_population,
+                                         household_population)
+
         H0_iso = self.H0_pre_npi * map_matrix
 
         no_days = 100
