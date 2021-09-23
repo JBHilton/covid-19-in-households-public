@@ -103,6 +103,21 @@ class OOHIAnalysis:
                                             prev,
                                             starting_immunity)
 
+        basic_npi_spec = deepcopy(OOHI_SPEC)
+        basic_npi_input = SEPIRQInput(basic_npi_spec, composition_list, comp_dist)
+        basic_npi_input.k_ext = beta_ext * model_input.k_ext
+        basic_npi_input = add_vuln_class(model_input,
+                            vuln_prop,
+                            adult_class)
+        basic_npi_population = HouseholdPopulation(
+            composition_list, comp_dist, basic_npi_input)
+        if isfile('outputs/oohi/map_matrix.pkl') is True:
+            with open('outputs/oohi/map_matrix.pkl', 'rb') as f:
+                self.map_matrix = load(f)
+        else:
+            self.map_matrix = map_SEPIR_to_SEPIRQ(self.pre_npi_household_population,
+                                         basic_npi_household_population)
+
     def __call__(self, p):
         print('now calling')
         try:
@@ -136,14 +151,7 @@ class OOHIAnalysis:
             household_population,
             import_model)
 
-        if isfile('outputs/oohi/map_matrix.pkl') is True:
-            with open('outputs/oohi/map_matrix.pkl', 'rb') as f:
-                map_matrix = load(f)
-        else:
-            map_matrix = map_SEPIR_to_SEPIRQ(self.pre_npi_household_population,
-                                         household_population)
-
-        H0_iso = self.H0_pre_npi * map_matrix
+        H0_iso = self.H0_pre_npi * self.map_matrix
 
         no_days = 100
         tspan = (0.0, no_days)
