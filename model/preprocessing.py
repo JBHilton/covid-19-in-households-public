@@ -1260,7 +1260,8 @@ def build_support_bubbles(
 
 def add_vuln_class(model_input,
                     vuln_prop,
-                    class_to_split = 1):
+                    class_to_split = 1,
+                    vuln_ext_scale = 0):
     '''This function expands the model input to account for an additional
     vulnerable class. We assume that this vulnerable class is identical
     to members of the class class_to_split, apart from in their mixing
@@ -1275,28 +1276,31 @@ def add_vuln_class(model_input,
     expanded_input.vuln_prop = vuln_prop
 
     '''We add a copy of of the class_to_split mixing behaviour to the bottom of
-    the internal mixing matrix, and a row of zeros to the bottom of the external
-    mixing matrix.'''
+    the internal mixing matrix, and a scaled down copy to the bottom of the
+    external mixing matrix.'''
     left_int_expander = vstack((
         identity(expanded_input.no_age_classes),
         identity(expanded_input.no_age_classes)[class_to_split, :]))
     left_ext_expander = vstack((
         identity(expanded_input.no_age_classes),
-        [0, 0]))
+        vuln_ext_scale*identity(expanded_input.no_age_classes)[class_to_split, :]))
 
     '''The next matrix splits interactions with the split class between
     vulnerable and non-vulnerable individuals.'''
-    right_expander = hstack((
+    right_int_expander = hstack((
+        identity(expanded_input.no_age_classes),
+        identity(expanded_input.no_age_classes)[:, [class_to_split]]))
+    right_ext_expander = hstack((
         identity(expanded_input.no_age_classes),
         expanded_input.vuln_prop * \
         identity(expanded_input.no_age_classes)[:, [class_to_split]]))
-    right_expander[class_to_split, class_to_split] = \
+    right_ext_expander[class_to_split, class_to_split] = \
                                                     1 - expanded_input.vuln_prop
 
     expanded_input.k_home = left_int_expander.dot(
-                                    expanded_input.k_home.dot(right_expander))
+                                    expanded_input.k_home.dot(right_int_expander))
     expanded_input.k_ext = left_ext_expander.dot(
-                                    expanded_input.k_ext.dot(right_expander))
+                                    expanded_input.k_ext.dot(right_ext_expander))
 
     for par_name in model_input.expandables:
 

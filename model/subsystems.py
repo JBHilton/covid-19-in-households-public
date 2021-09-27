@@ -235,6 +235,8 @@ def size_adj_inf_events(from_compartment,
                         (iso_adjusted_comp[k]**density_expo)) * inf_scales[ic]
             inf_rate[k] = old_state[no_compartments*i] * (
                 r_home[i, :].dot( old_infs ))
+            if class_idx[i]==2:
+                print('infection in vuln class, rate',inf_rate[k])
             new_state = old_state.copy()
             new_state[no_compartments*i + from_compartment] -= 1
             new_state[no_compartments*i + to_compartment] += 1
@@ -674,7 +676,7 @@ def _sepirq_subsystem(self, household_spec):
     alpha_1 = self.model_input.alpha_1
     alpha_2 = self.model_input.alpha_2
     gamma = self.model_input.gamma
-    iso_rates = self.model_input.iso_rates
+    iso_rates = deepcopy(self.model_input.iso_rates)
     discharge_rate = self.model_input.discharge_rate
     density_expo = self.model_input.density_expo
 
@@ -724,6 +726,14 @@ def _sepirq_subsystem(self, household_spec):
         inf_comps = [p_comp, i_comp, q_comp]
     else:
         inf_comps = [p_comp, i_comp]
+
+    if iso_method == 'ext':
+        for cmp in range(len(iso_rates)):
+            iso_rates[cmp] = \
+                self.model_input.ad_prob * iso_rates[cmp][class_idx]
+    else:
+        for cmp in range(len(iso_rates)):
+            iso_rates[cmp] = iso_rates[cmp][class_idx]
 
     Q_int, inf_event_row, inf_event_col, inf_event_class = \
                 size_adj_inf_events(s_comp,
