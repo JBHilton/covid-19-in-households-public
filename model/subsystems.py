@@ -235,8 +235,8 @@ def size_adj_inf_events(from_compartment,
                         (iso_adjusted_comp[k]**density_expo)) * inf_scales[ic]
             inf_rate[k] = old_state[no_compartments*i] * (
                 r_home[i, :].dot( old_infs ))
-            if class_idx[i]==2:
-                print('infection in vuln class, rate',inf_rate[k])
+            # if class_idx[i]==2:
+            #     print('infection in vuln class, rate',inf_rate[k])
             new_state = old_state.copy()
             new_state[no_compartments*i + from_compartment] -= 1
             new_state[no_compartments*i + to_compartment] += 1
