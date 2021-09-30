@@ -218,9 +218,9 @@ def size_adj_inf_events(from_compartment,
                 inf_event_class):
 
      # Total number of compartments contributing to within-household infection
-     no_inf_compartments = len(inf_compartment_list)
+    no_inf_compartments = len(inf_compartment_list)
 
-     for i in range(len(class_idx)):
+    for i in range(len(class_idx)):
         from_present = \
             where(states[:, no_compartments*i+from_compartment] > 0)[0]
 
@@ -238,11 +238,6 @@ def size_adj_inf_events(from_compartment,
             new_state = old_state.copy()
             new_state[no_compartments*i + from_compartment] -= 1
             new_state[no_compartments*i + to_compartment] += 1
-            if (class_idx==2).any():
-                print('infection in vuln class, rate',inf_rate[k])
-                print('class_idx=',class_idx)
-                print('old_state=',old_state)
-                print('new_state=',new_state)
             inf_to[k] = index_vector[
                 new_state.dot(reverse_prod) + new_state[-1], 0]
 
@@ -254,7 +249,7 @@ def size_adj_inf_events(from_compartment,
         inf_event_class = concatenate(
             (inf_event_class, class_idx[i]*ones((len(from_present)))))
 
-        return Q_int, inf_event_row, inf_event_col, inf_event_class
+    return Q_int, inf_event_row, inf_event_col, inf_event_class
 
 def progression_events(from_compartment,
                 to_compartment,

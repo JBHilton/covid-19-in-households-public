@@ -172,37 +172,6 @@ class OOHIAnalysis:
 
         H0_iso = self.H0_pre_npi * self.map_matrix
 
-        print('k_home=',model_input.k_home)
-        print('k_ext=',model_input.k_ext)
-
-        ng_mat = model_input.sus * ((1/this_spec['recovery_rate']) *
-         (model_input.k_home) + \
-        (1/this_spec['symp_onset_rate']) *
-        (model_input.k_home ) * array([0.5,0.5,0.5]))
-        print('next gen=',ng_mat)
-        print('eigs of next gen matrix=',eig(ng_mat))
-
-        # S0 = H0_iso.T.dot(household_population.states[:, ::6]) / \
-        #                 model_input.ave_hh_by_class
-        # E0 = H0_iso.T.dot(household_population.states[:, 1::6]) / \
-        #                 model_input.ave_hh_by_class
-        # P0 = H0_iso.T.dot(household_population.states[:, 2::6]) / \
-        #                 model_input.ave_hh_by_class
-        # I0 = H0_iso.T.dot(household_population.states[:, 3::6]) / \
-        #                 model_input.ave_hh_by_class
-        # R0 = H0_iso.T.dot(household_population.states[:, 4::6]) / \
-        #                 model_input.ave_hh_by_class
-        # Q0 = H0_iso.T.dot(household_population.states[:, 5::6]) / \
-        #                 model_input.ave_hh_by_class
-        # print('start state')
-        # print('s=',S0)
-        # print('e=',E0)
-        # print('p=',P0)
-        # print('i=',I0)
-        # print('r=',R0)
-        # print('q=',Q0)
-
-
         no_days = 100
         tspan = (0.0, no_days)
         solution = solve_ivp(rhs,
@@ -220,19 +189,6 @@ class OOHIAnalysis:
         I = H.T.dot(household_population.states[:, 3::6])
         R = H.T.dot(household_population.states[:, 4::6])
         Q = H.T.dot(household_population.states[:, 5::6])
-
-        I_vuln_present = \
-            H[
-                where(household_population.composition_by_state[:,2]>0)[0],
-                :].T.dot(
-                household_population.states[
-                    where(household_population.composition_by_state[:,2]>0)[0],
-                    3::6]
-                )
-
-        # print('I=',I/model_input.ave_hh_by_class)
-
-        print('I(at least one vuln present)=',I_vuln_present/model_input.ave_hh_by_class)
 
         vuln_peak = 100 * max(I[:, 2]) / \
                         model_input.ave_hh_by_class[2]
@@ -298,9 +254,9 @@ def main(no_of_workers,
 
 if __name__ == '__main__':
     parser = ArgumentParser()
-    parser.add_argument('--no_of_workers', type=int, default=4)
-    parser.add_argument('--iso_rate_vals', type=int, default=[0.01, 1.1, 1])
-    parser.add_argument('--iso_prob_vals', type=int, default=[0.25, 1.0, 0.5])
+    parser.add_argument('--no_of_workers', type=int, default=8)
+    parser.add_argument('--iso_rate_vals', type=int, default=[0.01, 1.1, 0.1])
+    parser.add_argument('--iso_prob_vals', type=int, default=[0.0, 1.1, 0.1])
     args = parser.parse_args()
 
     main(args.no_of_workers,
