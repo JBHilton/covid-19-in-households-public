@@ -135,7 +135,7 @@ TWO_AGE_INT_SEPIRQ_SPEC = {
     'symp_onset_rate': 1/3,         # P->I prodromal to symptomatic rate
     'exp_iso_rate': 1/1 * ones(2,),  # Ave. time in days to detection by class
     'pro_iso_rate': 1/1 * ones(2,),
-    'inf_iso_rate': 1/0.5 * ones(2,),
+    'inf_iso_rate': 1/1 * ones(2,),
     'discharge_rate': 1/14,         # 1 / ave time in isolation
     'iso_method': "int",            # This is either "int" or "ext"
     'ad_prob': 0.2,                   # Probability under internal isolation
@@ -164,7 +164,7 @@ TWO_AGE_EXT_SEPIRQ_SPEC = {
     'symp_onset_rate': 1/3,         # P->I prodromal to symptomatic rate
     'exp_iso_rate': 1/1 * ones(2,),  # Ave. time in days to detection by class
     'pro_iso_rate': 1/1 * ones(2,),
-    'inf_iso_rate': 1/0.5 * ones(2,),
+    'inf_iso_rate': 1/1 * ones(2,),
     'discharge_rate': 1/14,         # 1 / ave time in isolation
     'iso_method': "ext",            # This is either "int" or "ext"
     'ad_prob': 0.2,                   # Probability under OOHI that household
