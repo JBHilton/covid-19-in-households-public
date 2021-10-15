@@ -54,10 +54,10 @@ TWO_AGE_SIR_SPEC = {
     'compartmental_structure': 'SIR', # This is which subsystem key to use
     'SIP': 0.45,                     # Secondary inf probability
     'R*': 1.1,                      # Household-level reproduction number
-    'recovery_rate': 1/12,           # Recovery rate
+    'recovery_rate': 1 / (5.8 + 5),           # Recovery rate
     'sus': array([1,1]),          # Relative susceptibility by
                                   # age/vulnerability class
-    'density_expo' : 0.5, # "Cauchemez parameter"
+    'density_expo' : 1.0, # "Cauchemez parameter"
     'fit_method' : 'R*'
 }
 
@@ -65,22 +65,22 @@ SINGLE_AGE_SEIR_SPEC = {
     'compartmental_structure': 'SEIR', # This is which subsystem key to use
     'SIP': 0.45,                     # Secondary inf probability
     'R*': 1.1,                      # Household-level reproduction number
-    'recovery_rate': 1/7,           # Recovery rate
-    'incubation_rate': 1/5,         # E->I incubation rate
+    'recovery_rate': 1 / (0.8 * 5.8 + 5),           # Recovery rate
+    'incubation_rate': 1 / (0.2 * 5.8),         # E->I incubation rate
     'sus': array([1]),          # Relative susceptibility by
                                   # age/vulnerability class
-    'density_expo' : 0.5, # "Cauchemez parameter"
+    'density_expo' : 1.0, # "Cauchemez parameter"
     'fit_method' : 'R*'
 }
 
 SINGLE_AGE_SEIR_SPEC_FOR_FITTING = {
     'compartmental_structure': 'SEIR', # This is which subsystem key to use
     'SIP': 0.45,                     # Secondary inf probability
-    'recovery_rate': 1/7,           # Recovery rate
-    'incubation_rate': 1/5,         # E->I incubation rate
+    'recovery_rate': 1 / (0.8 * 5.8 + 5),           # Recovery rate
+    'incubation_rate': 1 / (0.2 * 5.8),         # E->I incubation rate
     'sus': array([1]),          # Relative susceptibility by
                                   # age/vulnerability class
-    'density_expo' : 0.5, # "Cauchemez parameter"
+    'density_expo' : 1.0, # "Cauchemez parameter"
     'fit_method' : 'EL'
 }
 
@@ -88,11 +88,11 @@ TWO_AGE_SEIR_SPEC = {
     'compartmental_structure': 'SEIR', # This is which subsystem key to use
     'SIP': 0.45,                     # Secondary inf probability
     'R*': 1.1,                      # Household-level reproduction number
-    'recovery_rate': 1/7,           # Recovery rate
-    'incubation_rate': 1/5,         # E->I incubation rate
+    'recovery_rate': 1 / (0.8 * 5.8 + 5),           # Recovery rate
+    'incubation_rate': 1 / (0.2 * 5.8),         # E->I incubation rate
     'sus': array([1,1]),          # Relative susceptibility by
                                   # age/vulnerability class
-    'density_expo' : 0.5, # "Cauchemez parameter"
+    'density_expo' : 1.0, # "Cauchemez parameter"
     'fit_method' : 'R*'
 }
 
@@ -100,39 +100,39 @@ TWO_AGE_SEPIR_SPEC = {
     'compartmental_structure': 'SEPIR', # This is which subsystem key to use
     'SIP': 0.45,                     # Secondary inf probability
     'R*': 1.1,                      # Household-level reproduction number
-    'recovery_rate': 1/4,           # Recovery rate
-    'incubation_rate': 1/5,         # E->P incubation rate
-    'symp_onset_rate': 1/3,         # P->I prodromal to symptomatic rate
+    'recovery_rate': 1 / 5,           # Recovery rate
+    'incubation_rate': 1 / (0.2 * 5.8),         # E->P incubation rate
+    'symp_onset_rate': 1 / (0.8 * 5.8),         # P->I prodromal to symptomatic rate
     'prodromal_trans_scaling':
-     array([0.5,0.5]),          # Prodromal transmission intensity relative to
+     array([3, 3]),          # Prodromal transmission intensity relative to
                                 # full inf transmission
     'sus': array([1,1]),          # Relative susceptibility by
                                   # age/vulnerability class
-    'density_expo' : 0.5, # "Cauchemez parameter"
+    'density_expo' : 1.0, # "Cauchemez parameter"
     'fit_method' : 'R*'
 }
 
 TWO_AGE_SEPIR_SPEC_FOR_FITTING = {
     'compartmental_structure': 'SEPIR', # This is which subsystem key to use
     'SIP': 0.45,                     # Secondary inf probability
-    'recovery_rate': 1/4,           # Recovery rate
-    'incubation_rate': 1/5,         # E->P incubation rate
-    'symp_onset_rate': 1/3,         # P->I prodromal to symptomatic rate
+    'recovery_rate': 1 / 5,           # Recovery rate
+    'incubation_rate': 1 / (0.2 * 5.8),         # E->P incubation rate
+    'symp_onset_rate': 1 / (0.8 * 5.8),         # P->I prodromal to symptomatic rate
     'prodromal_trans_scaling':
-     array([0.5,0.5]),          # Prodromal transmission intensity relative to
+     array([3, 3]),          # Prodromal transmission intensity relative to
                                 # full inf transmission
     'sus': array([1,1]),          # Relative susceptibility by
                                   # age/vulnerability class
-    'density_expo' : 0.5, # "Cauchemez parameter"
+    'density_expo' : 1.0, # "Cauchemez parameter"
     'fit_method' : 'EL'
 }
 
 TWO_AGE_INT_SEPIRQ_SPEC = {
     'compartmental_structure': 'SEPIRQ', # This is which subsystem key to use
     'SIP': 0.45,                     # Secondary inf probability
-    'recovery_rate': 1/4,           # Recovery rate
-    'incubation_rate': 1/5,         # E->P incubation rate
-    'symp_onset_rate': 1/3,         # P->I prodromal to symptomatic rate
+    'recovery_rate': 1 / 5,           # Recovery rate
+    'incubation_rate': 1 / (0.2 * 5.8),         # E->P incubation rate
+    'symp_onset_rate': 1 / (0.8 * 5.8),         # P->I prodromal to symptomatic rate
     'exp_iso_rate': 1/1 * ones(2,),  # Ave. time in days to detection by class
     'pro_iso_rate': 1/1 * ones(2,),
     'inf_iso_rate': 1/1 * ones(2,),
@@ -146,22 +146,22 @@ TWO_AGE_INT_SEPIRQ_SPEC = {
            [True, True, True]]), # Element (i,j) is "If someone of class j is
                                  # present, class i will isolate internally"
     'prodromal_trans_scaling':
-     array([0.5,0.5]),          # Prodromal transmission intensity relative to
+     array([3, 3]),          # Prodromal transmission intensity relative to
                                 # full inf transmission
     'iso_trans_scaling':
      array([1,1]),          # Prodromal transmission intensity relative to full
                             # inf transmission
     'sus': array([1,1]),    # Relative susceptibility by age/vulnerability class
-    'density_expo' : 0.5, # "Cauchemez parameter"
+    'density_expo' : 1.0, # "Cauchemez parameter"
     'fit_method' : 'EL'
 }
 
 TWO_AGE_EXT_SEPIRQ_SPEC = {
     'compartmental_structure': 'SEPIRQ', # This is which subsystem key to use
     'SIP': 0.45,                     # Secondary inf probability
-    'recovery_rate': 1/4,           # Recovery rate
-    'incubation_rate': 1/5,         # E->P incubation rate
-    'symp_onset_rate': 1/3,         # P->I prodromal to symptomatic rate
+    'recovery_rate': 1 / 5,           # Recovery rate
+    'incubation_rate': 1 / (0.2 * 5.8),         # E->P incubation rate
+    'symp_onset_rate': 1 / (0.8 * 5.8),         # P->I prodromal to symptomatic rate
     'exp_iso_rate': 1/1 * ones(2,),  # Ave. time in days to detection by class
     'pro_iso_rate': 1/1 * ones(2,),
     'inf_iso_rate': 1/1 * ones(2,),
@@ -175,13 +175,13 @@ TWO_AGE_EXT_SEPIRQ_SPEC = {
            [False, False, False]]), # Element (i,j) is "If someone of class j is
                                     # present, class i will isolate externally"
     'prodromal_trans_scaling':
-     array([0.5,0.5]),          # Prodromal transmission intensity relative to
+     array([3, 3]),          # Prodromal transmission intensity relative to
                                 # full inf transmission
     'iso_trans_scaling':
      array([1,1]),          # Isolated transmission intensity relative to full
                             # inf transmission
     'sus': array([1,1]),    # Relative susceptibility by age/vulnerability class
-    'density_expo' : 0.5, # "Cauchemez parameter"
+    'density_expo' : 1.0, # "Cauchemez parameter"
     'fit_method' : 'EL'
 }
 
