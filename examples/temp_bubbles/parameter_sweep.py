@@ -156,7 +156,9 @@ class MergedSystems:
             ):
 
         merged_input2 = SEIRInput(
-                        SPEC, merged_comp_list_2, merged_comp_dist_2)
+                        SPEC, composition_list, comp_dist)
+        merged_input2.composition_list = merged_comp_list_2
+        merged_input2.composition_distribution = merged_comp_dist_2
         merged_input2 = merge_hh_inputs(merged_input2, 2, GUEST_TRANS_SCALING)
         merged_input2.density_expo = merged_exp
         self.merged_input2 = merged_input2
@@ -171,7 +173,9 @@ class MergedSystems:
             NoImportModel(NO_COMPARTMENTS, 2))
 
         merged_input3 = SEIRInput(
-                        SPEC, merged_comp_list_3, merged_comp_dist_3)
+                        SPEC, composition_list, comp_dist)
+        merged_input3.composition_list = merged_comp_list_3
+        merged_input3.composition_distribution = merged_comp_dist_3
         merged_input3 = merge_hh_inputs(merged_input3, 3, GUEST_TRANS_SCALING)
         merged_input3.density_expo = merged_exp
         self.merged_input3 = merged_input3

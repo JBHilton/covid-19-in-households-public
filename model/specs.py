@@ -1,11 +1,11 @@
 '''Module containing model specifications'''
 
 from copy import deepcopy
-from numpy import arange, array, multiply, ones
+from numpy import arange, array, multiply, ones, zeros
 from numpy.random import rand
 
 def draw_random_two_age_SEPIR_specs(spec,
-                      AR_pars = [0.25, 0.75],
+                      AR_pars = [0.25, 0.75, 6],
                       rec_pars = [1, 7],
                       inc_pars = [1, 10],
                       pro_pars = [1, 5],
@@ -15,9 +15,16 @@ def draw_random_two_age_SEPIR_specs(spec,
                       R_pars = [1, 2]):
 
     rand_spec = deepcopy(spec)
-    # Draw secondary inf probabiliy from uniform, default [0.25, 0.75]
-    rand_spec['SIP'] = \
-        AR_pars[0] +(AR_pars[1] - AR_pars[0]) * rand(1,)
+
+    ''' Start by drawing secondary inf probabilities from uniform distribution,
+    with each SITP bounded above by previous one, starting default [0.25, 0.75]'''
+    rand_spec['SITP'] = zeros(AR_pars[2],) # AR_pars[2] is max hh size
+    prev_AR = AR_pars[1]
+    for n in range(AR_pars[2] - 1): # SITP is indexed by hh size minus one
+        new_AR = AR_pars[0] + (prev_AR - AR_pars[0]) * rand(1,)
+        rand_spec['SITP'][n] = new_AR
+        prev_AR = new_AR
+
      # Rec rate unif, default [1, 7]
     rand_spec['recovery_rate'] = 1 / (
                                         rec_pars[0] +
@@ -50,89 +57,99 @@ def draw_random_two_age_SEPIR_specs(spec,
 
     return rand_spec
 
+TRANCHE1_SITP = array([0.184,0.162,0.148,0.137,0.129])
+TRANCHE2_SITP = array([0.345,0.274,0.230,0.200,0.177])
+TRANCHE3_SITP = array([0.302,0.238,0.198,0.171,0.151])
+TRANCHE4_SITP = array([0.290,0.233,0.197,0.173,0.155])
+
+LATENT_PERIOD = 0.2 * 5.8   # Time in days from infection to infectiousness
+PRODROME_PERIOD = 0.8 * 5.8 # Time in days from infectiousness to symptom onset
+SYMPTOM_PERIOD = 5          # Time in days from symptom onset to recovery
+
+PRODROME_SCALING = 3        # Relative intensity of transmission during prodrome
+
 TWO_AGE_SIR_SPEC = {
     'compartmental_structure': 'SIR', # This is which subsystem key to use
-    'SIP': 0.45,                     # Secondary inf probability
+    'SITP': TRANCHE2_SITP,                     # Secondary inf probability
     'R*': 1.1,                      # Household-level reproduction number
-    'recovery_rate': 1 / (5.8 + 5),           # Recovery rate
+    'recovery_rate': 1 / (LATENT_PERIOD +
+                          PRODROME_PERIOD +
+                          SYMPTOM_PERIOD),           # Recovery rate
     'sus': array([1,1]),          # Relative susceptibility by
                                   # age/vulnerability class
-    'density_expo' : 1.0, # "Cauchemez parameter"
     'fit_method' : 'R*'
 }
 
 SINGLE_AGE_SEIR_SPEC = {
     'compartmental_structure': 'SEIR', # This is which subsystem key to use
-    'SIP': 0.45,                     # Secondary inf probability
+    'SITP': TRANCHE2_SITP,                     # Secondary inf probability
     'R*': 1.1,                      # Household-level reproduction number
-    'recovery_rate': 1 / (0.8 * 5.8 + 5),           # Recovery rate
-    'incubation_rate': 1 / (0.2 * 5.8),         # E->I incubation rate
+    'recovery_rate': 1 / (PRODROME_PERIOD +
+                          SYMPTOM_PERIOD),           # Recovery rate
+    'incubation_rate': 1 / LATENT_PERIOD,         # E->I incubation rate
     'sus': array([1]),          # Relative susceptibility by
                                   # age/vulnerability class
-    'density_expo' : 1.0, # "Cauchemez parameter"
     'fit_method' : 'R*'
 }
 
 SINGLE_AGE_SEIR_SPEC_FOR_FITTING = {
     'compartmental_structure': 'SEIR', # This is which subsystem key to use
-    'SIP': 0.45,                     # Secondary inf probability
-    'recovery_rate': 1 / (0.8 * 5.8 + 5),           # Recovery rate
-    'incubation_rate': 1 / (0.2 * 5.8),         # E->I incubation rate
+    'SITP': TRANCHE2_SITP,                     # Secondary inf probability
+    'recovery_rate': 1 / (PRODROME_PERIOD +
+                          SYMPTOM_PERIOD),           # Recovery rate
+    'incubation_rate': 1 / LATENT_PERIOD,         # E->I incubation rate
     'sus': array([1]),          # Relative susceptibility by
                                   # age/vulnerability class
-    'density_expo' : 1.0, # "Cauchemez parameter"
     'fit_method' : 'EL'
 }
 
 TWO_AGE_SEIR_SPEC = {
     'compartmental_structure': 'SEIR', # This is which subsystem key to use
-    'SIP': 0.45,                     # Secondary inf probability
+    'SITP': TRANCHE2_SITP,                     # Secondary inf probability
     'R*': 1.1,                      # Household-level reproduction number
-    'recovery_rate': 1 / (0.8 * 5.8 + 5),           # Recovery rate
-    'incubation_rate': 1 / (0.2 * 5.8),         # E->I incubation rate
+    'recovery_rate': 1 / (PRODROME_PERIOD +
+                          SYMPTOM_PERIOD),           # Recovery rate
+    'incubation_rate': 1 / LATENT_PERIOD,         # E->I incubation rate
     'sus': array([1,1]),          # Relative susceptibility by
                                   # age/vulnerability class
-    'density_expo' : 1.0, # "Cauchemez parameter"
     'fit_method' : 'R*'
 }
 
 TWO_AGE_SEPIR_SPEC = {
     'compartmental_structure': 'SEPIR', # This is which subsystem key to use
-    'SIP': 0.45,                     # Secondary inf probability
+    'SITP': TRANCHE2_SITP,                     # Secondary inf probability
     'R*': 1.1,                      # Household-level reproduction number
-    'recovery_rate': 1 / 5,           # Recovery rate
-    'incubation_rate': 1 / (0.2 * 5.8),         # E->P incubation rate
-    'symp_onset_rate': 1 / (0.8 * 5.8),         # P->I prodromal to symptomatic rate
+    'recovery_rate': 1 / SYMPTOM_PERIOD,           # Recovery rate
+    'incubation_rate': 1 / LATENT_PERIOD,         # E->P incubation rate
+    'symp_onset_rate': 1 / PRODROME_PERIOD,         # P->I prodromal to symptomatic rate
     'prodromal_trans_scaling':
-     array([3, 3]),          # Prodromal transmission intensity relative to
+     PRODROME_SCALING * ones(2,),          # Prodromal transmission intensity relative to
                                 # full inf transmission
     'sus': array([1,1]),          # Relative susceptibility by
                                   # age/vulnerability class
-    'density_expo' : 1.0, # "Cauchemez parameter"
     'fit_method' : 'R*'
 }
 
 TWO_AGE_SEPIR_SPEC_FOR_FITTING = {
     'compartmental_structure': 'SEPIR', # This is which subsystem key to use
-    'SIP': 0.45,                     # Secondary inf probability
-    'recovery_rate': 1 / 5,           # Recovery rate
-    'incubation_rate': 1 / (0.2 * 5.8),         # E->P incubation rate
-    'symp_onset_rate': 1 / (0.8 * 5.8),         # P->I prodromal to symptomatic rate
+    'SITP': array([0.184,0.162,0.148,0.137,0.129]),                     # Secondary inf probability
+    'recovery_rate': 1 / SYMPTOM_PERIOD,           # Recovery rate
+    'incubation_rate': 1 / LATENT_PERIOD,         # E->P incubation rate
+    'symp_onset_rate': 1 / PRODROME_PERIOD,         # P->I prodromal to symptomatic rate
     'prodromal_trans_scaling':
-     array([3, 3]),          # Prodromal transmission intensity relative to
+     PRODROME_SCALING * ones(2,),          # Prodromal transmission intensity relative to
                                 # full inf transmission
     'sus': array([1,1]),          # Relative susceptibility by
                                   # age/vulnerability class
-    'density_expo' : 1.0, # "Cauchemez parameter"
     'fit_method' : 'EL'
 }
 
 TWO_AGE_INT_SEPIRQ_SPEC = {
     'compartmental_structure': 'SEPIRQ', # This is which subsystem key to use
-    'SIP': 0.45,                     # Secondary inf probability
-    'recovery_rate': 1 / 5,           # Recovery rate
-    'incubation_rate': 1 / (0.2 * 5.8),         # E->P incubation rate
-    'symp_onset_rate': 1 / (0.8 * 5.8),         # P->I prodromal to symptomatic rate
+    'SITP': TRANCHE2_SITP,                     # Secondary inf probability
+    'recovery_rate': 1 / SYMPTOM_PERIOD,           # Recovery rate
+    'incubation_rate': 1 / LATENT_PERIOD,         # E->P incubation rate
+    'symp_onset_rate': 1 / PRODROME_PERIOD,         # P->I prodromal to symptomatic rate
     'exp_iso_rate': 1/1 * ones(2,),  # Ave. time in days to detection by class
     'pro_iso_rate': 1/1 * ones(2,),
     'inf_iso_rate': 1/1 * ones(2,),
@@ -146,22 +163,21 @@ TWO_AGE_INT_SEPIRQ_SPEC = {
            [True, True, True]]), # Element (i,j) is "If someone of class j is
                                  # present, class i will isolate internally"
     'prodromal_trans_scaling':
-     array([3, 3]),          # Prodromal transmission intensity relative to
+     PRODROME_SCALING * ones(2,),          # Prodromal transmission intensity relative to
                                 # full inf transmission
     'iso_trans_scaling':
      array([1,1]),          # Prodromal transmission intensity relative to full
                             # inf transmission
     'sus': array([1,1]),    # Relative susceptibility by age/vulnerability class
-    'density_expo' : 1.0, # "Cauchemez parameter"
     'fit_method' : 'EL'
 }
 
 TWO_AGE_EXT_SEPIRQ_SPEC = {
     'compartmental_structure': 'SEPIRQ', # This is which subsystem key to use
-    'SIP': 0.45,                     # Secondary inf probability
-    'recovery_rate': 1 / 5,           # Recovery rate
-    'incubation_rate': 1 / (0.2 * 5.8),         # E->P incubation rate
-    'symp_onset_rate': 1 / (0.8 * 5.8),         # P->I prodromal to symptomatic rate
+    'SITP': TRANCHE2_SITP,                     # Secondary inf probability
+    'recovery_rate': 1 / SYMPTOM_PERIOD,           # Recovery rate
+    'incubation_rate': 1 / LATENT_PERIOD,         # E->P incubation rate
+    'symp_onset_rate': 1 / PRODROME_PERIOD,         # P->I prodromal to symptomatic rate
     'exp_iso_rate': 1/1 * ones(2,),  # Ave. time in days to detection by class
     'pro_iso_rate': 1/1 * ones(2,),
     'inf_iso_rate': 1/1 * ones(2,),
@@ -175,13 +191,12 @@ TWO_AGE_EXT_SEPIRQ_SPEC = {
            [False, False, False]]), # Element (i,j) is "If someone of class j is
                                     # present, class i will isolate externally"
     'prodromal_trans_scaling':
-     array([3, 3]),          # Prodromal transmission intensity relative to
+     PRODROME_SCALING * ones(2,),          # Prodromal transmission intensity relative to
                                 # full inf transmission
     'iso_trans_scaling':
      array([1,1]),          # Isolated transmission intensity relative to full
                             # inf transmission
     'sus': array([1,1]),    # Relative susceptibility by age/vulnerability class
-    'density_expo' : 1.0, # "Cauchemez parameter"
     'fit_method' : 'EL'
 }
 

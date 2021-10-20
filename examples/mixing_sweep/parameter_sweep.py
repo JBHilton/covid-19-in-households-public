@@ -24,6 +24,7 @@ from model.imports import NoImportModel
 if isdir('outputs/mixing_sweep') is False:
     mkdir('outputs/mixing_sweep')
 
+SPEC = {**TWO_AGE_SEPIR_SPEC_FOR_FITTING, **TWO_AGE_UK_SPEC}
 DOUBLING_TIME = 3
 growth_rate = log(2) / DOUBLING_TIME
 
@@ -40,7 +41,6 @@ if isfile('outputs/mixing_sweep/beta_ext.pkl') is True:
     with open('outputs/mixing_sweep/beta_ext.pkl', 'rb') as f:
         beta_ext = load(f)
 else:
-    SPEC = {**TWO_AGE_SEPIR_SPEC_FOR_FITTING, **TWO_AGE_UK_SPEC}
     model_input_to_fit = SEPIRInput(SPEC, composition_list, comp_dist)
     household_population_to_fit = HouseholdPopulation(
         composition_list, comp_dist, model_input_to_fit)
@@ -55,7 +55,7 @@ else:
 
 prev=1.0e-5 # Starting prevalence
 antibody_prev=0 # Starting antibody prev/immunity
-gr_interval = [-0.5*this_spec['recovery_rate'], 1] # Interval used in growth rate estimation
+gr_interval = [-0.5*SPEC['recovery_rate'], 1] # Interval used in growth rate estimation
 gr_tol = 1e-3 # Absolute tolerance for growth rate estimation
 
 class MixingAnalysis:
@@ -76,10 +76,9 @@ class MixingAnalysis:
     def _implement_mixing(self, p):
         print('p=',p)
         this_spec = deepcopy(self.basic_spec)
-        this_spec['AR'] = p[0]
         model_input = SEPIRInput(this_spec, composition_list, comp_dist)
-        model_input.k_home = (1 - p[1]) * model_input.k_home
-        model_input.k_ext = (1 - p[2]) * beta_ext * model_input.k_ext
+        model_input.k_home = (1 - p[0]) * model_input.k_home
+        model_input.k_ext = (1 - p[1]) * beta_ext * model_input.k_ext
 
         household_population = HouseholdPopulation(
             composition_list, comp_dist, model_input)
@@ -135,13 +134,11 @@ class MixingAnalysis:
         return [growth_rate, peaks, R_end, hh_outbreak_prop, attack_ratio]
 
 def main(no_of_workers,
-         sip_vals,
          internal_mix_vals,
          external_mix_vals):
     main_start = get_time()
     mixing_system = MixingAnalysis()
     results = []
-    sip_range = arange(sip_vals[0], sip_vals[1], sip_vals[2])
     internal_mix_range = arange(internal_mix_vals[0],
                                 internal_mix_vals[1],
                                 internal_mix_vals[2])
@@ -149,8 +146,7 @@ def main(no_of_workers,
                                 external_mix_vals[1],
                                 external_mix_vals[2])
     params = array([
-        [a, i, e]
-        for a in sip_range
+        [i, e]
         for i in internal_mix_range
         for e in external_mix_range])
 
@@ -158,23 +154,18 @@ def main(no_of_workers,
         results = pool.map(mixing_system, params)
 
     growth_rate_data = array([r[0] for r in results]).reshape(
-        len(sip_range),
         len(internal_mix_range),
         len(external_mix_range))
     peak_data = array([r[1] for r in results]).reshape(
-        len(sip_range),
         len(internal_mix_range),
         len(external_mix_range))
     end_data = array([r[2] for r in results]).reshape(
-        len(sip_range),
         len(internal_mix_range),
         len(external_mix_range))
     hh_prop_data = array([r[3] for r in results]).reshape(
-        len(sip_range),
         len(internal_mix_range),
         len(external_mix_range))
     attack_ratio_data = array([r[4] for r in results]).reshape(
-        len(sip_range),
         len(internal_mix_range),
         len(external_mix_range))
 
@@ -186,7 +177,6 @@ def main(no_of_workers,
              end_data,
              hh_prop_data,
              attack_ratio_data,
-             sip_range,
              internal_mix_range,
              external_mix_range),
             f)
@@ -197,7 +187,6 @@ def main(no_of_workers,
 if __name__ == '__main__':
     parser = ArgumentParser()
     parser.add_argument('--no_of_workers', type=int, default=8)
-    parser.add_argument('--sip_vals', type=int, default=[0.25, 1.0, 0.25])
     parser.add_argument('--internal_mix_vals',
                         type=int,
                         default=[0.0, 0.99, 0.1])
@@ -207,6 +196,5 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     main(args.no_of_workers,
-         args.sip_vals,
          args.internal_mix_vals,
          args.external_mix_vals)

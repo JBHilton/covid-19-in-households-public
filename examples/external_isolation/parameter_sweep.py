@@ -48,23 +48,24 @@ comp_dist = read_csv(
     'inputs/eng_and_wales_adult_child_vuln_composition_dist.csv',
     header=0).to_numpy().squeeze()
 
+# List of observed household compositions
+two_class_comp_list = read_csv(
+    'inputs/eng_and_wales_adult_child_composition_list.csv',
+    header=0).to_numpy()
+# Proportion of households which are in each composition
+two_class_comp_dist = read_csv(
+    'inputs/eng_and_wales_adult_child_composition_dist.csv',
+    header=0).to_numpy().squeeze()
+
 if isfile('outputs/oohi/beta_ext.pkl') is True:
     with open('outputs/oohi/beta_ext.pkl', 'rb') as f:
         beta_ext = load(f)
 else:
-    # List of observed household compositions
-    fitting_comp_list = read_csv(
-        'inputs/eng_and_wales_adult_child_composition_list.csv',
-        header=0).to_numpy()
-    # Proportion of households which are in each composition
-    fitting_comp_dist = read_csv(
-        'inputs/eng_and_wales_adult_child_composition_dist.csv',
-        header=0).to_numpy().squeeze()
     model_input_to_fit = SEPIRInput(SEPIR_SPEC,
-                                    fitting_comp_list,
-                                    fitting_comp_dist)
+                                    two_class_comp_list,
+                                    two_class_comp_dist)
     household_population_to_fit = HouseholdPopulation(
-        fitting_comp_list, fitting_comp_dist, model_input_to_fit)
+        two_class_comp_list, two_class_comp_dist, model_input_to_fit)
     print('number of states for 2-class pop is',
             household_population_to_fit.Q_int.shape)
     rhs_to_fit = SEPIRRateEquations(model_input_to_fit,
@@ -87,8 +88,10 @@ starting_immunity=1e-2 # Starting antibody prev/immunity
 class OOHIAnalysis:
     def __init__(self):
         self.pre_npi_input =  SEPIRInput(SEPIR_SPEC,
-                                         composition_list,
-                                         comp_dist)
+                                         two_class_comp_list,
+                                         two_class_comp_dist)
+        self.pre_npi_input.composition_list = composition_list
+        self.pre_npi_input.composition_distribution = comp_dist
         self.pre_npi_input.k_ext *= beta_ext
         self.pre_npi_input = add_vuln_class(self.pre_npi_input,
                             vuln_prop,
@@ -116,8 +119,10 @@ class OOHIAnalysis:
             print('calculating map matrix...')
             basic_npi_spec = deepcopy(OOHI_SPEC)
             basic_npi_input = SEPIRQInput(basic_npi_spec,
-                                        composition_list,
-                                        comp_dist)
+                                        two_class_comp_list,
+                                        two_class_comp_dist)
+            basic_npi_input.composition_list = composition_list
+            basic_npi_input.composition_distribution = comp_dist
             basic_npi_input.k_ext = beta_ext * basic_npi_input.k_ext
             basic_npi_input = add_vuln_class(basic_npi_input,
                                 vuln_prop,
@@ -156,7 +161,11 @@ class OOHIAnalysis:
         this_spec['pro_iso_rate'] = p[0] * relative_iso_rates[1] * ones(2,)
         this_spec['inf_iso_rate'] = p[0] * relative_iso_rates[2] * ones(2,)
         this_spec['ad_prob'] = p[1]
-        model_input = SEPIRQInput(this_spec, composition_list, comp_dist)
+        model_input = SEPIRQInput(this_spec,
+                                    two_class_comp_list,
+                                    two_class_comp_dist)
+        model_input.composition_list = composition_list
+        model_input.composition_distribution = comp_dist
         model_input.k_ext = beta_ext * model_input.k_ext
         model_input = add_vuln_class(model_input,
                             vuln_prop,

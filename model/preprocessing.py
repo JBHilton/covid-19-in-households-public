@@ -2,13 +2,13 @@
 from abc import ABC
 from copy import copy, deepcopy
 from numpy import (
-        append, arange, around, array, concatenate, cumsum, diag, hstack,
+        append, arange, around, array, concatenate, cumsum, diag, exp, hstack,
         identity, insert, ix_, kron, log, ndarray, ones, ones_like, prod,
         shape, tile, vstack, where, zeros)
 from numpy.linalg import eig
 from pandas import read_excel, read_csv
 from scipy.integrate import solve_ivp
-from scipy.optimize import root_scalar
+from scipy.optimize import minimize, root_scalar
 from scipy.sparse import block_diag
 from scipy.sparse import identity as spidentity
 from scipy.sparse.linalg import LinearOperator, spilu, spsolve
@@ -518,6 +518,26 @@ def det_from_spec(spec):
     }
     return text_to_type[spec['det_model']['type']](spec['det_model'])
 
+def calculate_sitp_rmse(x, model_input, sitp_data):
+    ''' This function calculates the root mean square error in the
+    susceptible-infectious transmission probability for a given set of
+    parameters and some empirical data.'''
+
+    beta_int = x[0]
+    density_expo = x[1]
+
+    err_array = zeros(sitp_data.shape)
+
+    for n, sitp in enumerate(sitp_data):
+        sitp_est = 1 - exp(
+                            - beta_int *
+                            model_input.ave_contact_dur *
+                            model_input.ave_trans / (n+1)**density_expo
+                            )
+        err_array[n] = (sitp - sitp_est)**2
+
+    return err_array.sum()
+
 
 class ModelInput(ABC):
     def __init__(self,
@@ -565,7 +585,6 @@ class ModelInput(ABC):
                 self.k_all, self.fine_bds, self.coarse_bds, self.pop_pyramid)
             self.k_ext = self.k_all - self.k_home
 
-        self.density_expo = spec['density_expo']
         self.composition_list = composition_list
         self.composition_distribution = composition_distribution
 
@@ -586,6 +605,11 @@ class ModelInput(ABC):
     def ave_hh_by_class(self):
         return self.composition_distribution.T.dot(self.composition_list)
 
+    @property
+    def ave_contact_dur(self):
+        k_home_scaled = diag(self.ave_hh_by_class).dot(self.k_home)
+        return eig(k_home_scaled)[0].max()
+
 class SIRInput(ModelInput):
     def __init__(self, spec, composition_list, composition_distribution):
         super().__init__(spec, composition_list, composition_distribution)
@@ -598,28 +622,29 @@ class SIRInput(ModelInput):
         self.inf_scales = [ones((self.no_age_classes,))] # In the SIR model
                                                          # there is only one
                                                          # infectious comp
+        self.gamma = self.spec['recovery_rate']
 
-        home_eig = max(eig(
-            self.sus * ((1/spec['recovery_rate']) *
-             (self.k_home))
-            )[0])
+        self.ave_trans = 1 / self.gamma
+
+        def sitp_rmse(x):
+            return calculate_sitp_rmse(x, self, spec['SITP'])
+
+        pars = minimize(sitp_rmse, array([1e-1,1]), bounds=((0,None),(0,1))).x
+        beta_int = pars[0]
+        self.density_expo = pars[1]
+        print('Estimated beta_int=',pars[0],', estimated density=',pars[1])
+
+        self.k_home = beta_int * self.k_home
+
         ext_eig = max(eig(
             self.sus * ((1/spec['recovery_rate']) *
              (self.k_ext))
             )[0])
-
-        R_int = - log(1 - spec['SIP']) * self.dens_adj_ave_hh_size
-
-        self.k_home = R_int * self.k_home / home_eig
         if spec['fit_method'] == 'R*':
-            external_scale = spec['R*'] / (self.ave_hh_size*spec['SIP'])
+            external_scale = spec['R*'] / (self.ave_hh_size*spec['SITP'])
         else:
             external_scale = 1
         self.k_ext = external_scale * self.k_ext / ext_eig
-
-    @property
-    def gamma(self):
-        return self.spec['recovery_rate']
 
 class SEIRInput(ModelInput):
     def __init__(self, spec, composition_list, composition_distribution):
@@ -633,20 +658,26 @@ class SEIRInput(ModelInput):
         self.sus = spec['sus']
         self.inf_scales = [ones((self.no_age_classes,))]
 
-        home_eig = max(eig(
-            self.sus * ((1/spec['recovery_rate']) *
-             (self.k_home))
-            )[0])
+        self.gamma = self.spec['recovery_rate']
+
+        self.ave_trans = 1 / self.gamma
+
+        def sitp_rmse(x):
+            return calculate_sitp_rmse(x, self, spec['SITP'])
+
+        pars = minimize(sitp_rmse, array([1e-1,1]), bounds=((0,None),(0,1))).x
+        beta_int = pars[0]
+        self.density_expo = pars[1]
+        print('Estimated beta_int=',pars[0],', estimated density=',pars[1])
+
+        self.k_home = beta_int * self.k_home
+
         ext_eig = max(eig(
             self.sus * ((1/spec['recovery_rate']) *
              (self.k_ext))
             )[0])
-
-        R_int = - log(1 - spec['SIP']) * self.dens_adj_ave_hh_size
-
-        self.k_home = R_int * self.k_home / home_eig
         if spec['fit_method'] == 'R*':
-            external_scale = spec['R*'] / (self.ave_hh_size*spec['SIP'])
+            external_scale = spec['R*'] / (self.ave_hh_size*spec['SITP'])
         else:
             external_scale = 1
         self.k_ext = external_scale * self.k_ext / ext_eig
@@ -654,10 +685,6 @@ class SEIRInput(ModelInput):
     @property
     def alpha(self):
         return self.spec['incubation_rate']
-
-    @property
-    def gamma(self):
-        return self.spec['recovery_rate']
 
 class SEPIRInput(ModelInput):
     def __init__(self, spec, composition_list, composition_distribution):
@@ -672,42 +699,39 @@ class SEPIRInput(ModelInput):
         self.inf_scales = [spec['prodromal_trans_scaling'],
                 ones(shape(spec['prodromal_trans_scaling']))]
 
-        home_eig = max(eig(
-            self.sus * ((1/spec['recovery_rate']) *
-             (self.k_home) + \
-            (1/spec['symp_onset_rate']) *
-            (self.k_home ) * spec['prodromal_trans_scaling'])
-            )[0])
+
+
+        self.alpha_2 = self.spec['symp_onset_rate']
+
+        self.gamma = self.spec['recovery_rate']
+
+        self.ave_trans = \
+            (self.inf_scales[0].dot(self.ave_hh_by_class) / self.alpha_2) +  \
+            (self.inf_scales[1].dot(self.ave_hh_by_class) / self.gamma)
+
+        def sitp_rmse(x):
+            return calculate_sitp_rmse(x, self, spec['SITP'])
+
+        pars = minimize(sitp_rmse, array([1e-1,1]), bounds=((0,None),(0,1))).x
+        beta_int = pars[0]
+        self.density_expo = pars[1]
+        print('Estimated beta_int=',pars[0],', estimated density=',pars[1])
+
+        self.k_home = beta_int * self.k_home
+
         ext_eig = max(eig(
             self.sus * ((1/spec['recovery_rate']) *
-             (self.k_ext) + \
-            (1/spec['symp_onset_rate']) *
-            (self.k_ext ) * spec['prodromal_trans_scaling'])
+             (self.k_ext))
             )[0])
-
-        R_int = - log(1 - spec['SIP']) * self.dens_adj_ave_hh_size
-
-        self.k_home = R_int * self.k_home / home_eig
-
         if spec['fit_method'] == 'R*':
-            external_scale = spec['R*'] / (self.ave_hh_size*spec['SIP'])
+            external_scale = spec['R*'] / (self.ave_hh_size*spec['SITP'])
         else:
             external_scale = 1
         self.k_ext = external_scale * self.k_ext / ext_eig
 
-
-
     @property
     def alpha_1(self):
         return self.spec['incubation_rate']
-
-    @property
-    def alpha_2(self):
-        return self.spec['symp_onset_rate']
-
-    @property
-    def gamma(self):
-        return self.spec['recovery_rate']
 
 class SEPIRQInput(ModelInput):
     def __init__(self, spec, composition_list, composition_distribution):
@@ -724,27 +748,31 @@ class SEPIRQInput(ModelInput):
                 ones(shape(spec['prodromal_trans_scaling'])),
                 spec['iso_trans_scaling']]
 
-        home_eig = max(eig(
-            self.sus * ((1/spec['recovery_rate']) *
-             (self.k_home) + \
-            (1/spec['symp_onset_rate']) *
-            (self.k_home ) * spec['prodromal_trans_scaling'])
-            )[0])
+        self.alpha_2 = self.spec['symp_onset_rate']
+
+        self.gamma = self.spec['recovery_rate']
+
+        self.ave_trans = \
+            (self.inf_scales[0].dot(self.ave_hh_by_class) / self.alpha_2) +  \
+            (self.inf_scales[1].dot(self.ave_hh_by_class) / self.gamma)
+
+        def sitp_rmse(x):
+            return calculate_sitp_rmse(x, self, spec['SITP'])
+
+        pars = minimize(sitp_rmse, array([1e-1,1]), bounds=((0,None),(0,1))).x
+        beta_int = pars[0]
+        self.density_expo = pars[1]
+
+        self.k_home = beta_int * self.k_home
+
         ext_eig = max(eig(
             self.sus * ((1/spec['recovery_rate']) *
-             (self.k_ext) + \
-            (1/spec['symp_onset_rate']) *
-            (self.k_ext ) * spec['prodromal_trans_scaling'])
+             (self.k_ext))
             )[0])
-
-        R_int = - log(1 - spec['SIP']) * self.dens_adj_ave_hh_size
-
-        self.k_home = R_int * self.k_home / home_eig
-
         if spec['fit_method'] == 'R*':
-            external_scale = spec['R*'] / (self.ave_hh_size*spec['SIP'])
+            external_scale = spec['R*'] / (self.ave_hh_size*spec['SITP'])
         else:
-            external_scale = 1 / (self.ave_hh_size*spec['SIP'])
+            external_scale = 1
         self.k_ext = external_scale * self.k_ext / ext_eig
 
         # To define the iso_rates property, we add some zeros which act as dummy
@@ -762,18 +790,9 @@ class SEPIRQInput(ModelInput):
         self.ad_prob = spec['ad_prob']
         self.discharge_rate = spec['discharge_rate']
 
-
     @property
     def alpha_1(self):
         return self.spec['incubation_rate']
-
-    @property
-    def alpha_2(self):
-        return self.spec['symp_onset_rate']
-
-    @property
-    def gamma(self):
-        return self.spec['recovery_rate']
 
 '''The following function constructs a matrix which maps the state (S,E,P,I,R)
 in the SEPIR model to the state (S,E,P,I,R,0) in the SEPIRQ model. This is used
