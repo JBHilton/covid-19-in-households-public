@@ -108,62 +108,65 @@ fig.savefig('plots/oohi/cum_iso.png',
             dpi=300)
 close()
 
-fig, ((ax1, ax2), (ax3, ax4)) = subplots(2,2,sharex=True)
+peak_max = max(vp_max, ip_max)
+end_max = max(ve_max, ci_max)
+
+fig, ((ax1, ax3), (ax2, ax4)) = subplots(2,2,sharex=True)
 
 axim=ax1.imshow(vuln_peaks,
            origin='lower',
            extent=(iso_rate_range[0],iso_rate_range[-1],0,1),
-           vmin=vp_min,
-           vmax=vp_max)
+           vmin=0,
+           vmax=peak_max)
 ax1.set_xlabel('Detection rate')
 ax1.set_ylabel('Adherence probability')
 
-divider = make_axes_locatable(ax1)
-cax = divider.append_axes("right", size="5%", pad=0.05)
-cbar = colorbar(axim,
-                label="Peak % prevalence in vulnerable population",
-                cax=cax)
+# divider = make_axes_locatable(ax1)
+# cax = divider.append_axes("right", size="5%", pad=0.05)
+# cbar = colorbar(axim,
+#                 label="Peak % prevalence in vulnerable population",
+#                 cax=cax)
 
 axim=ax2.imshow(vuln_end,
            origin='lower',
            extent=(iso_rate_range[0],iso_rate_range[-1],0,1),
-           vmin=ve_min,
-           vmax=ve_max)
+           vmin=0,
+           vmax=end_max)
 ax2.set_xlabel('Detection rate')
 ax2.set_ylabel('Adherence probability')
 
-divider = make_axes_locatable(ax2)
-cax = divider.append_axes("right", size="5%", pad=0.05)
-cbar = colorbar(axim,
-                label="Cumulative % infected in vulnerable population",
-                cax=cax)
+# divider = make_axes_locatable(ax2)
+# cax = divider.append_axes("right", size="5%", pad=0.05)
+# cbar = colorbar(axim,
+#                 label="Cumulative % infected in vulnerable population",
+#                 cax=cax)
 
 axim=ax3.imshow(iso_peaks,
            origin='lower',
            extent=(iso_rate_range[0],iso_rate_range[-1],0,1),
-           vmin=ip_min,
-           vmax=ip_max)
+           vmin=0,
+           vmax=peak_max)
 ax3.set_xlabel('Detection rate')
 ax3.set_ylabel('Adherence probability')
 
 divider = make_axes_locatable(ax3)
-cax = divider.append_axes("right", size="5%", pad=0.05)
+cax = divider.append_axes("right", size="5%", pad=0.1)
 cbar = colorbar(axim,
-                label="Peak % population isolating",
+                label="Peak %",
                 cax=cax)
 
 axim=ax4.imshow(cum_iso,
            origin='lower',
            extent=(iso_rate_range[0],iso_rate_range[-1],0,1),
-           vmin=ci_min,
-           vmax=ci_max)
+           vmin=0,
+           vmax=end_max)
 ax4.set_xlabel('Detection rate')
 ax4.set_ylabel('Adherence probability')
 
 divider = make_axes_locatable(ax4)
-cax = divider.append_axes("right", size="5%", pad=0.05)
+cax = divider.append_axes("right", size="5%", pad=0.1)
 cbar = colorbar(axim,
-                label="Cumulative % isolating",
+                label="Cumulative %",
                 cax=cax)
 
 fig.savefig('plots/oohi/grid_plot.png',

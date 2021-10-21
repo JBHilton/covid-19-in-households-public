@@ -5,7 +5,8 @@ from os import mkdir
 from os.path import isdir
 from pickle import load
 from numpy import arange, array, atleast_2d, hstack, sum, where, zeros
-from matplotlib.pyplot import close, colorbar, imshow, set_cmap, subplots
+from matplotlib.pyplot import axes, close, colorbar, imshow, set_cmap, subplots
+from mpl_toolkits.axes_grid1 import make_axes_locatable
 from seaborn import heatmap
 
 if isdir('plots/long_term_bubbles') is False:
@@ -78,4 +79,50 @@ ax.set_ylabel('% uptake of support bubbles')
 cbar = colorbar(label="% attack rate in infected households",fraction=0.046, pad=0.04)
 
 fig.savefig('plots/long_term_bubbles/attack_ratio.png',bbox_inches='tight', dpi=300)
+close()
+
+fig, ((ax1, ax2), (ax3, ax4)) = subplots(2, 2)
+axim=ax1.imshow(peaks,
+                origin='lower',
+                extent=(0,1,0,1),
+                vmin=peak_min,
+                vmax=peak_max)
+ax1.set_ylabel('% reduction in\n within-household\n transmission')
+divider = make_axes_locatable(ax1)
+cax = divider.append_axes("right", size="5%", pad=0.05)
+cbar = colorbar(axim, label="Peak % prevalence", cax=cax)
+
+axim=ax2.imshow(R_end,
+                origin='lower',
+                extent=(0,1,0,1),
+                vmin=R_end_min,
+                vmax=R_end_max)
+divider = make_axes_locatable(ax2)
+cax = divider.append_axes("right", size="5%", pad=0.05)
+cbar = colorbar(axim, label="Cumulative % prevalence", cax=cax)
+
+axim=ax3.imshow(hh_prop,
+                origin='lower',
+                extent=(0,1,0,1),
+                vmin=hh_prop_min,
+                vmax=hh_prop_max)
+ax3.set_ylabel('% uptake of support bubbles')
+ax3.set_xlabel('% reduction in\n between-household\n transmission')
+divider = make_axes_locatable(ax3)
+cax = divider.append_axes("right", size="5%", pad=0.05)
+cbar = colorbar(axim, label="% of households infected", cax=cax)
+
+axim=ax4.imshow(attack_ratio,
+                origin='lower',
+                extent=(0,1,0,1),
+                vmin=attack_ratio_min,
+                vmax=attack_ratio_max)
+ax4.set_xlabel('% reduction in\n between-household\n transmission')
+divider = make_axes_locatable(ax4)
+cax = divider.append_axes("right", size="5%", pad=0.05)
+cbar = colorbar(axim, label="% attack ratio", cax=cax)
+
+fig.savefig('plots/long_term_bubbles/grid_plot.png',
+            bbox_inches='tight',
+            dpi=300)
 close()

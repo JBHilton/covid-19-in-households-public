@@ -1182,7 +1182,7 @@ def estimate_growth_rate(household_population,
             root_output = root_scalar(eval_from_r, bracket=[r_min, r_max], method='brentq', xtol=tol, x0=x0)
             growth_rate_found = True
         except:
-            r_min = 0.5 * r_min
+            r_min = 0.9 * r_min
 
     r_now = root_output.root
     print('converged in',root_output.iterations,'iterations.')

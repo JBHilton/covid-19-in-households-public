@@ -5,6 +5,7 @@ from os.path import isdir
 from pickle import dump, load
 from numpy import array, atleast_2d, hstack, where, zeros
 from matplotlib.pyplot import axes, close, colorbar, imshow, subplots
+from mpl_toolkits.axes_grid1 import make_axes_locatable
 
 if isdir('plots/temp_bubbles') is False:
     mkdir('plots/temp_bubbles')
@@ -51,17 +52,6 @@ peak_datamax = 100 * array([peak_data0.max(),
                             peak_data3.max(),
                             peak_data4.max()]).max()
 
-fig, ax = subplots(1,1,sharex=True)
-imshow(100 * peak_data0, origin='lower',extent=(0, 1, 0, 1), vmin=peak_datamin, vmax=peak_datamax)
-
-ax.set_ylabel('Single household\n density exponent')
-ax.set_xlabel('Bubbled density exponent')
-
-fig.tight_layout()
-
-fig.savefig('plots/temp_bubbles/peak_data0.png',bbox_inches='tight', dpi=300)
-close()
-
 fig, ((ax1, ax2), (ax3, ax4)) = subplots(2,2)
 pd_1=ax1.imshow(100 * peak_data1, origin='lower',extent=(0, 1, 0, 1), vmin=peak_datamin, vmax=peak_datamax)
 ax1.set_ylabel('Single household\n density exponent')
@@ -92,17 +82,6 @@ end_datamax = 100 * array([end_data0.max(),
                             end_data3.max(),
                             end_data4.max()]).max()
 
-fig, ax = subplots(1,1,sharex=True)
-imshow(100 * end_data0, origin='lower',extent=(0, 1, 0, 1), vmin=end_datamin, vmax=end_datamax)
-
-ax.set_ylabel('Single household\n density exponent')
-ax.set_xlabel('Bubbled density exponent')
-
-fig.tight_layout()
-
-fig.savefig('plots/temp_bubbles/end_data0.png',bbox_inches='tight', dpi=300)
-close()
-
 fig, ((ax1, ax2), (ax3, ax4)) = subplots(2,2)
 ed_1=ax1.imshow(100 * end_data1, origin='lower',extent=(0, 1, 0, 1), vmin=end_datamin, vmax=end_datamax)
 ax1.set_ylabel('Single household\n density exponent')
@@ -132,17 +111,6 @@ ar_datamax = 100 * array([ar_data0.max(),
                             ar_data2.max(),
                             ar_data3.max(),
                             ar_data4.max()]).max()
-
-fig, ax = subplots(1,1,sharex=True)
-imshow(100 * ar_data0, origin='lower',extent=(0, 1, 0, 1), vmin=ar_datamin, vmax=ar_datamax)
-
-ax.set_ylabel('Single household\n density exponent')
-ax.set_xlabel('Bubbled density exponent')
-
-fig.tight_layout()
-
-fig.savefig('plots/temp_bubbles/ar_data0.png',bbox_inches='tight', dpi=300)
-close()
 
 fig, ((ax1, ax2), (ax3, ax4)) = subplots(2,2)
 ard_1=ax1.imshow(100 * ar_data1, origin='lower',extent=(0, 1, 0, 1), vmin=ar_datamin, vmax=ar_datamax)
@@ -202,4 +170,46 @@ cax = axes([0.9, 0.1, 0.05, 0.75])
 fig.colorbar(hhd_1, label="% of households infected", cax=cax)
 
 fig.savefig('plots/temp_bubbles/hh_prop_data_1to4.png',bbox_inches='tight', dpi=300)
+close()
+
+''' Now do single day strategy '''
+
+fig, ((ax1, ax2, ax3)) = subplots(1,3,sharex=True)
+axim = ax1.imshow(100 * peak_data0,
+                  origin='lower',extent=(0, 1, 0, 1),
+                  vmin=peak_datamin,
+                  vmax=peak_datamax)
+ax1.set_ylabel('Single household\n density exponent')
+ax1.set_xlabel('Bubbled density\n exponent')
+divider = make_axes_locatable(ax1)
+cax = divider.append_axes("top", size="5%", pad=0.25)
+cbar = colorbar(axim, cax=cax, orientation='horizontal')
+cbar.ax.set_title("Peak % prevalence")
+cbar.ax.title.set_fontsize(8)
+
+axim = ax2.imshow(100 * end_data0,
+                  origin='lower',
+                  extent=(0, 1, 0, 1),
+                  vmin=end_datamin,
+                  vmax=end_datamax)
+ax2.set_xlabel('Bubbled density\n exponent')
+divider = make_axes_locatable(ax2)
+cax = divider.append_axes("top", size="5%", pad=0.25)
+cbar = colorbar(axim, cax=cax, orientation='horizontal')
+cbar.ax.set_title("Cumulative % prevalence")
+cbar.ax.title.set_fontsize(8)
+
+axim = ax3.imshow(100 * ar_data0,
+                  origin='lower',
+                  extent=(0, 1, 0, 1),
+                  vmin=ar_datamin,
+                  vmax=ar_datamax)
+ax3.set_xlabel('Bubbled density\n exponent')
+divider = make_axes_locatable(ax3)
+cax = divider.append_axes("top", size="5%", pad=0.25)
+cbar = colorbar(axim, cax=cax, orientation='horizontal')
+cbar.ax.set_title("% attack ratio")
+cbar.ax.title.set_fontsize(8)
+
+fig.savefig('plots/temp_bubbles/single_day_grid.png',bbox_inches='tight', dpi=300)
 close()

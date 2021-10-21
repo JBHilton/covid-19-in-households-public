@@ -119,16 +119,16 @@ class MixingAnalysis:
                         household_population.states[:, 4::5].sum(axis=1)
         attack_ratio = \
                     (household_population.state_to_comp_matrix.T.dot(R_end_vec))
-        attack_ratio = model_input.composition_distribution.dot(
+        attack_ratio = 100 * model_input.composition_distribution.dot(
                                         attack_ratio / model_input.hh_size_list)
 
         recovered_states = where(
             ((rhs.states_sus_only + rhs.states_rec_only).sum(axis=1)
                     == household_population.states.sum(axis=1))
             & ((rhs.states_rec_only).sum(axis=1) > 0))[0]
-        hh_outbreak_prop = H[recovered_states, -1].sum()
+        hh_outbreak_prop = 100 * H[recovered_states, -1].sum()
 
-        peaks = 100 * max(I)
+        peaks = 100 * max(I) #
         R_end = 100 * R[-1]
 
         return [growth_rate, peaks, R_end, hh_outbreak_prop, attack_ratio]
