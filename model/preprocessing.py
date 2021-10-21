@@ -1135,7 +1135,8 @@ def get_multiplier_eigenvalue(r,
     return evalue
 
 def estimate_growth_rate(household_population,
-                         rhs,interval=[-1, 1],
+                         rhs,
+                         interval=[-1, 1],
                          tol=1e-3,
                          x0=1e-3):
 
@@ -1175,7 +1176,13 @@ def estimate_growth_rate(household_population,
                                          index_states,
                                          no_index_states) - 1
 
-    root_output = root_scalar(eval_from_r, bracket=[r_min, r_max], method='brentq', xtol=tol, x0=x0)
+    growth_rate_found = False
+    while growth_rate_found is False:
+        try:
+            root_output = root_scalar(eval_from_r, bracket=[r_min, r_max], method='brentq', xtol=tol, x0=x0)
+            growth_rate_found = True
+        except:
+            r_min = 0.5 * r_min
 
     r_now = root_output.root
     print('converged in',root_output.iterations,'iterations.')

@@ -34,7 +34,7 @@ GUEST_TRANS_SCALING = 1 # This is strength of guest-host interactions relative t
 
 growth_rate = X0
 prev = 1e-2
-starting_immunity = 1e-2
+starting_immunity = 1e-1
 
 comp_dist = read_csv(
     'inputs/england_hh_size_dist.csv',
