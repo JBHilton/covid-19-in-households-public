@@ -1138,7 +1138,8 @@ def estimate_growth_rate(household_population,
                          rhs,
                          interval=[-1, 1],
                          tol=1e-3,
-                         x0=1e-3):
+                         x0=1e-3,
+                         r_min_discount=0.95):
 
     reverse_comp_dist = diag(household_population.composition_distribution). \
         dot(household_population.composition_list)
@@ -1182,7 +1183,7 @@ def estimate_growth_rate(household_population,
             root_output = root_scalar(eval_from_r, bracket=[r_min, r_max], method='brentq', xtol=tol, x0=x0)
             growth_rate_found = True
         except:
-            r_min = 0.9 * r_min
+            r_min = r_max - r_min_discount * (r_max - r_min)
 
     r_now = root_output.root
     print('converged in',root_output.iterations,'iterations.')
