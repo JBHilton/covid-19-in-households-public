@@ -229,10 +229,10 @@ if __name__ == '__main__':
     parser.add_argument('--no_of_workers', type=int, default=8)
     parser.add_argument('--bubble_prob_vals',
                         type=int,
-                        default=[0.0, 1.0, 0.25])
+                        default=[0.0, 1.01, 0.05])
     parser.add_argument('--external_mix_vals',
                         type=int,
-                        default=[0.0, 1.0, 0.25])
+                        default=[0.0, 0.99, 0.05])
     args = parser.parse_args()
 
     main(args.no_of_workers,

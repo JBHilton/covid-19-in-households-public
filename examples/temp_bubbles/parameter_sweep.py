@@ -25,7 +25,7 @@ if isdir('outputs/temp_bubbles') is False:
     mkdir('outputs/temp_bubbles')
 
 SPEC = {**SINGLE_AGE_UK_SPEC, **SINGLE_AGE_SEIR_SPEC_FOR_FITTING}
-X0 = 3 * 1e-2 # Growth rate estimate for mid-December 2020 from ONS
+X0 = 2 * 1e-2 # Growth rate estimate for mid-December 2020 from ONS
 ATOL = 1e-16 # IVP solver tolerance
 NO_COMPARTMENTS = 4 # We use an SEIR model, hence 4 compartments
 MAX_MERGED_SIZE = 10 # We only allow merges where total individuals is at most 12
@@ -781,8 +781,8 @@ def main(no_of_workers,
 if __name__ == '__main__':
     parser = ArgumentParser()
     parser.add_argument('--no_of_workers', type=int, default=8)
-    parser.add_argument('--unmerged_exponent_vals', type=float, default=[0.0, 1.1, 0.1])
-    parser.add_argument('--merged_exponent_vals', type=float, default=[0.0, 1.1, 0.1])
+    parser.add_argument('--unmerged_exponent_vals', type=float, default=[0.0, 1.01, 0.05])
+    parser.add_argument('--merged_exponent_vals', type=float, default=[0.0, 1.01, 0.05])
     args = parser.parse_args()
     start = time()
     main(args.no_of_workers,

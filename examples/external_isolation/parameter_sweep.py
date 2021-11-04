@@ -29,7 +29,7 @@ if isdir('outputs/oohi') is False:
     mkdir('outputs/oohi')
 
 DOUBLING_TIME = 10
-growth_rate = log(2) / DOUBLING_TIME
+growth_rate = -0.01
 
 SEPIR_SPEC = {**TWO_AGE_SEPIR_SPEC_FOR_FITTING, **TWO_AGE_UK_SPEC}
 OOHI_SPEC = {**TWO_AGE_UK_SPEC, **TWO_AGE_EXT_SEPIRQ_SPEC}
@@ -264,8 +264,8 @@ def main(no_of_workers,
 if __name__ == '__main__':
     parser = ArgumentParser()
     parser.add_argument('--no_of_workers', type=int, default=8)
-    parser.add_argument('--iso_rate_vals', type=int, default=[0.01, 1.1, 0.1])
-    parser.add_argument('--iso_prob_vals', type=int, default=[0.0, 1.1, 0.1])
+    parser.add_argument('--iso_rate_vals', type=int, default=[0.01, 1.01, 0.05])
+    parser.add_argument('--iso_prob_vals', type=int, default=[0.0, 1.01, 0.05])
     args = parser.parse_args()
 
     main(args.no_of_workers,
