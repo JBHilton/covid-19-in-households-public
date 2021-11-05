@@ -548,6 +548,7 @@ class ModelInput(ABC):
         self.spec = deepcopy(spec)
 
         self.compartmental_structure = spec['compartmental_structure']
+        self.no_compartments = subsystem_key[self.compartmental_structure][1]
         self.inf_compartment_list = \
             subsystem_key[self.compartmental_structure][2]
         self.no_inf_compartments = \
@@ -595,6 +596,10 @@ class ModelInput(ABC):
     def ave_hh_size(self):
         # Average household size
         return self.composition_distribution.T.dot(self.hh_size_list)
+    @property
+    def max_hh_size(self):
+        # Average household size
+        return self.hh_size_list.max()
     @property
     def dens_adj_ave_hh_size(self):
           # Average household size adjusted for density,
@@ -1467,3 +1472,27 @@ def merge_hh_inputs(model_input,
         setattr(merged_input, par_name, expanded_param)
 
     return merged_input
+
+''' The following function calculates hh size-stratified attack ratio from
+simulation results.'''
+
+def AR_by_size(household_population, H, R_comp):
+    max_hh_size = household_population.model_input.max_hh_size
+    attack_ratio = zeros((max_hh_size,))
+    for hh_size in range(1,max_hh_size+1):
+        R_probs = zeros((hh_size+1,))
+        for R in range(hh_size+1):
+            this_hh_range = where(
+            household_population.states.sum(axis=1)==hh_size)[0]
+            this_R_range = where(
+                (household_population.states.sum(axis=1)==hh_size) &
+                (household_population.states[:,
+                    R_comp::household_population.model_input.no_compartments
+                    ].sum(axis=1)==R)
+                )[0]
+            R_probs[R] = \
+                sum(H[this_R_range,-1]) / sum(H[this_hh_range,-1])
+        print('R_probs = ',R_probs)
+        attack_ratio[hh_size-1] = sum(arange(0, hh_size,1) *
+            R_probs[1:]/sum(R_probs[1:]))/hh_size
+    return attack_ratio

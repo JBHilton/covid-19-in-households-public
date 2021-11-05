@@ -15,8 +15,9 @@ from time import time as get_time
 from scipy.integrate import solve_ivp
 from matplotlib.pyplot import subplots
 from matplotlib.cm import get_cmap
-from model.preprocessing import ( estimate_beta_ext, estimate_growth_rate,
-        SEPIRInput, HouseholdPopulation, make_initial_condition_by_eigenvector)
+from model.preprocessing import ( AR_by_size, estimate_beta_ext,
+        estimate_growth_rate, SEPIRInput, HouseholdPopulation,
+        make_initial_condition_by_eigenvector)
 from model.specs import TWO_AGE_SEPIR_SPEC_FOR_FITTING, TWO_AGE_UK_SPEC
 from model.common import SEPIRRateEquations
 from model.imports import NoImportModel
@@ -28,6 +29,8 @@ SPEC = {**TWO_AGE_SEPIR_SPEC_FOR_FITTING, **TWO_AGE_UK_SPEC}
 DOUBLING_TIME = 3
 growth_rate = log(2) / DOUBLING_TIME
 
+R_comp = 4
+
 # List of observed household compositions
 composition_list = read_csv(
     'inputs/eng_and_wales_adult_child_composition_list.csv',
@@ -37,11 +40,11 @@ comp_dist = read_csv(
     'inputs/eng_and_wales_adult_child_composition_dist.csv',
     header=0).to_numpy().squeeze()
 
+model_input_to_fit = SEPIRInput(SPEC, composition_list, comp_dist)
 if isfile('outputs/mixing_sweep/beta_ext.pkl') is True:
     with open('outputs/mixing_sweep/beta_ext.pkl', 'rb') as f:
         beta_ext = load(f)
 else:
-    model_input_to_fit = SEPIRInput(SPEC, composition_list, comp_dist)
     household_population_to_fit = HouseholdPopulation(
         composition_list, comp_dist, model_input_to_fit)
     rhs_to_fit = SEPIRRateEquations(model_input_to_fit,
@@ -101,7 +104,7 @@ class MixingAnalysis:
                                                    prev,
                                                    antibody_prev)
 
-        no_days = 100
+        no_days = 30
         tspan = (0.0, no_days)
         solution = solve_ivp(rhs, tspan, H0, first_step=0.001, atol=1e-16)
 
@@ -131,7 +134,14 @@ class MixingAnalysis:
         peaks = 100 * max(I) #
         R_end = 100 * R[-1]
 
-        return [growth_rate, peaks, R_end, hh_outbreak_prop, attack_ratio]
+        ar_by_size = AR_by_size(household_population, H, R_comp)
+
+        return [growth_rate,
+                peaks,
+                R_end,
+                hh_outbreak_prop,
+                attack_ratio,
+                ar_by_size]
 
 def main(no_of_workers,
          internal_mix_vals,
@@ -153,6 +163,9 @@ def main(no_of_workers,
     with Pool(no_of_workers) as pool:
         results = pool.map(mixing_system, params)
 
+
+    print('Parameter sweep took',get_time()-main_start,'seconds.')
+
     growth_rate_data = array([r[0] for r in results]).reshape(
         len(internal_mix_range),
         len(external_mix_range))
@@ -168,6 +181,10 @@ def main(no_of_workers,
     attack_ratio_data = array([r[4] for r in results]).reshape(
         len(internal_mix_range),
         len(external_mix_range))
+    ar_by_size_data = array([r[5] for r in results]).reshape(
+        len(internal_mix_range),
+        len(external_mix_range),
+        model_input_to_fit.max_hh_size)
 
     fname = 'outputs/mixing_sweep/results.pkl'
     with open(fname, 'wb') as f:
@@ -177,10 +194,10 @@ def main(no_of_workers,
              end_data,
              hh_prop_data,
              attack_ratio_data,
+             ar_by_size_data,
              internal_mix_range,
              external_mix_range),
             f)
-    print('Parameter sweep took',get_time()-main_start,'seconds.')
 
     return -1
 
@@ -189,10 +206,10 @@ if __name__ == '__main__':
     parser.add_argument('--no_of_workers', type=int, default=8)
     parser.add_argument('--internal_mix_vals',
                         type=int,
-                        default=[0.0, 0.99, 0.05])
+                        default=[0.0, 0.99, 0.01])
     parser.add_argument('--external_mix_vals',
                         type=int,
-                        default=[0.0, 0.99, 0.05])
+                        default=[0.0, 0.99, 0.01])
     args = parser.parse_args()
 
     main(args.no_of_workers,

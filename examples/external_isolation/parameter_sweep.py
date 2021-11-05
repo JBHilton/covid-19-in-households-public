@@ -1,4 +1,4 @@
-''' In this script we do projections  of the impact of support bubble policies
+''' In this script we do projections  of the impact of OOHI policies
  by doing a 2D parameter sweep'''
 
 from argparse import ArgumentParser

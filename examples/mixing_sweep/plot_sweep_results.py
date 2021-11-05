@@ -17,6 +17,7 @@ with open('outputs/mixing_sweep/results.pkl','rb') as f:
     R_end,
     hh_prop,
     attack_ratio,
+    ar_by_size,
     internal_mix_range,
     external_mix_range) = load(f)
 
@@ -164,3 +165,19 @@ fig.savefig('plots/mixing_sweep/grid_plot.png',
             bbox_inches='tight',
             dpi=300)
 close()
+
+baseline_ar = ar_by_size[0,0,:] # AR by size with no interventions
+ar_int_40 = ar_by_size[2,0,:] # AR with 40% internal mixing reduction
+ar_ext_40 = ar_by_size[0,2,:] # AR with 40% external reduction
+ar_both_40 = ar_by_size[2,2,:] # AR with both interventions
+
+fig, ax = subplots(1,1)
+ax.plot(range(1,7), baseline_ar, label = 'No interventions')
+ax.plot(range(1,7), ar_int_40, label = '40% within-hh reduction')
+ax.plot(range(1,7), ar_ext_40, label = '40% between-hh reduction')
+ax.plot(range(1,7), ar_both_40, label = '40% reduction on both levels')
+ax.set_xlabel('Household size')
+ax.set_ylabel('Expected number of secondary cases')
+ax.legend()
+
+fig.savefig('plots/mixing_sweep/ar_by_size.png')
