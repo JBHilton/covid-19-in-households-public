@@ -36,7 +36,7 @@ axim=ax.imshow(vuln_peaks,
            vmin=vp_min,
            vmax=vp_max)
 ax.set_xlabel('Detection rate')
-ax.set_ylabel('Adherence probability')
+ax.set_ylabel('Isolation probability')
 
 divider = make_axes_locatable(ax)
 cax = divider.append_axes("right", size="5%", pad=0.05)
@@ -55,7 +55,7 @@ axim=ax.imshow(vuln_end,
            vmin=ve_min,
            vmax=ve_max)
 ax.set_xlabel('Detection rate')
-ax.set_ylabel('Adherence probability')
+ax.set_ylabel('Isolation probability')
 
 divider = make_axes_locatable(ax)
 cax = divider.append_axes("right", size="5%", pad=0.05)
@@ -75,7 +75,7 @@ axim=ax.imshow(iso_peaks,
            vmin=ip_min,
            vmax=ip_max)
 ax.set_xlabel('Detection rate')
-ax.set_ylabel('Adherence probability')
+ax.set_ylabel('Isolation probability')
 
 divider = make_axes_locatable(ax)
 cax = divider.append_axes("right", size="5%", pad=0.05)
@@ -95,7 +95,7 @@ axim=ax.imshow(cum_iso,
            vmin=ci_min,
            vmax=ci_max)
 ax.set_xlabel('Detection rate')
-ax.set_ylabel('Adherence probability')
+ax.set_ylabel('Isolation probability')
 
 divider = make_axes_locatable(ax)
 cax = divider.append_axes("right", size="5%", pad=0.05)
@@ -119,7 +119,7 @@ axim=ax1.imshow(vuln_peaks,
            vmin=0,
            vmax=peak_max)
 ax1.set_xlabel('Detection rate')
-ax1.set_ylabel('Adherence probability')
+ax1.set_ylabel('Isolation probability')
 
 # divider = make_axes_locatable(ax1)
 # cax = divider.append_axes("right", size="5%", pad=0.05)
@@ -133,7 +133,7 @@ axim=ax2.imshow(vuln_end,
            vmin=0,
            vmax=end_max)
 ax2.set_xlabel('Detection rate')
-ax2.set_ylabel('Adherence probability')
+ax2.set_ylabel('Isolation probability')
 
 # divider = make_axes_locatable(ax2)
 # cax = divider.append_axes("right", size="5%", pad=0.05)
@@ -147,7 +147,7 @@ axim=ax3.imshow(iso_peaks,
            vmin=0,
            vmax=peak_max)
 ax3.set_xlabel('Detection rate')
-ax3.set_ylabel('Adherence probability')
+ax3.set_ylabel('Isolation probability')
 
 divider = make_axes_locatable(ax3)
 cax = divider.append_axes("right", size="5%", pad=0.1)
@@ -161,7 +161,7 @@ axim=ax4.imshow(cum_iso,
            vmin=0,
            vmax=end_max)
 ax4.set_xlabel('Detection rate')
-ax4.set_ylabel('Adherence probability')
+ax4.set_ylabel('Isolation probability')
 
 divider = make_axes_locatable(ax4)
 cax = divider.append_axes("right", size="5%", pad=0.1)
@@ -170,6 +170,41 @@ cbar = colorbar(axim,
                 cax=cax)
 
 fig.savefig('plots/oohi/grid_plot.png',
+            bbox_inches='tight',
+            dpi=300)
+close()
+
+fig, ((ax1, ax2)) = subplots(2,1,sharex=True)
+
+axim=ax1.imshow(vuln_end,
+           origin='lower',
+           extent=(iso_rate_range[0],iso_rate_range[-1],0,1),
+           vmin=0,
+           vmax=ve_max)
+ax1.set_xlabel('Detection rate')
+ax1.set_ylabel('Isolation probability')
+
+divider = make_axes_locatable(ax1)
+cax = divider.append_axes("right", size="5%", pad=0.1)
+cbar = colorbar(axim,
+                label="Cumulative clinically\n vulnerable % prevalence",
+                cax=cax)
+
+axim=ax2.imshow(cum_iso,
+           origin='lower',
+           extent=(iso_rate_range[0],iso_rate_range[-1],0,1),
+           vmin=0,
+           vmax=ci_max)
+ax2.set_xlabel('Detection rate (1/days)')
+ax2.set_ylabel('Isolation probability')
+
+divider = make_axes_locatable(ax2)
+cax = divider.append_axes("right", size="5%", pad=0.1)
+cbar = colorbar(axim,
+                label="Total % of population\n who isolate",
+                cax=cax)
+
+fig.savefig('plots/oohi/poster_plot.png',
             bbox_inches='tight',
             dpi=300)
 close()

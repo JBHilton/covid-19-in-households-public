@@ -166,8 +166,8 @@ fig.savefig('plots/mixing_sweep/grid_plot.png',
             dpi=300)
 close()
 
-baseline_ar = ar_by_size[0,0,:] # AR by size with no interventions
-ar_int_40 = ar_by_size[2,0,:] # AR with 40% internal mixing reduction
+baseline_ar = ar_by_size[0,-1,:] # AR by size with no interventions
+ar_int_40 = ar_by_size[2,-1,:] # AR with 40% internal mixing reduction
 ar_ext_40 = ar_by_size[0,2,:] # AR with 40% external reduction
 ar_both_40 = ar_by_size[2,2,:] # AR with both interventions
 
