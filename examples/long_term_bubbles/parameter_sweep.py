@@ -58,7 +58,7 @@ else:
 
 prev=1.0e-5 # Starting prevalence
 starting_immunity=0 # Starting antibody prev/immunity
-gr_interval = [-0.5*SPEC['recovery_rate'], 1] # Interval used in growth rate estimation
+gr_interval = [-SPEC['recovery_rate'], 1] # Interval used in growth rate estimation
 gr_tol = 1e-3 # Absolute tolerance for growth rate estimation
 
 class BubbleAnalysis:

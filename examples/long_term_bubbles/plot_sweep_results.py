@@ -126,3 +126,34 @@ fig.savefig('plots/long_term_bubbles/grid_plot.png',
             bbox_inches='tight',
             dpi=300)
 close()
+
+fig, ((ax1, ax2)) = subplots(1, 2)
+axim=ax1.imshow(peaks,
+                origin='lower',
+                extent=(0,1,0,1),
+                vmin=peak_min,
+                vmax=peak_max)
+ax1.set_xlabel('% reduction in\n between-household\n transmission')
+ax1.set_ylabel('% reduction in\n within-household\n transmission')
+divider = make_axes_locatable(ax1)
+cax = divider.append_axes("top", size="5%", pad=0.05)
+cbar = colorbar(axim, label="Peak % prevalence", orientation='horizontal', cax=cax)
+cax.xaxis.set_ticks_position('top')
+cax.xaxis.set_label_position('top')
+
+axim=ax2.imshow(R_end,
+                origin='lower',
+                extent=(0,1,0,1),
+                vmin=R_end_min,
+                vmax=R_end_max)
+ax2.set_xlabel('% reduction in\n between-household\n transmission')
+divider = make_axes_locatable(ax2)
+cax = divider.append_axes("top", size="5%", pad=0.05)
+cbar = colorbar(axim, label="Cumulative % prevalence", orientation='horizontal', cax=cax)
+cax.xaxis.set_ticks_position('top')
+cax.xaxis.set_label_position('top')
+
+fig.savefig('plots/long_term_bubbles/poster_plot.png',
+            bbox_inches='tight',
+            dpi=300)
+close()
