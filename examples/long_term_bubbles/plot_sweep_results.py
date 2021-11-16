@@ -133,8 +133,8 @@ axim=ax1.imshow(peaks,
                 extent=(0,1,0,1),
                 vmin=peak_min,
                 vmax=peak_max)
-ax1.set_xlabel('% reduction in\n between-household\n transmission')
-ax1.set_ylabel('% reduction in\n within-household\n transmission')
+ax1.set_xlabel('Proportional reduction in\n between-household\n transmission')
+ax1.set_ylabel('Proportional uptake of support\n bubbles among\n elligible households')
 divider = make_axes_locatable(ax1)
 cax = divider.append_axes("top", size="5%", pad=0.05)
 cbar = colorbar(axim, label="Peak % prevalence", orientation='horizontal', cax=cax)
@@ -146,7 +146,7 @@ axim=ax2.imshow(R_end,
                 extent=(0,1,0,1),
                 vmin=R_end_min,
                 vmax=R_end_max)
-ax2.set_xlabel('% reduction in\n between-household\n transmission')
+ax2.set_xlabel('Proportional reduction in\n between-household\n transmission')
 divider = make_axes_locatable(ax2)
 cax = divider.append_axes("top", size="5%", pad=0.05)
 cbar = colorbar(axim, label="Cumulative % prevalence", orientation='horizontal', cax=cax)

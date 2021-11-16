@@ -132,7 +132,7 @@ TWO_AGE_SEPIR_SPEC = {
 
 TWO_AGE_SEPIR_SPEC_FOR_FITTING = {
     'compartmental_structure': 'SEPIR', # This is which subsystem key to use
-    'SITP': array([0.184,0.162,0.148,0.137,0.129]),                     # Secondary inf probability
+    'SITP': TRANCHE2_SITP,                     # Secondary inf probability
     'recovery_rate': 1 / SYMPTOM_PERIOD,           # Recovery rate
     'incubation_rate': 1 / LATENT_PERIOD,         # E->P incubation rate
     'symp_onset_rate': 1 / PRODROME_PERIOD,         # P->I prodromal to symptomatic rate

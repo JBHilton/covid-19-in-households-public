@@ -174,14 +174,13 @@ fig.savefig('plots/oohi/grid_plot.png',
             dpi=300)
 close()
 
-fig, ((ax1, ax2)) = subplots(2,1,sharex=True)
+fig, ((ax1, ax2)) = subplots(2,1)
 
 axim=ax1.imshow(vuln_end,
            origin='lower',
            extent=(iso_rate_range[0],iso_rate_range[-1],0,1),
            vmin=0,
            vmax=ve_max)
-ax1.set_xlabel('Detection rate')
 ax1.set_ylabel('Isolation probability')
 
 divider = make_axes_locatable(ax1)

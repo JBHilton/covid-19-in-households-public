@@ -166,18 +166,42 @@ fig.savefig('plots/mixing_sweep/grid_plot.png',
             dpi=300)
 close()
 
-baseline_ar = ar_by_size[0,-1,:] # AR by size with no interventions
-ar_int_40 = ar_by_size[2,-1,:] # AR with 40% internal mixing reduction
-ar_ext_40 = ar_by_size[0,2,:] # AR with 40% external reduction
-ar_both_40 = ar_by_size[2,2,:] # AR with both interventions
+baseline_ar = ar_by_size[0,0,:] # AR by size with no interventions
+ar_int_40 = ar_by_size[0,1,:] # AR with 40% internal mixing reduction
+ar_ext_40 = ar_by_size[1,0,:] # AR with 40% external reduction
+ar_both_40 = ar_by_size[1,1,:] # AR with both interventions
 
 fig, ax = subplots(1,1)
 ax.plot(range(1,7), baseline_ar, label = 'No interventions')
-ax.plot(range(1,7), ar_int_40, label = '40% within-hh reduction')
-ax.plot(range(1,7), ar_ext_40, label = '40% between-hh reduction')
-ax.plot(range(1,7), ar_both_40, label = '40% reduction on both levels')
+ax.plot(range(1,7), ar_int_40, label = '25% within-hh reduction')
+ax.plot(range(1,7), ar_ext_40, label = '25% between-hh reduction')
+ax.plot(range(1,7), ar_both_40, label = '25% reduction on both levels')
 ax.set_xlabel('Household size')
-ax.set_ylabel('Expected number of secondary cases')
+ax.set_ylabel('Expected secondary attack ratio')
+ax.set_aspect(1.0/ax.get_data_ratio())
 ax.legend()
 
 fig.savefig('plots/mixing_sweep/ar_by_size.png')
+
+
+fig, (ax1, ax2) = subplots(1,2)
+
+axim=ax1.imshow(R_end,
+                origin='lower',
+                extent=(0,1,0,1),
+                vmin=R_end_min,
+                vmax=R_end_max)
+divider = make_axes_locatable(ax1)
+cax = divider.append_axes("right", size="5%", pad=0.05)
+cbar = colorbar(axim, label="Cumulative % prevalence", cax=cax)
+
+ax2.plot(range(1,7), baseline_ar, label = 'No interventions')
+ax2.plot(range(1,7), ar_int_40, label = '25% within-hh reduction')
+ax2.plot(range(1,7), ar_ext_40, label = '25% between-hh reduction')
+ax2.plot(range(1,7), ar_both_40, label = '25% reduction on both levels')
+ax2.set_xlabel('Household size')
+ax2.set_ylabel('Expected secondary attack ratio')
+ax2.set_aspect(1.0/ax.get_data_ratio())
+ax2.legend()
+
+fig.savefig('plots/mixing_sweep/poster_plot.png')

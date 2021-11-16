@@ -104,7 +104,7 @@ class MixingAnalysis:
                                                    prev,
                                                    antibody_prev)
 
-        no_days = 30
+        no_days = 90
         tspan = (0.0, no_days)
         solution = solve_ivp(rhs, tspan, H0, first_step=0.001, atol=1e-16)
 
@@ -206,10 +206,10 @@ if __name__ == '__main__':
     parser.add_argument('--no_of_workers', type=int, default=8)
     parser.add_argument('--internal_mix_vals',
                         type=int,
-                        default=[0.0, 0.99, 0.05])
+                        default=[0.0, 0.99, 0.25])
     parser.add_argument('--external_mix_vals',
                         type=int,
-                        default=[0.0, 0.99, 0.05])
+                        default=[0.0, 0.99, 0.25])
     args = parser.parse_args()
 
     main(args.no_of_workers,

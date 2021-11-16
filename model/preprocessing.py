@@ -259,6 +259,8 @@ def make_initial_condition_by_eigenvector(growth_rate,
         model_input.R_compartment::household_population.no_epi_compartments]
         ).sum() / \
         household_population.ave_hh_size
+    end_state_ar = AR_by_size(household_population, sol.y, 4, 0)
+    print('Single pass secondary attack ratio=',end_state_ar)
 
     H0 = (prev / start_state_prev) * start_state_profile.T + \
          (starting_immunity / end_state_prev) * end_state_profile.T
@@ -518,7 +520,7 @@ def det_from_spec(spec):
     }
     return text_to_type[spec['det_model']['type']](spec['det_model'])
 
-def calculate_sitp_rmse(x, model_input, sitp_data):
+def calculate_sitp_rmse_fixed_times(x, model_input, sitp_data):
     ''' This function calculates the root mean square error in the
     susceptible-infectious transmission probability for a given set of
     parameters and some empirical data.'''
@@ -537,6 +539,76 @@ def calculate_sitp_rmse(x, model_input, sitp_data):
         err_array[n] = (sitp - sitp_est)**2
 
     return err_array.sum()
+
+def calculate_sitp_fixed_times(x, model_input, sitp_data):
+    ''' This function calculates the root mean square error in the
+    susceptible-infectious transmission probability for a given set of
+    parameters and some empirical data. This is assuming fixed periods in each
+    infectious compartment.'''
+
+    beta_int = x[0]
+    density_expo = x[1]
+
+    sitp_array = zeros(sitp_data.shape)
+
+    for n, sitp in enumerate(sitp_data):
+        sitp_est = 1 - exp(
+                            - beta_int *
+                            model_input.ave_contact_dur *
+                            model_input.ave_trans / (n+1)**density_expo
+                            )
+        sitp_array[n] = sitp_est
+
+    return sitp_array
+
+def calculate_sitp_rmse(x, model_input, sitp_data):
+    ''' This function calculates the root mean square error in the
+    susceptible-infectious transmission probability for a given set of
+    parameters and some empirical data.'''
+
+    beta_int = x[0]
+    density_expo = x[1]
+
+    err_array = zeros(sitp_data.shape)
+
+    for n, sitp in enumerate(sitp_data):
+        escape_prob = 1 / model_input.prog_rates.prod()
+        for comp in range(model_input.no_inf_compartments):
+            escape_prob *= 1 / (
+                1 / model_input.prog_rates[comp] +
+                beta_int *
+                model_input.inf_scales[comp].dot(model_input.ave_hh_by_class) *
+                model_input.ave_contact_dur /
+                (n+1)**density_expo)
+        sitp_est = 1 - escape_prob
+        err_array[n] = (sitp - sitp_est)**2
+
+    return err_array.sum()
+
+def calculate_sitp(x, model_input, sitp_data):
+    ''' This function calculates the root mean square error in the
+    susceptible-infectious transmission probability for a given set of
+    parameters and some empirical data. This is assuming fixed periods in each
+    infectious compartment.'''
+
+    beta_int = x[0]
+    density_expo = x[1]
+
+    sitp_array = zeros(sitp_data.shape)
+
+    for n, sitp in enumerate(sitp_data):
+        escape_prob = 1 / model_input.prog_rates.prod()
+        for comp in range(model_input.no_inf_compartments):
+            escape_prob *= 1 / (
+                1 / model_input.prog_rates[comp] +
+                beta_int *
+                model_input.inf_scales[comp].dot(model_input.ave_hh_by_class) *
+                model_input.ave_contact_dur /
+                (n+1)**density_expo)
+        sitp_est = 1 - escape_prob
+        sitp_array[n] = sitp_est
+
+    return sitp_array
 
 
 class ModelInput(ABC):
@@ -631,6 +703,8 @@ class SIRInput(ModelInput):
 
         self.ave_trans = 1 / self.gamma
 
+        self.prog_rates = array([self.gamma])
+
         def sitp_rmse(x):
             return calculate_sitp_rmse(x, self, spec['SITP'])
 
@@ -666,6 +740,8 @@ class SEIRInput(ModelInput):
         self.gamma = self.spec['recovery_rate']
 
         self.ave_trans = 1 / self.gamma
+
+        self.prog_rates = array([self.gamma])
 
         def sitp_rmse(x):
             return calculate_sitp_rmse(x, self, spec['SITP'])
@@ -711,8 +787,12 @@ class SEPIRInput(ModelInput):
         self.gamma = self.spec['recovery_rate']
 
         self.ave_trans = \
-            (self.inf_scales[0].dot(self.ave_hh_by_class) / self.alpha_2) +  \
-            (self.inf_scales[1].dot(self.ave_hh_by_class) / self.gamma)
+            ((self.inf_scales[0].dot(self.ave_hh_by_class) / self.ave_hh_size) /
+            self.alpha_2) +  \
+            ((self.inf_scales[1].dot(self.ave_hh_by_class) / self.ave_hh_size) /
+             self.gamma)
+
+        self.prog_rates = array([self.alpha_2, self.gamma])
 
         def sitp_rmse(x):
             return calculate_sitp_rmse(x, self, spec['SITP'])
@@ -721,6 +801,8 @@ class SEPIRInput(ModelInput):
         beta_int = pars[0]
         self.density_expo = pars[1]
         print('Estimated beta_int=',pars[0],', estimated density=',pars[1])
+        sitp_estimate = calculate_sitp(pars, self, spec['SITP'])
+        print('sitp=',sitp_estimate)
 
         self.k_home = beta_int * self.k_home
 
@@ -758,8 +840,12 @@ class SEPIRQInput(ModelInput):
         self.gamma = self.spec['recovery_rate']
 
         self.ave_trans = \
-            (self.inf_scales[0].dot(self.ave_hh_by_class) / self.alpha_2) +  \
-            (self.inf_scales[1].dot(self.ave_hh_by_class) / self.gamma)
+            ((self.inf_scales[0].dot(self.ave_hh_by_class) / self.ave_hh_size) /
+            self.alpha_2) +  \
+            ((self.inf_scales[1].dot(self.ave_hh_by_class) / self.ave_hh_size) /
+             self.gamma)
+
+        self.prog_rates = array([self.alpha_2, self.gamma])
 
         def sitp_rmse(x):
             return calculate_sitp_rmse(x, self, spec['SITP'])
@@ -1099,7 +1185,7 @@ def get_multiplier_by_path_integral(r,
     start = get_time()
     sA_iLU = spilu(discount_matrix)
     M = LinearOperator(discount_matrix.shape, sA_iLU.solve)
-    print('Precondtioner computed in {0}s'.format(get_time() - start))
+    # print('Precondtioner computed in {0}s'.format(get_time() - start))
     mult_start = get_time()
     for i, index_state in enumerate(index_states):
         result = isolve(discount_matrix, reward_mat[:, i], M=M)
@@ -1109,7 +1195,7 @@ def get_multiplier_by_path_integral(r,
             (range(no_index_states),
             no_index_states * [i] )),
             shape=(no_index_states, no_index_states))
-    print('multiplier calculation took',get_time()-mult_start,'seconds.')
+    # print('multiplier calculation took',get_time()-mult_start,'seconds.')
     return multiplier
 
 def get_multiplier_eigenvalue(r,
@@ -1125,7 +1211,7 @@ def get_multiplier_eigenvalue(r,
     start = get_time()
     sA_iLU = spilu(discount_matrix)
     M = LinearOperator(discount_matrix.shape, sA_iLU.solve)
-    print('Precondtioner computed in {0}s'.format(get_time() - start))
+    # print('Precondtioner computed in {0}s'.format(get_time() - start))
     mult_start = get_time()
     for i, index_state in enumerate(index_states):
         result = isolve(discount_matrix, reward_mat[:, i], M=M)
@@ -1135,7 +1221,7 @@ def get_multiplier_eigenvalue(r,
             (range(no_index_states),
             no_index_states * [i] )),
             shape=(no_index_states, no_index_states))
-    print('multiplier calculation took',get_time()-mult_start,'seconds.')
+    # print('multiplier calculation took',get_time()-mult_start,'seconds.')
     evalue = (speig(multiplier.T,k=1)[0]).real
     return evalue
 
@@ -1476,7 +1562,7 @@ def merge_hh_inputs(model_input,
 ''' The following function calculates hh size-stratified attack ratio from
 simulation results.'''
 
-def AR_by_size(household_population, H, R_comp):
+def AR_by_size(household_population, H, R_comp, S_comp=0):
     max_hh_size = household_population.model_input.max_hh_size
     attack_ratio = zeros((max_hh_size,))
     for hh_size in range(1,max_hh_size+1):
@@ -1486,13 +1572,14 @@ def AR_by_size(household_population, H, R_comp):
             household_population.states.sum(axis=1)==hh_size)[0]
             this_R_range = where(
                 (household_population.states.sum(axis=1)==hh_size) &
+                ((household_population.states[:,
+                    S_comp::household_population.model_input.no_compartments
+                    ].sum(axis=1)==(hh_size - R)) &
                 (household_population.states[:,
                     R_comp::household_population.model_input.no_compartments
-                    ].sum(axis=1)==R)
+                    ].sum(axis=1)==R))
                 )[0]
-            R_probs[R] = \
-                sum(H[this_R_range,-1]) / sum(H[this_hh_range,-1])
-        print('R_probs = ',R_probs)
+            R_probs[R] = sum(H[this_R_range,-1])
         attack_ratio[hh_size-1] = sum(arange(0, hh_size,1) *
             R_probs[1:]/sum(R_probs[1:]))/hh_size
     return attack_ratio
