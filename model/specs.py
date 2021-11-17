@@ -194,7 +194,7 @@ TWO_AGE_EXT_SEPIRQ_SPEC = {
      PRODROME_SCALING * ones(2,),          # Prodromal transmission intensity relative to
                                 # full inf transmission
     'iso_trans_scaling':
-     array([1,1]),          # Isolated transmission intensity relative to full
+     array([0,0]),          # Isolated transmission intensity relative to full
                             # inf transmission
     'sus': array([1,1]),    # Relative susceptibility by age/vulnerability class
     'fit_method' : 'EL'

@@ -18,6 +18,7 @@ with open('outputs/mixing_sweep/results.pkl','rb') as f:
     hh_prop,
     attack_ratio,
     ar_by_size,
+    first_pass_ar,
     internal_mix_range,
     external_mix_range) = load(f)
 
@@ -167,15 +168,15 @@ fig.savefig('plots/mixing_sweep/grid_plot.png',
 close()
 
 baseline_ar = ar_by_size[0,0,:] # AR by size with no interventions
-ar_int_40 = ar_by_size[0,1,:] # AR with 40% internal mixing reduction
-ar_ext_40 = ar_by_size[1,0,:] # AR with 40% external reduction
-ar_both_40 = ar_by_size[1,1,:] # AR with both interventions
+ar_int_40 = ar_by_size[0,2,:] # AR with 40% internal mixing reduction
+ar_ext_40 = ar_by_size[2,0,:] # AR with 40% external reduction
+ar_both_40 = ar_by_size[2,2,:] # AR with both interventions
 
 fig, ax = subplots(1,1)
 ax.plot(range(1,7), baseline_ar, label = 'No interventions')
-ax.plot(range(1,7), ar_int_40, label = '25% within-hh reduction')
-ax.plot(range(1,7), ar_ext_40, label = '25% between-hh reduction')
-ax.plot(range(1,7), ar_both_40, label = '25% reduction on both levels')
+ax.plot(range(1,7), ar_int_40, label = '50% within-hh reduction')
+ax.plot(range(1,7), ar_ext_40, label = '50% between-hh reduction')
+ax.plot(range(1,7), ar_both_40, label = '50% reduction on both levels')
 ax.set_xlabel('Household size')
 ax.set_ylabel('Expected secondary attack ratio')
 ax.set_aspect(1.0/ax.get_data_ratio())
@@ -183,6 +184,26 @@ ax.legend()
 
 fig.savefig('plots/mixing_sweep/ar_by_size.png')
 
+close()
+
+baseline_fpar = first_pass_ar[0,0,:] # AR by size with no interventions
+fpar_int_40 = first_pass_ar[0,2,:] # AR with 40% internal mixing reduction
+fpar_ext_40 = first_pass_ar[2,0,:] # AR with 40% external reduction
+fpar_both_40 = first_pass_ar[2,2,:] # AR with both interventions
+
+fig, ax = subplots(1,1)
+ax.plot(range(1,7), baseline_fpar, label = 'No interventions')
+ax.plot(range(1,7), fpar_int_40, label = '50% within-hh reduction')
+ax.plot(range(1,7), fpar_ext_40, label = '50% between-hh reduction')
+ax.plot(range(1,7), fpar_both_40, label = '50% reduction on both levels')
+ax.set_xlabel('Household size')
+ax.set_ylabel('Expected secondary attack ratio')
+ax.set_aspect(1.0/ax.get_data_ratio())
+ax.legend()
+
+fig.savefig('plots/mixing_sweep/fpar_by_size.png')
+
+close()
 
 fig, (ax1, ax2) = subplots(1,2)
 

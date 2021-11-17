@@ -89,7 +89,7 @@ def main(no_of_workers, no_samples):
 
 if __name__ == '__main__':
     parser = ArgumentParser()
-    parser.add_argument('--no_of_workers', type=int, default=4)
+    parser.add_argument('--no_of_workers', type=int, default=8)
     parser.add_argument('--no_samples', type=int, default=100)
     args = parser.parse_args()
 

@@ -97,12 +97,13 @@ class MixingAnalysis:
         if growth_rate is None:
             growth_rate = 0
 
-        H0 = make_initial_condition_by_eigenvector(growth_rate,
+        H0, first_pass_ar = make_initial_condition_by_eigenvector(growth_rate,
                                                    model_input,
                                                    household_population,
                                                    rhs,
                                                    prev,
-                                                   antibody_prev)
+                                                   antibody_prev,
+                                                   True)
 
         no_days = 90
         tspan = (0.0, no_days)
@@ -141,7 +142,8 @@ class MixingAnalysis:
                 R_end,
                 hh_outbreak_prop,
                 attack_ratio,
-                ar_by_size]
+                ar_by_size,
+                first_pass_ar]
 
 def main(no_of_workers,
          internal_mix_vals,
@@ -185,6 +187,10 @@ def main(no_of_workers,
         len(internal_mix_range),
         len(external_mix_range),
         model_input_to_fit.max_hh_size)
+    first_pass_ar_data = array([r[6] for r in results]).reshape(
+        len(internal_mix_range),
+        len(external_mix_range),
+        model_input_to_fit.max_hh_size)
 
     fname = 'outputs/mixing_sweep/results.pkl'
     with open(fname, 'wb') as f:
@@ -195,6 +201,7 @@ def main(no_of_workers,
              hh_prop_data,
              attack_ratio_data,
              ar_by_size_data,
+             first_pass_ar_data,
              internal_mix_range,
              external_mix_range),
             f)
@@ -206,10 +213,10 @@ if __name__ == '__main__':
     parser.add_argument('--no_of_workers', type=int, default=8)
     parser.add_argument('--internal_mix_vals',
                         type=int,
-                        default=[0.0, 0.99, 0.25])
+                        default=[0.0, 0.99, 0.05])
     parser.add_argument('--external_mix_vals',
                         type=int,
-                        default=[0.0, 0.99, 0.25])
+                        default=[0.0, 0.99, 0.05])
     args = parser.parse_args()
 
     main(args.no_of_workers,

@@ -192,7 +192,10 @@ def make_initial_condition_by_eigenvector(growth_rate,
                                          household_population,
                                          rhs,
                                          prev=1e-5,
-                                         starting_immunity=1e-2):
+                                         starting_immunity=1e-2,
+                                         return_AR = False,
+                                         R_comp = 4,
+                                         S_comp = 0):
 
     Q_int = household_population.Q_int
 
@@ -259,8 +262,6 @@ def make_initial_condition_by_eigenvector(growth_rate,
         model_input.R_compartment::household_population.no_epi_compartments]
         ).sum() / \
         household_population.ave_hh_size
-    end_state_ar = AR_by_size(household_population, sol.y, 4, 0)
-    print('Single pass secondary attack ratio=',end_state_ar)
 
     H0 = (prev / start_state_prev) * start_state_profile.T + \
          (starting_immunity / end_state_prev) * end_state_profile.T
@@ -273,7 +274,12 @@ def make_initial_condition_by_eigenvector(growth_rate,
     for i in range(len(H0)):
         this_comp = household_population.which_composition[i]
         H0[fully_sus[this_comp]] -= H0_pre_sus[i]
-    return H0
+
+    if return_AR:
+        end_state_ar = AR_by_size(household_population, sol.y, R_comp, S_comp)
+        return H0, end_state_ar
+    else:
+        return H0
 
 
 def make_aggregator(coarse_bounds, fine_bounds):
@@ -625,6 +631,7 @@ class ModelInput(ABC):
             subsystem_key[self.compartmental_structure][2]
         self.no_inf_compartments = \
             len(self.inf_compartment_list)
+            
         self.new_case_compartment = \
             subsystem_key[self.compartmental_structure][3]
 
@@ -801,8 +808,6 @@ class SEPIRInput(ModelInput):
         beta_int = pars[0]
         self.density_expo = pars[1]
         print('Estimated beta_int=',pars[0],', estimated density=',pars[1])
-        sitp_estimate = calculate_sitp(pars, self, spec['SITP'])
-        print('sitp=',sitp_estimate)
 
         self.k_home = beta_int * self.k_home
 
@@ -839,13 +844,15 @@ class SEPIRQInput(ModelInput):
 
         self.gamma = self.spec['recovery_rate']
 
+        self.discharge_rate = spec['discharge_rate']
+
         self.ave_trans = \
             ((self.inf_scales[0].dot(self.ave_hh_by_class) / self.ave_hh_size) /
             self.alpha_2) +  \
             ((self.inf_scales[1].dot(self.ave_hh_by_class) / self.ave_hh_size) /
              self.gamma)
 
-        self.prog_rates = array([self.alpha_2, self.gamma])
+        self.prog_rates = array([self.alpha_2, self.gamma, self.discharge_rate])
 
         def sitp_rmse(x):
             return calculate_sitp_rmse(x, self, spec['SITP'])
@@ -879,7 +886,6 @@ class SEPIRQInput(ModelInput):
         self.class_is_isolating = spec['class_is_isolating']
         self.iso_method = spec['iso_method']
         self.ad_prob = spec['ad_prob']
-        self.discharge_rate = spec['discharge_rate']
 
     @property
     def alpha_1(self):
