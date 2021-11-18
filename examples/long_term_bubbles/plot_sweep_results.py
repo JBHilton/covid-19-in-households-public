@@ -82,45 +82,58 @@ fig.savefig('plots/long_term_bubbles/attack_ratio.png',bbox_inches='tight', dpi=
 close()
 
 fig, ((ax1, ax2), (ax3, ax4)) = subplots(2, 2)
-axim=ax1.imshow(peaks,
+fig.tight_layout()
+axim=ax1.imshow(growth_rate,
+                origin='lower',
+                extent=(0,1,0,1),
+                vmin=r_min,
+                vmax=r_max)
+ax1.set_ylabel('% uptake of support bubbles')
+ax1.text(-0.5, 1.1, 'a)',
+            fontsize='medium', verticalalignment='top', fontfamily='serif',
+            bbox=dict(facecolor='1', edgecolor='none', pad=3.0))
+divider = make_axes_locatable(ax1)
+cax = divider.append_axes("right", size="5%", pad=0.05)
+cbar = colorbar(axim, label="Growth rate", cax=cax)
+
+axim=ax2.imshow(peaks,
                 origin='lower',
                 extent=(0,1,0,1),
                 vmin=peak_min,
                 vmax=peak_max)
-ax1.set_ylabel('% reduction in\n within-household\n transmission')
-divider = make_axes_locatable(ax1)
+ax2.text(-0.3, 1.1, 'b)',
+            fontsize='medium', verticalalignment='top', fontfamily='serif',
+            bbox=dict(facecolor='1', edgecolor='none', pad=3.0))
+divider = make_axes_locatable(ax2)
 cax = divider.append_axes("right", size="5%", pad=0.05)
 cbar = colorbar(axim, label="Peak % prevalence", cax=cax)
 
-axim=ax2.imshow(R_end,
+axim=ax3.imshow(R_end,
                 origin='lower',
                 extent=(0,1,0,1),
                 vmin=R_end_min,
                 vmax=R_end_max)
-divider = make_axes_locatable(ax2)
+ax3.set_ylabel('% uptake of support bubbles')
+ax3.set_xlabel('% reduction in\n between-household\n transmission')
+ax3.text(-0.5, 1.1, 'c)',
+            fontsize='medium', verticalalignment='top', fontfamily='serif',
+            bbox=dict(facecolor='1', edgecolor='none', pad=3.0))
+divider = make_axes_locatable(ax3)
 cax = divider.append_axes("right", size="5%", pad=0.05)
 cbar = colorbar(axim, label="Cumulative % prevalence", cax=cax)
 
-axim=ax3.imshow(hh_prop,
+axim=ax4.imshow(hh_prop,
                 origin='lower',
                 extent=(0,1,0,1),
                 vmin=hh_prop_min,
                 vmax=hh_prop_max)
-ax3.set_ylabel('% uptake of support bubbles')
-ax3.set_xlabel('% reduction in\n between-household\n transmission')
-divider = make_axes_locatable(ax3)
-cax = divider.append_axes("right", size="5%", pad=0.05)
-cbar = colorbar(axim, label="% of households infected", cax=cax)
-
-axim=ax4.imshow(attack_ratio,
-                origin='lower',
-                extent=(0,1,0,1),
-                vmin=attack_ratio_min,
-                vmax=attack_ratio_max)
 ax4.set_xlabel('% reduction in\n between-household\n transmission')
+ax4.text(-0.3, 1.1, 'd)',
+            fontsize='medium', verticalalignment='top', fontfamily='serif',
+            bbox=dict(facecolor='1', edgecolor='none', pad=3.0))
 divider = make_axes_locatable(ax4)
 cax = divider.append_axes("right", size="5%", pad=0.05)
-cbar = colorbar(axim, label="% attack ratio", cax=cax)
+cbar = colorbar(axim, label="% of households infected", cax=cax)
 
 fig.savefig('plots/long_term_bubbles/grid_plot.png',
             bbox_inches='tight',

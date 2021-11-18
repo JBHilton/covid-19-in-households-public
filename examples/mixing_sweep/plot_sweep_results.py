@@ -122,45 +122,58 @@ fig.savefig('plots/mixing_sweep/attack_ratio.png',
 close()
 
 fig, ((ax1, ax2), (ax3, ax4)) = subplots(2, 2)
-axim=ax1.imshow(peaks,
+fig.tight_layout()
+axim=ax1.imshow(growth_rate,
+                origin='lower',
+                extent=(0,1,0,1),
+                vmin=r_min,
+                vmax=r_max)
+ax1.set_ylabel('% reduction in\n within-household\n transmission')
+ax1.text(-0.5, 1.1, 'a)',
+            fontsize='medium', verticalalignment='top', fontfamily='serif',
+            bbox=dict(facecolor='1', edgecolor='none', pad=3.0))
+divider = make_axes_locatable(ax1)
+cax = divider.append_axes("right", size="5%", pad=0.05)
+cbar = colorbar(axim, label="Growth rate", cax=cax)
+
+axim=ax2.imshow(peaks,
                 origin='lower',
                 extent=(0,1,0,1),
                 vmin=peak_min,
                 vmax=peak_max)
-ax1.set_ylabel('% reduction in\n within-household\n transmission')
-divider = make_axes_locatable(ax1)
+ax2.text(-0.3, 1.1, 'b)',
+            fontsize='medium', verticalalignment='top', fontfamily='serif',
+            bbox=dict(facecolor='1', edgecolor='none', pad=3.0))
+divider = make_axes_locatable(ax2)
 cax = divider.append_axes("right", size="5%", pad=0.05)
 cbar = colorbar(axim, label="Peak % prevalence", cax=cax)
 
-axim=ax2.imshow(R_end,
+axim=ax3.imshow(R_end,
                 origin='lower',
                 extent=(0,1,0,1),
                 vmin=R_end_min,
                 vmax=R_end_max)
-divider = make_axes_locatable(ax2)
+ax3.set_ylabel('% reduction in\n within-household\n transmission')
+ax3.set_xlabel('% reduction in\n between-household\n transmission')
+ax3.text(-0.5, 1.1, 'c)',
+            fontsize='medium', verticalalignment='top', fontfamily='serif',
+            bbox=dict(facecolor='1', edgecolor='none', pad=3.0))
+divider = make_axes_locatable(ax3)
 cax = divider.append_axes("right", size="5%", pad=0.05)
 cbar = colorbar(axim, label="Cumulative % prevalence", cax=cax)
 
-axim=ax3.imshow(hh_prop,
+axim=ax4.imshow(hh_prop,
                 origin='lower',
                 extent=(0,1,0,1),
                 vmin=hh_prop_min,
                 vmax=hh_prop_max)
-ax3.set_ylabel('% reduction in\n within-household\n transmission')
-ax3.set_xlabel('% reduction in\n between-household\n transmission')
-divider = make_axes_locatable(ax3)
-cax = divider.append_axes("right", size="5%", pad=0.05)
-cbar = colorbar(axim, label="% of households infected", cax=cax)
-
-axim=ax4.imshow(attack_ratio,
-                origin='lower',
-                extent=(0,1,0,1),
-                vmin=attack_ratio_min,
-                vmax=attack_ratio_max)
 ax4.set_xlabel('% reduction in\n between-household\n transmission')
+ax4.text(-0.3, 1.1, 'd)',
+            fontsize='medium', verticalalignment='top', fontfamily='serif',
+            bbox=dict(facecolor='1', edgecolor='none', pad=3.0))
 divider = make_axes_locatable(ax4)
 cax = divider.append_axes("right", size="5%", pad=0.05)
-cbar = colorbar(axim, label="% attack ratio", cax=cax)
+cbar = colorbar(axim, label="% of households infected", cax=cax)
 
 fig.savefig('plots/mixing_sweep/grid_plot.png',
             bbox_inches='tight',
@@ -168,61 +181,87 @@ fig.savefig('plots/mixing_sweep/grid_plot.png',
 close()
 
 baseline_ar = ar_by_size[0,0,:] # AR by size with no interventions
-ar_int_40 = ar_by_size[0,2,:] # AR with 40% internal mixing reduction
-ar_ext_40 = ar_by_size[2,0,:] # AR with 40% external reduction
-ar_both_40 = ar_by_size[2,2,:] # AR with both interventions
+ar_int_25 = ar_by_size[5,0,:] # AR with 25% internal mixing reduction
+ar_ext_25 = ar_by_size[0,5,:] # AR with 25% external reduction
+ar_both_25 = ar_by_size[5,5,:] # AR with both interventions
+ar_int_50 = ar_by_size[10,0,:] # AR with 50% internal mixing reduction
+ar_ext_50 = ar_by_size[0,10,:] # AR with 50% external reduction
+ar_both_50 = ar_by_size[10,10,:] # AR with both interventions
 
 fig, ax = subplots(1,1)
 ax.plot(range(1,7), baseline_ar, label = 'No interventions')
-ax.plot(range(1,7), ar_int_40, label = '50% within-hh reduction')
-ax.plot(range(1,7), ar_ext_40, label = '50% between-hh reduction')
-ax.plot(range(1,7), ar_both_40, label = '50% reduction on both levels')
+ax.plot(range(1,7), ar_int_50, label = '50% within-hh reduction')
+ax.plot(range(1,7), ar_ext_50, label = '50% between-hh reduction')
+ax.plot(range(1,7), ar_both_50, label = '50% reduction on both levels')
 ax.set_xlabel('Household size')
-ax.set_ylabel('Expected secondary attack ratio')
+ax.set_ylabel('Expected secondary\n attack ratio')
 ax.set_aspect(1.0/ax.get_data_ratio())
 ax.legend()
 
-fig.savefig('plots/mixing_sweep/ar_by_size.png')
+fig.savefig('plots/mixing_sweep/ar_by_size_50.png')
 
 close()
 
 baseline_fpar = first_pass_ar[0,0,:] # AR by size with no interventions
-fpar_int_40 = first_pass_ar[0,2,:] # AR with 40% internal mixing reduction
-fpar_ext_40 = first_pass_ar[2,0,:] # AR with 40% external reduction
-fpar_both_40 = first_pass_ar[2,2,:] # AR with both interventions
+fpar_int_25 = first_pass_ar[5,0,:] # AR with 25% internal mixing reduction
+fpar_int_50 = first_pass_ar[10,0,:] # AR with 50% internal mixing reduction
 
 fig, ax = subplots(1,1)
 ax.plot(range(1,7), baseline_fpar, label = 'No interventions')
-ax.plot(range(1,7), fpar_int_40, label = '50% within-hh reduction')
-ax.plot(range(1,7), fpar_ext_40, label = '50% between-hh reduction')
-ax.plot(range(1,7), fpar_both_40, label = '50% reduction on both levels')
+ax.plot(range(1,7), fpar_int_50, label = '50% within-hh reduction')
 ax.set_xlabel('Household size')
-ax.set_ylabel('Expected secondary attack ratio')
+ax.set_ylabel('Expected secondary\n attack ratio')
 ax.set_aspect(1.0/ax.get_data_ratio())
 ax.legend()
 
-fig.savefig('plots/mixing_sweep/fpar_by_size.png')
+fig.savefig('plots/mixing_sweep/fpar_by_size_50.png')
 
 close()
 
-fig, (ax1, ax2) = subplots(1,2)
-
-axim=ax1.imshow(R_end,
-                origin='lower',
-                extent=(0,1,0,1),
-                vmin=R_end_min,
-                vmax=R_end_max)
-divider = make_axes_locatable(ax1)
-cax = divider.append_axes("right", size="5%", pad=0.05)
-cbar = colorbar(axim, label="Cumulative % prevalence", cax=cax)
+fig, ((ax1, ax2), (ax3, ax4)) = subplots(2, 2)
+fig.tight_layout()
+ax1.plot(range(1,7), baseline_ar, label = 'No interventions')
+ax1.plot(range(1,7), ar_int_25, label = 'Within-hh controls')
+ax1.plot(range(1,7), ar_ext_25, label = 'Between-hh controls')
+ax1.plot(range(1,7), ar_both_25, label = 'Controls on both levels')
+ax1.set_xlabel('Household size')
+ax1.set_ylabel('Expected secondary\n attack ratio')
+ax1.set_aspect(1.0/ax1.get_data_ratio())
+ax1.text(-1.5, 1.0, 'a)',
+            fontsize='medium', verticalalignment='top', fontfamily='serif',
+            bbox=dict(facecolor='1', edgecolor='none', pad=3.0))
 
 ax2.plot(range(1,7), baseline_ar, label = 'No interventions')
-ax2.plot(range(1,7), ar_int_40, label = '25% within-hh reduction')
-ax2.plot(range(1,7), ar_ext_40, label = '25% between-hh reduction')
-ax2.plot(range(1,7), ar_both_40, label = '25% reduction on both levels')
+ax2.plot(range(1,7), ar_int_50, label = 'Within-hh controls')
+ax2.plot(range(1,7), ar_ext_50, label = 'Between-hh controls')
+ax2.plot(range(1,7), ar_both_50, label = 'Controls on both levels')
 ax2.set_xlabel('Household size')
-ax2.set_ylabel('Expected secondary attack ratio')
-ax2.set_aspect(1.0/ax.get_data_ratio())
-ax2.legend()
+ax2.set_ylabel('Expected secondary\n attack ratio')
+ax2.set_aspect(1.0/ax2.get_data_ratio())
+ax2.text(-1.0, 1.0, 'b)',
+            fontsize='medium', verticalalignment='top', fontfamily='serif',
+            bbox=dict(facecolor='1', edgecolor='none', pad=3.0))
+ax2.legend(loc='center left', bbox_to_anchor=(1, 0.5))
 
-fig.savefig('plots/mixing_sweep/poster_plot.png')
+ax3.plot(range(1,7), baseline_fpar, label = 'No interventions')
+ax3.plot(range(1,7), fpar_int_25, label = 'Within-hh controls')
+ax3.set_xlabel('Household size')
+ax3.set_ylabel('Expected first\n pass secondary\n attack ratio')
+ax3.set_aspect(1.0/ax3.get_data_ratio())
+ax3.text(-1.5, 0.8, 'c)',
+            fontsize='medium', verticalalignment='top', fontfamily='serif',
+            bbox=dict(facecolor='1', edgecolor='none', pad=3.0))
+
+ax4.plot(range(1,7), baseline_fpar, label = 'No interventions')
+ax4.plot(range(1,7), fpar_int_50, label = 'Within-hh controls')
+ax4.set_xlabel('Household size')
+ax4.set_ylabel('Expected first\n pass secondary\n attack ratio')
+ax4.set_aspect(1.0/ax4.get_data_ratio())
+ax4.text(-1.0, 0.8, 'd)',
+            fontsize='medium', verticalalignment='top', fontfamily='serif',
+            bbox=dict(facecolor='1', edgecolor='none', pad=3.0))
+
+fig.savefig('plots/mixing_sweep/ar_grid.png',
+            bbox_inches='tight',
+            dpi=300)
+close()

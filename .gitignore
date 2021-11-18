@@ -8,6 +8,7 @@ output*.txt
 *.swp
 *.png
 *.zip
+*.fig
 .DS_Store
 __init__.py
 __init__.pyc
