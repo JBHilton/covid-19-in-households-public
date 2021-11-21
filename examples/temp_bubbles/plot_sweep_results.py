@@ -41,6 +41,11 @@ pol_label = []
 for pol in range(5):
     pol_label.append('Policy'+str(pol))
 
+peak0_min = peak_data0.min()
+peak0_max = peak_data0.max()
+end0_min = end_data0.min()
+end0_max =end_data0.max()
+
 peak_datamin = 100 * array([peak_data0.min(),
                             peak_data1.min(),
                             peak_data2.min(),
@@ -174,42 +179,220 @@ close()
 
 ''' Now do single day strategy '''
 
-fig, ((ax1, ax2, ax3)) = subplots(1,3,sharex=True)
+fig, ((ax1, ax2)) = subplots(1,2,sharex=True)
+fig.tight_layout()
 axim = ax1.imshow(100 * peak_data0,
                   origin='lower',extent=(0, 1, 0, 1),
-                  vmin=peak_datamin,
-                  vmax=peak_datamax)
+                  vmin=100*peak0_min,
+                  vmax=100*peak0_max)
 ax1.set_ylabel('Single household\n density exponent')
 ax1.set_xlabel('Bubbled density\n exponent')
+ax1.text(-0.3, 1.3, 'a)',
+            fontsize='medium', verticalalignment='top', fontfamily='serif',
+            bbox=dict(facecolor='1', edgecolor='none', pad=3.0))
 divider = make_axes_locatable(ax1)
-cax = divider.append_axes("top", size="5%", pad=0.25)
-cbar = colorbar(axim, cax=cax, orientation='horizontal')
-cbar.ax.set_title("Peak % prevalence")
-cbar.ax.title.set_fontsize(8)
+cax = divider.append_axes("right", size="5%", pad=0.25)
+cbar = colorbar(axim,
+                cax=cax,
+                orientation='horizontal',
+                label="Peak % prevalence")
+cax.xaxis.set_ticks_position('top')
+cax.xaxis.set_label_position('top')
 
 axim = ax2.imshow(100 * end_data0,
                   origin='lower',
                   extent=(0, 1, 0, 1),
-                  vmin=end_datamin,
-                  vmax=end_datamax)
+                  vmin=100*end0_min,
+                  vmax=100*end0_max)
 ax2.set_xlabel('Bubbled density\n exponent')
+ax2.text(-0.15, 1.3, 'b)',
+            fontsize='medium', verticalalignment='top', fontfamily='serif',
+            bbox=dict(facecolor='1', edgecolor='none', pad=3.0))
 divider = make_axes_locatable(ax2)
 cax = divider.append_axes("top", size="5%", pad=0.25)
-cbar = colorbar(axim, cax=cax, orientation='horizontal')
-cbar.ax.set_title("Cumulative % prevalence")
-cbar.ax.title.set_fontsize(8)
-
-axim = ax3.imshow(100 * ar_data0,
-                  origin='lower',
-                  extent=(0, 1, 0, 1),
-                  vmin=ar_datamin,
-                  vmax=ar_datamax)
-ax3.set_xlabel('Bubbled density\n exponent')
-divider = make_axes_locatable(ax3)
-cax = divider.append_axes("top", size="5%", pad=0.25)
-cbar = colorbar(axim, cax=cax, orientation='horizontal')
-cbar.ax.set_title("% attack ratio")
-cbar.ax.title.set_fontsize(8)
+cbar = colorbar(axim,
+                cax=cax,
+                orientation='horizontal',
+                label="Cumulative % prevalence")
+cax.xaxis.set_ticks_position('top')
+cax.xaxis.set_label_position('top')
 
 fig.savefig('plots/temp_bubbles/single_day_grid.png',bbox_inches='tight', dpi=300)
+close()
+
+fig, ((ax_0, ax_1),
+      (ax_2, ax_3),
+      (ax_4, ax_null)) = subplots(3, 2, sharex=True, sharey=True)
+
+fig.tight_layout()
+
+axim = ax_0.imshow(100 * peak_data0,
+                  origin='lower',extent=(0, 1, 0, 1),
+                  vmin=100*peak_data0.min(),
+                  vmax=100*peak_data0.max())
+ax_0.set_ylabel('Single household\n density exponent')
+ax_0.text(-1, 1, 'a)',
+            fontsize='medium', verticalalignment='top', fontfamily='serif',
+            bbox=dict(facecolor='1', edgecolor='none', pad=3.0))
+divider = make_axes_locatable(ax_0)
+cax = divider.append_axes("right", size="5%", pad=0.25)
+cbar = colorbar(axim,
+                cax=cax,
+                orientation='vertical',
+                label="Peak %\n prevalence")
+
+axim = ax_1.imshow(100 * peak_data1,
+                  origin='lower',extent=(0, 1, 0, 1),
+                  vmin=100*peak_data1.min(),
+                  vmax=100*peak_data1.max())
+ax_1.set_ylabel('Single household\n density exponent')
+ax_1.text(-0.6, 1, 'b)',
+            fontsize='medium', verticalalignment='top', fontfamily='serif',
+            bbox=dict(facecolor='1', edgecolor='none', pad=3.0))
+divider = make_axes_locatable(ax_1)
+cax = divider.append_axes("right", size="5%", pad=0.25)
+cbar = colorbar(axim,
+                cax=cax,
+                orientation='vertical',
+                label="Peak %\n prevalence")
+
+axim = ax_2.imshow(100 * peak_data2,
+                  origin='lower',extent=(0, 1, 0, 1),
+                  vmin=100*peak_data2.min(),
+                  vmax=100*peak_data2.max())
+ax_2.set_ylabel('Single household\n density exponent')
+ax_2.text(-1, 1, 'c)',
+            fontsize='medium', verticalalignment='top', fontfamily='serif',
+            bbox=dict(facecolor='1', edgecolor='none', pad=3.0))
+divider = make_axes_locatable(ax_2)
+cax = divider.append_axes("right", size="5%", pad=0.25)
+cbar = colorbar(axim,
+                cax=cax,
+                orientation='vertical',
+                label="Peak %\n prevalence")
+
+axim = ax_3.imshow(100 * peak_data3,
+                  origin='lower',extent=(0, 1, 0, 1),
+                  vmin=100*peak_data3.min(),
+                  vmax=100*peak_data3.max())
+ax_3.set_ylabel('Single household\n density exponent')
+ax_3.set_xlabel('Bubbled density\n exponent')
+ax_3.text(-0.6, 1, 'd)',
+            fontsize='medium', verticalalignment='top', fontfamily='serif',
+            bbox=dict(facecolor='1', edgecolor='none', pad=3.0))
+divider = make_axes_locatable(ax_3)
+cax = divider.append_axes("right", size="5%", pad=0.25)
+cbar = colorbar(axim,
+                cax=cax,
+                orientation='vertical',
+                label="Peak %\n prevalence")
+
+axim = ax_4.imshow(100 * peak_data4,
+                  origin='lower',extent=(0, 1, 0, 1),
+                  vmin=100*peak_data4.min(),
+                  vmax=100*peak_data4.max())
+ax_4.set_ylabel('Single household\n density exponent')
+ax_4.set_xlabel('Bubbled density\n exponent')
+ax_4.text(-1, 1, 'e)',
+            fontsize='medium', verticalalignment='top', fontfamily='serif',
+            bbox=dict(facecolor='1', edgecolor='none', pad=3.0))
+divider = make_axes_locatable(ax_4)
+cax = divider.append_axes("right", size="5%", pad=0.25)
+cbar = colorbar(axim,
+                cax=cax,
+                orientation='vertical',
+                label="Peak %\n prevalence")
+
+ax_null.axis('off')
+
+fig.savefig('plots/temp_bubbles/peak_prev_grid.png',bbox_inches='tight', dpi=300)
+close()
+
+
+fig, ((ax_0, ax_1),
+      (ax_2, ax_3),
+      (ax_4, ax_null)) = subplots(3, 2, sharex=True, sharey=True)
+
+fig.tight_layout()
+
+axim = ax_0.imshow(100 * end_data0,
+                  origin='lower',extent=(0, 1, 0, 1),
+                  vmin=100*end_data0.min(),
+                  vmax=100*end_data0.max())
+ax_0.set_ylabel('Single household\n density exponent')
+ax_0.text(-1, 1, 'a)',
+            fontsize='medium', verticalalignment='top', fontfamily='serif',
+            bbox=dict(facecolor='1', edgecolor='none', pad=3.0))
+divider = make_axes_locatable(ax_0)
+cax = divider.append_axes("right", size="5%", pad=0.25)
+cbar = colorbar(axim,
+                cax=cax,
+                orientation='vertical',
+                label="Cumulative %\n prevalence")
+
+axim = ax_1.imshow(100 * end_data1,
+                  origin='lower',extent=(0, 1, 0, 1),
+                  vmin=100*end_data1.min(),
+                  vmax=100*end_data1.max())
+ax_1.set_ylabel('Single household\n density exponent')
+ax_1.text(-0.6, 1, 'b)',
+            fontsize='medium', verticalalignment='top', fontfamily='serif',
+            bbox=dict(facecolor='1', edgecolor='none', pad=3.0))
+divider = make_axes_locatable(ax_1)
+cax = divider.append_axes("right", size="5%", pad=0.25)
+cbar = colorbar(axim,
+                cax=cax,
+                orientation='vertical',
+                label="Cumulative %\n prevalence")
+
+axim = ax_2.imshow(100 * end_data2,
+                  origin='lower',extent=(0, 1, 0, 1),
+                  vmin=100*end_data2.min(),
+                  vmax=100*end_data2.max())
+ax_2.set_ylabel('Single household\n density exponent')
+ax_2.text(-1, 1, 'c)',
+            fontsize='medium', verticalalignment='top', fontfamily='serif',
+            bbox=dict(facecolor='1', edgecolor='none', pad=3.0))
+divider = make_axes_locatable(ax_2)
+cax = divider.append_axes("right", size="5%", pad=0.25)
+cbar = colorbar(axim,
+                cax=cax,
+                orientation='vertical',
+                label="Cumulative %\n prevalence")
+
+axim = ax_3.imshow(100 * end_data3,
+                  origin='lower',extent=(0, 1, 0, 1),
+                  vmin=100*end_data3.min(),
+                  vmax=100*end_data3.max())
+ax_3.set_ylabel('Single household\n density exponent')
+ax_3.set_xlabel('Bubbled density\n exponent')
+ax_3.text(-0.6, 1, 'd)',
+            fontsize='medium', verticalalignment='top', fontfamily='serif',
+            bbox=dict(facecolor='1', edgecolor='none', pad=3.0))
+divider = make_axes_locatable(ax_3)
+cax = divider.append_axes("right", size="5%", pad=0.25)
+cbar = colorbar(axim,
+                cax=cax,
+                orientation='vertical',
+                label="Cumulative %\n prevalence")
+
+axim = ax_4.imshow(100 * end_data4,
+                  origin='lower',extent=(0, 1, 0, 1),
+                  vmin=100*end_data4.min(),
+                  vmax=100*end_data4.max())
+ax_4.set_ylabel('Single household\n density exponent')
+ax_4.set_xlabel('Bubbled density\n exponent')
+ax_4.text(-1, 1, 'e)',
+            fontsize='medium', verticalalignment='top', fontfamily='serif',
+            bbox=dict(facecolor='1', edgecolor='none', pad=3.0))
+divider = make_axes_locatable(ax_4)
+cax = divider.append_axes("right", size="5%", pad=0.25)
+cbar = colorbar(axim,
+                cax=cax,
+                orientation='vertical',
+                label="Cumulative %\n prevalence")
+
+ax_null.axis('off')
+
+fig.savefig('plots/temp_bubbles/cum_prev_grid.png',bbox_inches='tight', dpi=300)
 close()

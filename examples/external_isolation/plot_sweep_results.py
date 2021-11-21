@@ -111,62 +111,66 @@ close()
 peak_max = max(vp_max, ip_max)
 end_max = max(ve_max, ci_max)
 
-fig, ((ax1, ax3), (ax2, ax4)) = subplots(2,2,sharex=True)
-
+fig, ((ax1, ax2), (ax3, ax4)) = subplots(2,2,sharex=True)
+fig.tight_layout()
 axim=ax1.imshow(vuln_peaks,
            origin='lower',
            extent=(iso_rate_range[0],iso_rate_range[-1],0,1),
            vmin=0,
-           vmax=peak_max)
-ax1.set_xlabel('Detection rate')
+           vmax=vp_max)
 ax1.set_ylabel('Isolation probability')
-
-# divider = make_axes_locatable(ax1)
-# cax = divider.append_axes("right", size="5%", pad=0.05)
-# cbar = colorbar(axim,
-#                 label="Peak % prevalence in vulnerable population",
-#                 cax=cax)
+ax1.text(-0.5, 1.1, 'a)',
+            fontsize='medium', verticalalignment='top', fontfamily='serif',
+            bbox=dict(facecolor='1', edgecolor='none', pad=3.0))
+divider = make_axes_locatable(ax1)
+cax = divider.append_axes("right", size="5%", pad=0.05)
+cbar = colorbar(axim,
+                label="Peak % prevalence\n in vulnerable population",
+                cax=cax)
 
 axim=ax2.imshow(vuln_end,
            origin='lower',
            extent=(iso_rate_range[0],iso_rate_range[-1],0,1),
            vmin=0,
-           vmax=end_max)
-ax2.set_xlabel('Detection rate')
-ax2.set_ylabel('Isolation probability')
-
-# divider = make_axes_locatable(ax2)
-# cax = divider.append_axes("right", size="5%", pad=0.05)
-# cbar = colorbar(axim,
-#                 label="Cumulative % infected in vulnerable population",
-#                 cax=cax)
+           vmax=ve_max)
+ax2.text(-0.3, 1.1, 'b)',
+            fontsize='medium', verticalalignment='top', fontfamily='serif',
+            bbox=dict(facecolor='1', edgecolor='none', pad=3.0))
+divider = make_axes_locatable(ax2)
+cax = divider.append_axes("right", size="5%", pad=0.05)
+cbar = colorbar(axim,
+                label="Cumulative % infected\n in vulnerable population",
+                cax=cax)
 
 axim=ax3.imshow(iso_peaks,
            origin='lower',
            extent=(iso_rate_range[0],iso_rate_range[-1],0,1),
            vmin=0,
-           vmax=peak_max)
+           vmax=ip_max)
 ax3.set_xlabel('Detection rate')
 ax3.set_ylabel('Isolation probability')
-
+ax3.text(-0.5, 1.1, 'c)',
+            fontsize='medium', verticalalignment='top', fontfamily='serif',
+            bbox=dict(facecolor='1', edgecolor='none', pad=3.0))
 divider = make_axes_locatable(ax3)
 cax = divider.append_axes("right", size="5%", pad=0.1)
 cbar = colorbar(axim,
-                label="Peak %",
+                label="Peak % population\n in isolation",
                 cax=cax)
 
 axim=ax4.imshow(cum_iso,
            origin='lower',
            extent=(iso_rate_range[0],iso_rate_range[-1],0,1),
            vmin=0,
-           vmax=end_max)
+           vmax=ci_max)
 ax4.set_xlabel('Detection rate')
-ax4.set_ylabel('Isolation probability')
-
+ax4.text(-0.3, 1.1, 'd)',
+            fontsize='medium', verticalalignment='top', fontfamily='serif',
+            bbox=dict(facecolor='1', edgecolor='none', pad=3.0))
 divider = make_axes_locatable(ax4)
 cax = divider.append_axes("right", size="5%", pad=0.1)
 cbar = colorbar(axim,
-                label="Cumulative %",
+                label="Cumulative % population\n in isolation",
                 cax=cax)
 
 fig.savefig('plots/oohi/grid_plot.png',
