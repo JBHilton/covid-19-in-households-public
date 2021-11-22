@@ -220,6 +220,8 @@ cax.xaxis.set_label_position('top')
 fig.savefig('plots/temp_bubbles/single_day_grid.png',bbox_inches='tight', dpi=300)
 close()
 
+'''Paper plots'''
+
 fig, ((ax_0, ax_1),
       (ax_2, ax_3),
       (ax_4, ax_null)) = subplots(3, 2, sharex=True, sharey=True)
@@ -241,10 +243,10 @@ cbar = colorbar(axim,
                 orientation='vertical',
                 label="Peak %\n prevalence")
 
-axim = ax_1.imshow(100 * peak_data1,
+axim = ax_1.imshow(100 * peak_data2,
                   origin='lower',extent=(0, 1, 0, 1),
-                  vmin=100*peak_data1.min(),
-                  vmax=100*peak_data1.max())
+                  vmin=100*peak_data2.min(),
+                  vmax=100*peak_data2.max())
 ax_1.set_ylabel('Single household\n density exponent')
 ax_1.text(-0.6, 1, 'b)',
             fontsize='medium', verticalalignment='top', fontfamily='serif',
@@ -256,10 +258,10 @@ cbar = colorbar(axim,
                 orientation='vertical',
                 label="Peak %\n prevalence")
 
-axim = ax_2.imshow(100 * peak_data2,
+axim = ax_2.imshow(100 * peak_data1,
                   origin='lower',extent=(0, 1, 0, 1),
-                  vmin=100*peak_data2.min(),
-                  vmax=100*peak_data2.max())
+                  vmin=100*peak_data1.min(),
+                  vmax=100*peak_data1.max())
 ax_2.set_ylabel('Single household\n density exponent')
 ax_2.text(-1, 1, 'c)',
             fontsize='medium', verticalalignment='top', fontfamily='serif',
@@ -271,10 +273,10 @@ cbar = colorbar(axim,
                 orientation='vertical',
                 label="Peak %\n prevalence")
 
-axim = ax_3.imshow(100 * peak_data3,
+axim = ax_3.imshow(100 * peak_data4,
                   origin='lower',extent=(0, 1, 0, 1),
-                  vmin=100*peak_data3.min(),
-                  vmax=100*peak_data3.max())
+                  vmin=100*peak_data4.min(),
+                  vmax=100*peak_data4.max())
 ax_3.set_ylabel('Single household\n density exponent')
 ax_3.set_xlabel('Bubbled density\n exponent')
 ax_3.text(-0.6, 1, 'd)',
@@ -287,10 +289,10 @@ cbar = colorbar(axim,
                 orientation='vertical',
                 label="Peak %\n prevalence")
 
-axim = ax_4.imshow(100 * peak_data4,
+axim = ax_4.imshow(100 * peak_data3,
                   origin='lower',extent=(0, 1, 0, 1),
-                  vmin=100*peak_data4.min(),
-                  vmax=100*peak_data4.max())
+                  vmin=100*peak_data3.min(),
+                  vmax=100*peak_data3.max())
 ax_4.set_ylabel('Single household\n density exponent')
 ax_4.set_xlabel('Bubbled density\n exponent')
 ax_4.text(-1, 1, 'e)',
@@ -330,10 +332,10 @@ cbar = colorbar(axim,
                 orientation='vertical',
                 label="Cumulative %\n prevalence")
 
-axim = ax_1.imshow(100 * end_data1,
+axim = ax_1.imshow(100 * end_data2,
                   origin='lower',extent=(0, 1, 0, 1),
-                  vmin=100*end_data1.min(),
-                  vmax=100*end_data1.max())
+                  vmin=100*end_data2.min(),
+                  vmax=100*end_data2.max())
 ax_1.set_ylabel('Single household\n density exponent')
 ax_1.text(-0.6, 1, 'b)',
             fontsize='medium', verticalalignment='top', fontfamily='serif',
@@ -345,10 +347,10 @@ cbar = colorbar(axim,
                 orientation='vertical',
                 label="Cumulative %\n prevalence")
 
-axim = ax_2.imshow(100 * end_data2,
+axim = ax_2.imshow(100 * end_data1,
                   origin='lower',extent=(0, 1, 0, 1),
-                  vmin=100*end_data2.min(),
-                  vmax=100*end_data2.max())
+                  vmin=100*end_data1.min(),
+                  vmax=100*end_data1.max())
 ax_2.set_ylabel('Single household\n density exponent')
 ax_2.text(-1, 1, 'c)',
             fontsize='medium', verticalalignment='top', fontfamily='serif',
@@ -360,10 +362,10 @@ cbar = colorbar(axim,
                 orientation='vertical',
                 label="Cumulative %\n prevalence")
 
-axim = ax_3.imshow(100 * end_data3,
+axim = ax_3.imshow(100 * end_data4,
                   origin='lower',extent=(0, 1, 0, 1),
-                  vmin=100*end_data3.min(),
-                  vmax=100*end_data3.max())
+                  vmin=100*end_data4.min(),
+                  vmax=100*end_data4.max())
 ax_3.set_ylabel('Single household\n density exponent')
 ax_3.set_xlabel('Bubbled density\n exponent')
 ax_3.text(-0.6, 1, 'd)',
@@ -376,10 +378,10 @@ cbar = colorbar(axim,
                 orientation='vertical',
                 label="Cumulative %\n prevalence")
 
-axim = ax_4.imshow(100 * end_data4,
+axim = ax_4.imshow(100 * end_data3,
                   origin='lower',extent=(0, 1, 0, 1),
-                  vmin=100*end_data4.min(),
-                  vmax=100*end_data4.max())
+                  vmin=100*end_data3.min(),
+                  vmax=100*end_data3.max())
 ax_4.set_ylabel('Single household\n density exponent')
 ax_4.set_xlabel('Bubbled density\n exponent')
 ax_4.text(-1, 1, 'e)',

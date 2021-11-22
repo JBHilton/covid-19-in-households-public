@@ -28,8 +28,8 @@ SPEC = {**SINGLE_AGE_UK_SPEC, **SINGLE_AGE_SEIR_SPEC_FOR_FITTING}
 X0 = 2 * 1e-2 # Growth rate estimate for mid-December 2020 from ONS
 ATOL = 1e-16 # IVP solver tolerance
 NO_COMPARTMENTS = 4 # We use an SEIR model, hence 4 compartments
-MAX_MERGED_SIZE = 10 # We only allow merges where total individuals is at most 12
-MAX_UNMERGED_SIZE = 4 # As usual, we model the chunk of the population in households of size 6 or fewer
+MAX_MERGED_SIZE = 12 # We only allow merges where total individuals is at most 12
+MAX_UNMERGED_SIZE = 6 # As usual, we model the chunk of the population in households of size 6 or fewer
 GUEST_TRANS_SCALING = 1 # This is strength of guest-host interactions relative to host-host interactions
 
 growth_rate = X0
@@ -435,7 +435,9 @@ def run_merge(
             peaks_4,
             R_end_4,
             ar_4,
-            hh_prop_4]
+            hh_prop_4,
+            unmerged.input.density_expo,
+            merged.merged_input2.density_expo]
 
 
 
@@ -689,6 +691,8 @@ def main(no_of_workers,
     with Pool(no_of_workers) as pool:
         results = pool.map(unpack_paramas_and_run_merge, params)
 
+    print(results)
+
     peak_data0 = array([r[0] for r in results]).reshape(
         len(unmerged_exponents),
         len(merged_exponents))
@@ -749,6 +753,12 @@ def main(no_of_workers,
     hh_prop_data4 = array([r[19] for r in results]).reshape(
         len(unmerged_exponents),
         len(merged_exponents))
+    par_data1 = array([r[20] for r in results]).reshape(
+        len(unmerged_exponents),
+        len(merged_exponents))
+    par_data2 = array([r[20] for r in results]).reshape(
+        len(unmerged_exponents),
+        len(merged_exponents))
 
     fname = 'outputs/temp_bubbles/results.pkl'
     with open(fname, 'wb') as f:
@@ -773,8 +783,8 @@ def main(no_of_workers,
              end_data4,
              ar_data4,
              hh_prop_data4,
-             unmerged_exponents,
-             merged_exponents),
+             par_data1,
+             par_data2),
             f)
 
 
