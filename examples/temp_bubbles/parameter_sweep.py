@@ -691,8 +691,6 @@ def main(no_of_workers,
     with Pool(no_of_workers) as pool:
         results = pool.map(unpack_paramas_and_run_merge, params)
 
-    print(results)
-
     peak_data0 = array([r[0] for r in results]).reshape(
         len(unmerged_exponents),
         len(merged_exponents))
