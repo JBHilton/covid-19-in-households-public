@@ -13,8 +13,6 @@ from numpy.random import rand
 from pandas import read_csv
 from time import time as get_time
 from scipy.integrate import solve_ivp, trapezoid
-from matplotlib.pyplot import subplots
-from matplotlib.cm import get_cmap
 from model.preprocessing import (add_vuln_class, add_vulnerable_hh_members,
 estimate_beta_ext, HouseholdPopulation, make_initial_condition_by_eigenvector,
 map_SEPIR_to_SEPIRQ,SEPIRInput, SEPIRQInput)

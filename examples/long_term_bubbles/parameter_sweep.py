@@ -13,8 +13,6 @@ from numpy.random import rand
 from pandas import read_csv
 from time import time as get_time
 from scipy.integrate import solve_ivp
-from matplotlib.pyplot import subplots
-from matplotlib.cm import get_cmap
 from model.preprocessing import ( build_support_bubbles, estimate_beta_ext,
         estimate_growth_rate, SEPIRInput, HouseholdPopulation,
         make_initial_condition_by_eigenvector)

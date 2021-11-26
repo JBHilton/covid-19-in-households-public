@@ -189,10 +189,10 @@ ar_ext_50 = ar_by_size[0,10,:] # AR with 50% external reduction
 ar_both_50 = ar_by_size[10,10,:] # AR with both interventions
 
 fig, ax = subplots(1,1)
-ax.plot(range(1,7), baseline_ar, label = 'No interventions')
-ax.plot(range(1,7), ar_int_50, label = '50% within-hh reduction')
-ax.plot(range(1,7), ar_ext_50, label = '50% between-hh reduction')
-ax.plot(range(1,7), ar_both_50, label = '50% reduction on both levels')
+ax.plot(range(1,7), baseline_ar, '-o', label = 'No interventions')
+ax.plot(range(1,7), ar_int_50, label = '50% within-hh reduction', linestyle='dotted', marker='s')
+ax.plot(range(1,7), ar_ext_50, label = '50% between-hh reduction', linestyle='dashed', marker='v')
+ax.plot(range(1,7), ar_both_50, label = '50% reduction on both levels', linestyle='dashdot', marker='X')
 ax.set_xlabel('Household size')
 ax.set_ylabel('Expected secondary\n attack ratio')
 ax.set_aspect(1.0/ax.get_data_ratio())
@@ -207,8 +207,8 @@ fpar_int_25 = first_pass_ar[5,0,:] # AR with 25% internal mixing reduction
 fpar_int_50 = first_pass_ar[10,0,:] # AR with 50% internal mixing reduction
 
 fig, ax = subplots(1,1)
-ax.plot(range(1,7), baseline_fpar, label = 'No interventions')
-ax.plot(range(1,7), fpar_int_50, label = '50% within-hh reduction')
+ax.plot(range(1,7), baseline_fpar, '-o', label = 'No interventions')
+ax.plot(range(1,7), fpar_int_50, label = '50% within-hh reduction', linestyle='dotted', marker='s')
 ax.set_xlabel('Household size')
 ax.set_ylabel('Expected secondary\n attack ratio')
 ax.set_aspect(1.0/ax.get_data_ratio())
@@ -220,10 +220,10 @@ close()
 
 fig, ((ax1, ax2), (ax3, ax4)) = subplots(2, 2)
 fig.tight_layout()
-ax1.plot(range(1,7), baseline_ar, label = 'No interventions')
-ax1.plot(range(1,7), ar_int_25, label = 'Within-hh controls')
-ax1.plot(range(1,7), ar_ext_25, label = 'Between-hh controls')
-ax1.plot(range(1,7), ar_both_25, label = 'Controls on both levels')
+ax1.plot(range(1,7), baseline_ar, '-o', label = 'No interventions')
+ax1.plot(range(1,7), ar_int_25, ':s', label = 'Within-hh controls')
+ax1.plot(range(1,7), ar_ext_25, '--v', label = 'Between-hh controls')
+ax1.plot(range(1,7), ar_both_25, '-.x', label = 'Controls on both levels')
 ax1.set_xlabel('Household size')
 ax1.set_ylabel('Expected secondary\n attack ratio')
 ax1.set_aspect(1.0/ax1.get_data_ratio())
@@ -231,10 +231,10 @@ ax1.text(-1.5, 1.0, 'a)',
             fontsize='medium', verticalalignment='top', fontfamily='serif',
             bbox=dict(facecolor='1', edgecolor='none', pad=3.0))
 
-ax2.plot(range(1,7), baseline_ar, label = 'No interventions')
-ax2.plot(range(1,7), ar_int_50, label = 'Within-hh controls')
-ax2.plot(range(1,7), ar_ext_50, label = 'Between-hh controls')
-ax2.plot(range(1,7), ar_both_50, label = 'Controls on both levels')
+ax2.plot(range(1,7), baseline_ar, '-o', label = 'No interventions')
+ax2.plot(range(1,7), ar_int_50, ':s', label = 'Within-hh controls')
+ax2.plot(range(1,7), ar_ext_50, '--v', label = 'Between-hh controls')
+ax2.plot(range(1,7), ar_both_50, '-.x', label = 'Controls on both levels')
 ax2.set_xlabel('Household size')
 ax2.set_ylabel('Expected secondary\n attack ratio')
 ax2.set_aspect(1.0/ax2.get_data_ratio())
@@ -243,8 +243,8 @@ ax2.text(-1.0, 1.0, 'b)',
             bbox=dict(facecolor='1', edgecolor='none', pad=3.0))
 ax2.legend(loc='center left', bbox_to_anchor=(1, 0.5))
 
-ax3.plot(range(1,7), baseline_fpar, label = 'No interventions')
-ax3.plot(range(1,7), fpar_int_25, label = 'Within-hh controls')
+ax3.plot(range(1,7), baseline_fpar, '-o', label = 'No interventions')
+ax3.plot(range(1,7), fpar_int_25, ':s', label = 'Within-hh controls')
 ax3.set_xlabel('Household size')
 ax3.set_ylabel('Expected first\n pass secondary\n attack ratio')
 ax3.set_aspect(1.0/ax3.get_data_ratio())
@@ -252,8 +252,8 @@ ax3.text(-1.5, 0.8, 'c)',
             fontsize='medium', verticalalignment='top', fontfamily='serif',
             bbox=dict(facecolor='1', edgecolor='none', pad=3.0))
 
-ax4.plot(range(1,7), baseline_fpar, label = 'No interventions')
-ax4.plot(range(1,7), fpar_int_50, label = 'Within-hh controls')
+ax4.plot(range(1,7), baseline_fpar, '-o', label = 'No interventions')
+ax4.plot(range(1,7), fpar_int_50, ':s', label = 'Within-hh controls')
 ax4.set_xlabel('Household size')
 ax4.set_ylabel('Expected first\n pass secondary\n attack ratio')
 ax4.set_aspect(1.0/ax4.get_data_ratio())
