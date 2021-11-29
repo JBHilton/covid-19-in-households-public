@@ -800,8 +800,8 @@ def main(no_of_workers,
 if __name__ == '__main__':
     parser = ArgumentParser()
     parser.add_argument('--no_of_workers', type=int, default=8)
-    parser.add_argument('--unmerged_exponent_vals', type=float, default=[0.0, 1.01, 0.6])
-    parser.add_argument('--merged_exponent_vals', type=float, default=[0.0, 1.01, 0.6])
+    parser.add_argument('--unmerged_exponent_vals', type=float, default=[0.0, 1.01, 0.05])
+    parser.add_argument('--merged_exponent_vals', type=float, default=[0.0, 1.01, 0.05])
     args = parser.parse_args()
     start = time()
     main(args.no_of_workers,
