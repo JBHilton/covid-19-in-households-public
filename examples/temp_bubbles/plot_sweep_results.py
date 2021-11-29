@@ -10,6 +10,12 @@ from mpl_toolkits.axes_grid1 import make_axes_locatable
 if isdir('plots/temp_bubbles') is False:
     mkdir('plots/temp_bubbles')
 
+with open('outputs/temp_bubbles/baseline_results.pkl', 'rb') as f:
+    (baseline_peak_data,
+     baseline_end_data,
+     baseline_ar_data,
+     baseline_hh_prop_data) = load(f)
+
 with open('outputs/temp_bubbles/results.pkl', 'rb') as f:
     (peak_data0,
      end_data0,
@@ -305,7 +311,11 @@ cbar = colorbar(axim,
                 orientation='vertical',
                 label="Peak %\n prevalence")
 
-ax_null.axis('off')
+ax_null.plot(unmerged_exponents[:, 0], 100 * baseline_peak_data)
+ax_null.set_ylim([0,10])
+ax_null.set_aspect(1/10)
+ax_null.set_xlabel('Single household\n density exponent')
+ax_null.set_ylabel('Peak % prevalence')
 
 fig.savefig('plots/temp_bubbles/peak_prev_grid.png',bbox_inches='tight', dpi=300)
 close()
@@ -394,7 +404,11 @@ cbar = colorbar(axim,
                 orientation='vertical',
                 label="Cumulative %\n prevalence")
 
-ax_null.axis('off')
+ax_null.plot(unmerged_exponents[:, 0], 100 * baseline_end_data)
+ax_null.set_ylim([0,50])
+ax_null.set_aspect(1/50)
+ax_null.set_xlabel('Single household\n density exponent')
+ax_null.set_ylabel('Cumulative % prevalence')
 
 fig.savefig('plots/temp_bubbles/cum_prev_grid.png',bbox_inches='tight', dpi=300)
 close()

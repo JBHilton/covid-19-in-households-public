@@ -124,18 +124,15 @@ class UnmergedContext:
         baseline_R = baseline_H.T.dot(
             self.population.states[:, 3])/unmerged_input.ave_hh_size
 
-        with open('baseline.pkl', 'wb') as f:
-            dump(
-                (
-                    self.population,
-                    baseline_H,
-                    baseline_time,
-                    baseline_S,
-                    baseline_E,
-                    baseline_I,
-                    baseline_R
-                ),
-                f)
+        self.peaks_baseline = max(baseline_I)
+        self.R_end_baseline = baseline_R[-1]
+        R_end_vec = baseline_H[:, -1] * \
+                        self.population.states[:, 3]
+        ar_baseline = (
+                self.population.state_to_comp_matrix.T.dot(R_end_vec))
+        self.ar_baseline = self.input.composition_distribution.dot(
+                                        ar_baseline / self.input.hh_size_list)
+        self.hh_prop_baseline = baseline_H[self.recovered_states, -1].sum()
 
 
 def unpack_paramas_and_run_merge(p):
@@ -652,6 +649,20 @@ def main(no_of_workers,
         params.append((i, e, t0, t_end, merge_start))
     with Pool(no_of_workers) as pool:
         unmerged_results = pool.map(create_unmerged_context, params)
+    baseline_peak_data = array([r.peaks_baseline for r in unmerged_results])
+    baseline_end_data = array([r.R_end_baseline for r in unmerged_results])
+    baseline_ar_data = array([r.ar_baseline for r in unmerged_results])
+    baseline_hh_prop_data = array(
+                            [r.hh_prop_baseline for r in unmerged_results])
+    fname = 'outputs/temp_bubbles/baseline_results.pkl'
+    with open(fname, 'wb') as f:
+        dump(
+            (baseline_peak_data,
+             baseline_end_data,
+             baseline_ar_data,
+             baseline_hh_prop_data),
+            f)
+
     params = []
     for e in merged_exponents:
         params.append((
@@ -789,8 +800,8 @@ def main(no_of_workers,
 if __name__ == '__main__':
     parser = ArgumentParser()
     parser.add_argument('--no_of_workers', type=int, default=8)
-    parser.add_argument('--unmerged_exponent_vals', type=float, default=[0.0, 1.01, 0.05])
-    parser.add_argument('--merged_exponent_vals', type=float, default=[0.0, 1.01, 0.05])
+    parser.add_argument('--unmerged_exponent_vals', type=float, default=[0.0, 1.01, 0.6])
+    parser.add_argument('--merged_exponent_vals', type=float, default=[0.0, 1.01, 0.6])
     args = parser.parse_args()
     start = time()
     main(args.no_of_workers,
