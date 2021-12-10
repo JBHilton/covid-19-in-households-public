@@ -57,7 +57,7 @@ fig.tight_layout()
 vmin = 0.5*floor(2*100*baseline_peak_array.min())
 vmax = 0.5*ceil(2*100*baseline_peak_array.max())
 vtick = vmin + 0.25 * (vmax - vmin) * arange(5)
-axim = ax_0.imshow(100 * baseline_peak_array.T,
+axim = ax_0.imshow(100 * baseline_peak_array,
                   origin='lower',extent=(0, 1, 0, 1),
                   vmin=vmin,
                   vmax=vmax)
@@ -201,7 +201,7 @@ fig.tight_layout()
 vmin=floor(100*baseline_end_array.min())
 vmax=ceil(100*baseline_end_array.max())
 vtick = vmin + 0.25 * (vmax - vmin) * arange(5)
-axim = ax_0.imshow(100 * baseline_end_array.T,
+axim = ax_0.imshow(100 * baseline_end_array,
                   origin='lower',extent=(0, 1, 0, 1),
                   vmin=vmin,
                   vmax=vmax)
