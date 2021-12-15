@@ -526,47 +526,6 @@ def det_from_spec(spec):
     }
     return text_to_type[spec['det_model']['type']](spec['det_model'])
 
-def calculate_sitp_rmse_fixed_times(x, model_input, sitp_data):
-    ''' This function calculates the root mean square error in the
-    susceptible-infectious transmission probability for a given set of
-    parameters and some empirical data.'''
-
-    beta_int = x[0]
-    density_expo = x[1]
-
-    err_array = zeros(sitp_data.shape)
-
-    for n, sitp in enumerate(sitp_data):
-        sitp_est = 1 - exp(
-                            - beta_int *
-                            model_input.ave_contact_dur *
-                            model_input.ave_trans / (n+1)**density_expo
-                            )
-        err_array[n] = (sitp - sitp_est)**2
-
-    return err_array.sum()
-
-def calculate_sitp_fixed_times(x, model_input, sitp_data):
-    ''' This function calculates the root mean square error in the
-    susceptible-infectious transmission probability for a given set of
-    parameters and some empirical data. This is assuming fixed periods in each
-    infectious compartment.'''
-
-    beta_int = x[0]
-    density_expo = x[1]
-
-    sitp_array = zeros(sitp_data.shape)
-
-    for n, sitp in enumerate(sitp_data):
-        sitp_est = 1 - exp(
-                            - beta_int *
-                            model_input.ave_contact_dur *
-                            model_input.ave_trans / (n+1)**density_expo
-                            )
-        sitp_array[n] = sitp_est
-
-    return sitp_array
-
 def calculate_sitp_rmse(x, model_input, sitp_data):
     ''' This function calculates the root mean square error in the
     susceptible-infectious transmission probability for a given set of
@@ -583,7 +542,7 @@ def calculate_sitp_rmse(x, model_input, sitp_data):
             escape_prob *= 1 / (
                 1 / model_input.prog_rates[comp] +
                 beta_int *
-                model_input.inf_scales[comp].dot(model_input.ave_hh_by_class) *
+                model_input.inf_scales[comp].dot(model_input.ave_hh_by_class / model_input.ave_hh_size) *
                 model_input.ave_contact_dur /
                 (n+1)**density_expo)
         sitp_est = 1 - escape_prob
@@ -631,7 +590,7 @@ class ModelInput(ABC):
             subsystem_key[self.compartmental_structure][2]
         self.no_inf_compartments = \
             len(self.inf_compartment_list)
-            
+
         self.new_case_compartment = \
             subsystem_key[self.compartmental_structure][3]
 

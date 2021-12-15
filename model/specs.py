@@ -66,6 +66,9 @@ LATENT_PERIOD = 0.2 * 5.8   # Time in days from infection to infectiousness
 PRODROME_PERIOD = 0.8 * 5.8 # Time in days from infectiousness to symptom onset
 SYMPTOM_PERIOD = 5          # Time in days from symptom onset to recovery
 
+OMI_PRODROME_PERIOD = 0.5 * 0.8 * 5.8 # Time in days from infectiousness to symptom onset
+OMI_SYMPTOM_PERIOD = 0.5 * 5          # Time in days from symptom onset to recovery
+
 PRODROME_SCALING = 3        # Relative intensity of transmission during prodrome
 
 TWO_AGE_SIR_SPEC = {
@@ -115,6 +118,17 @@ TWO_AGE_SEIR_SPEC = {
     'fit_method' : 'R*'
 }
 
+TWO_AGE_SEIR_SPEC_FOR_FITTING = {
+    'compartmental_structure': 'SEIR', # This is which subsystem key to use
+    'SITP': TRANCHE2_SITP,                     # Secondary inf probability
+    'recovery_rate': 1 / (PRODROME_PERIOD +
+                          SYMPTOM_PERIOD),           # Recovery rate
+    'incubation_rate': 1 / LATENT_PERIOD,         # E->I incubation rate
+    'sus': array([1,1]),          # Relative susceptibility by
+                                  # age/vulnerability class
+    'fit_method' : 'EL'
+}
+
 TWO_AGE_SEPIR_SPEC = {
     'compartmental_structure': 'SEPIR', # This is which subsystem key to use
     'SITP': TRANCHE2_SITP,                     # Secondary inf probability
@@ -140,6 +154,34 @@ TWO_AGE_SEPIR_SPEC_FOR_FITTING = {
      PRODROME_SCALING * ones(2,),          # Prodromal transmission intensity relative to
                                 # full inf transmission
     'sus': array([1,1]),          # Relative susceptibility by
+                                  # age/vulnerability class
+    'fit_method' : 'EL'
+}
+
+THREE_AGE_SEPIR_SPEC_FOR_FITTING = {
+    'compartmental_structure': 'SEPIR', # This is which subsystem key to use
+    'SITP': TRANCHE2_SITP,                     # Secondary inf probability
+    'recovery_rate': 1 / SYMPTOM_PERIOD,           # Recovery rate
+    'incubation_rate': 1 / LATENT_PERIOD,         # E->P incubation rate
+    'symp_onset_rate': 1 / PRODROME_PERIOD,         # P->I prodromal to symptomatic rate
+    'prodromal_trans_scaling':
+     PRODROME_SCALING * ones(3,),          # Prodromal transmission intensity relative to
+                                # full inf transmission
+    'sus': array([1,1,1]),          # Relative susceptibility by
+                                  # age/vulnerability class
+    'fit_method' : 'EL'
+}
+
+THREE_AGE_OMI_SEPIR_SPEC_FOR_FITTING = {
+    'compartmental_structure': 'SEPIR', # This is which subsystem key to use
+    'SITP': TRANCHE2_SITP,                     # Secondary inf probability
+    'recovery_rate': 1 / OMI_SYMPTOM_PERIOD,           # Recovery rate
+    'incubation_rate': 1 / LATENT_PERIOD,         # E->P incubation rate
+    'symp_onset_rate': 1 / OMI_PRODROME_PERIOD,         # P->I prodromal to symptomatic rate
+    'prodromal_trans_scaling':
+     PRODROME_SCALING * ones(3,),          # Prodromal transmission intensity relative to
+                                # full inf transmission
+    'sus': array([1,1,1]),          # Relative susceptibility by
                                   # age/vulnerability class
     'fit_method' : 'EL'
 }
@@ -200,6 +242,17 @@ TWO_AGE_EXT_SEPIRQ_SPEC = {
     'fit_method' : 'EL'
 }
 
+THREE_AGE_SEIR_SPEC = {
+    'compartmental_structure': 'SEIR', # This is which subsystem key to use
+    'SITP': TRANCHE2_SITP,                     # Secondary inf probability
+    'recovery_rate': 1 / (PRODROME_PERIOD +
+                          SYMPTOM_PERIOD),           # Recovery rate
+    'incubation_rate': 1 / LATENT_PERIOD,         # E->I incubation rate
+    'sus': array([1,1,1]),          # Relative susceptibility by
+                                  # age/vulnerability class
+    'fit_method' : 'EL'
+}
+
 SINGLE_AGE_UK_SPEC = {
     # Load in within-hh and pop-level contact matrices:
     'k_home': {
@@ -229,6 +282,21 @@ TWO_AGE_UK_SPEC = {
     'pop_pyramid_file_name': 'inputs/United Kingdom-2019.csv',
     'fine_bds' : arange(0,81,5),
     'coarse_bds' : array([0,20]),
+    'adult_bd' : 1
+}
+
+BDS_20_65_UK_SPEC = {
+    'k_home': {
+        'file_name': 'inputs/MUestimates_home_2.xlsx',
+        'sheet_name':'United Kingdom of Great Britain'
+    },
+    'k_all': {
+        'file_name': 'inputs/MUestimates_all_locations_2.xlsx',
+        'sheet_name': 'United Kingdom of Great Britain'
+    },
+    'pop_pyramid_file_name': 'inputs/United Kingdom-2019.csv',
+    'fine_bds' : arange(0,81,5),
+    'coarse_bds' : array([0,20, 65]),
     'adult_bd' : 1
 }
 
