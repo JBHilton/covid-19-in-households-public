@@ -14,16 +14,15 @@ if isdir('plots/uk') is False:
 DOUBLING_TIME = 3
 growth_rate = log(2) / DOUBLING_TIME
 
-with open('outputs/uk/SEIR_results.pkl', 'rb') as f:
+with open('outputs/uk/SIR_results.pkl', 'rb') as f:
     H, time_series = load(f)
-with open('outputs/uk/fitted_SEIR_input.pkl', 'rb') as f:
+with open('outputs/uk/fitted_SIR_input.pkl', 'rb') as f:
     model_input = load(f)
 
 t = time_series['time']
 t_15_loc = where(t > 15)[0][0]
 t_30_loc = where(t > 30)[0][0]
-total_cases = (time_series['E'] +
-               time_series['I']).sum(1) / model_input.ave_hh_size
+total_cases = (time_series['I']).sum(1) / model_input.ave_hh_size
 exp_curve = total_cases[t_15_loc] * exp(growth_rate * (t[:t_30_loc+1]-t[t_15_loc]))
 
 lgd=['Fitted simulation results', 'Exponential growth curve']
@@ -49,4 +48,4 @@ ax.set_ylabel('Prevalence')
 ax.set_ylim(0.1 * total_cases[0], 1e-2)
 ax.legend(ncol=1, loc='upper left')
 ax.set_box_aspect(1)
-fig.savefig('plots/uk/SEIR_exp_growth.png', bbox_inches='tight', dpi=300)
+fig.savefig('plots/uk/SIR_exp_growth.png', bbox_inches='tight', dpi=300)

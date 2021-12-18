@@ -4,7 +4,7 @@ from copy import copy, deepcopy
 from numpy import (
         append, arange, around, array, concatenate, cumsum, diag, exp, hstack,
         identity, insert, ix_, kron, log, ndarray, ones, ones_like, prod,
-        shape, tile, vstack, where, zeros)
+        shape, sqrt, tile, vstack, where, zeros)
 from numpy.linalg import eig
 from pandas import read_excel, read_csv
 from scipy.integrate import solve_ivp
@@ -537,18 +537,19 @@ def calculate_sitp_rmse(x, model_input, sitp_data):
     err_array = zeros(sitp_data.shape)
 
     for n, sitp in enumerate(sitp_data):
-        escape_prob = 1 / model_input.prog_rates.prod()
+        escape_prob = 1
         for comp in range(model_input.no_inf_compartments):
             escape_prob *= 1 / (
-                1 / model_input.prog_rates[comp] +
-                beta_int *
-                model_input.inf_scales[comp].dot(model_input.ave_hh_by_class / model_input.ave_hh_size) *
-                model_input.ave_contact_dur /
-                (n+1)**density_expo)
+                1  +
+                (beta_int * (1 / model_input.prog_rates[comp]) *
+                (model_input.inf_scales[comp].dot(
+                model_input.ave_hh_by_class / model_input.ave_hh_size
+                ) * model_input.ave_contact_dur) /
+                (n+1)**density_expo))
         sitp_est = 1 - escape_prob
         err_array[n] = (sitp - sitp_est)**2
 
-    return err_array.sum()
+    return sqrt(err_array.sum())
 
 def calculate_sitp(x, model_input, sitp_data):
     ''' This function calculates the root mean square error in the
@@ -562,14 +563,14 @@ def calculate_sitp(x, model_input, sitp_data):
     sitp_array = zeros(sitp_data.shape)
 
     for n, sitp in enumerate(sitp_data):
-        escape_prob = 1 / model_input.prog_rates.prod()
+        escape_prob = 1
         for comp in range(model_input.no_inf_compartments):
             escape_prob *= 1 / (
-                1 / model_input.prog_rates[comp] +
-                beta_int *
-                model_input.inf_scales[comp].dot(model_input.ave_hh_by_class) *
+                1 +
+                (beta_int * (1 / model_input.prog_rates[comp]) *
+                model_input.inf_scales[comp].dot(model_input.ave_hh_by_class / model_input.ave_hh_size) *
                 model_input.ave_contact_dur /
-                (n+1)**density_expo)
+                (n+1)**density_expo))
         sitp_est = 1 - escape_prob
         sitp_array[n] = sitp_est
 
@@ -682,8 +683,8 @@ class SIRInput(ModelInput):
         self.k_home = beta_int * self.k_home
 
         ext_eig = max(eig(
-            self.sus * ((1/spec['recovery_rate']) *
-             (self.k_ext))
+            diag(self.sus).dot((1/spec['recovery_rate']) *
+             (self.k_ext).dot(diag(self.inf_scales[0])))
             )[0])
         if spec['fit_method'] == 'R*':
             external_scale = spec['R*'] / (self.ave_hh_size*spec['SITP'])
@@ -702,7 +703,6 @@ class SEIRInput(ModelInput):
 
         self.sus = spec['sus']
         self.inf_scales = [ones((self.no_age_classes,))]
-
         self.gamma = self.spec['recovery_rate']
 
         self.ave_trans = 1 / self.gamma
@@ -720,8 +720,8 @@ class SEIRInput(ModelInput):
         self.k_home = beta_int * self.k_home
 
         ext_eig = max(eig(
-            self.sus * ((1/spec['recovery_rate']) *
-             (self.k_ext))
+            diag(self.sus).dot((1/spec['recovery_rate']) *
+             (self.k_ext).dot(diag(self.inf_scales[0])))
             )[0])
         if spec['fit_method'] == 'R*':
             external_scale = spec['R*'] / (self.ave_hh_size*spec['SITP'])
@@ -771,8 +771,10 @@ class SEPIRInput(ModelInput):
         self.k_home = beta_int * self.k_home
 
         ext_eig = max(eig(
-            self.sus * ((1/spec['recovery_rate']) *
-             (self.k_ext))
+            diag(self.sus).dot((1/spec['symp_onset_rate']) *
+             (self.k_ext).dot(self.inf_scales[0]) +
+             (1/spec['recovery_rate']) *
+              (self.k_ext).dot(diag(self.inf_scales[1])))
             )[0])
         if spec['fit_method'] == 'R*':
             external_scale = spec['R*'] / (self.ave_hh_size*spec['SITP'])
@@ -823,8 +825,10 @@ class SEPIRQInput(ModelInput):
         self.k_home = beta_int * self.k_home
 
         ext_eig = max(eig(
-            self.sus * ((1/spec['recovery_rate']) *
-             (self.k_ext))
+            diag(self.sus).dot((1/spec['symp_onset_rate']) *
+             (self.k_ext).dot(self.inf_scales[0]) +
+             (1/spec['recovery_rate']) *
+              (self.k_ext).dot(diag(self.inf_scales[1])))
             )[0])
         if spec['fit_method'] == 'R*':
             external_scale = spec['R*'] / (self.ave_hh_size*spec['SITP'])
@@ -1204,9 +1208,9 @@ def estimate_growth_rate(household_population,
     Q_int = rhs.Q_int
     FOI_by_state = zeros((Q_int.shape[0],household_population.no_risk_groups))
     for ic in range(rhs.no_inf_compartments):
-                states_inf_only =  rhs.inf_by_state_list[ic]
-                FOI_by_state += (rhs.ext_matrix_list[ic].dot(
-                        rhs.epsilon * states_inf_only.T)).T
+        states_inf_only =  rhs.inf_by_state_list[ic]
+        FOI_by_state += (rhs.ext_matrix_list[ic].dot(
+                rhs.epsilon * states_inf_only.T)).T
     index_states = where(
     ((rhs.states_new_cases_only.sum(axis=1)==1) *
     ((rhs.states_sus_only + rhs.states_new_cases_only).sum(axis=1)==\
@@ -1256,9 +1260,10 @@ def estimate_beta_ext(household_population,rhs,r):
     Q_int = rhs.Q_int
     FOI_by_state = zeros((Q_int.shape[0],household_population.no_risk_groups))
     for ic in range(rhs.no_inf_compartments):
-                states_inf_only =  rhs.inf_by_state_list[ic]
-                FOI_by_state += (rhs.ext_matrix_list[ic].dot(
-                        rhs.epsilon * states_inf_only.T)).T
+        states_inf_only =  rhs.inf_by_state_list[ic]
+        FOI_by_state += (rhs.ext_matrix_list[ic].dot(
+                rhs.epsilon * states_inf_only.T)).T
+
     index_states = where(
     ((rhs.states_new_cases_only.sum(axis=1)==1) *
     ((rhs.states_sus_only + rhs.states_new_cases_only).sum(axis=1)==\

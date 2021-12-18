@@ -7,10 +7,10 @@ from matplotlib.pyplot import subplots
 from matplotlib.cm import get_cmap
 from numpy import where
 
-if isdir('plots/ov_shielding') is False:
-    mkdir('plots/ov_shielding')
+if isdir('plots/multigen') is False:
+    mkdir('plots/multigen')
 
-with open('outputs/ov_shielding/results.pkl', 'rb') as f:
+with open('outputs/multigen/results.pkl', 'rb') as f:
     (H,
     time_series,
     P_001,
@@ -25,7 +25,7 @@ with open('outputs/ov_shielding/results.pkl', 'rb') as f:
     P_111,
     I_111,
     R_111) = load(f)
-with open('outputs/ov_shielding/fitted_model_input.pkl', 'rb') as f:
+with open('outputs/multigen/fitted_model_input.pkl', 'rb') as f:
     model_input = load(f)
 
 t = time_series['time']
@@ -64,7 +64,7 @@ for i in range(len(data_list)):
 axis_E.set_ylabel('Proportion of population')
 axis_E.set_title('65+ years old')
 
-fig.savefig('plots/ov_shielding/cases_by_class.png', bbox_inches='tight', dpi=300)
+fig.savefig('plots/multigen/cases_by_class.png', bbox_inches='tight', dpi=300)
 
 fig, ((ax_001, ax_011), (ax_101, ax_111)) = subplots(2,2, sharex=True)
 
@@ -85,7 +85,7 @@ ax_011.set_title('65+ with 20-64')
 ax_101.set_title('65+ with 0-19')
 ax_111.set_title('Three gen')
 
-fig.savefig('plots/ov_shielding/prev_by_gens.png')
+fig.savefig('plots/multigen/prev_by_gens.png')
 
 fig, ((ax_001, ax_011), (ax_101, ax_111)) = subplots(2,2, sharex=True)
 
@@ -106,4 +106,4 @@ ax_011.set_title('65+ with 20-64')
 ax_101.set_title('65+ with 0-19')
 ax_111.set_title('Three gen')
 
-fig.savefig('plots/ov_shielding/cum_prev_by_gens.png')
+fig.savefig('plots/multigen/cum_prev_by_gens.png')
