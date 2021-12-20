@@ -253,7 +253,7 @@ ax1.plot(range(1,7), baseline_ar, '-o', label = 'No interventions')
 ax1.plot(range(1,7), ar_int_25, ':s', label = 'Within-hh controls')
 ax1.plot(range(1,7), ar_ext_25, '--v', label = 'Between-hh controls')
 ax1.plot(range(1,7), ar_both_25, '-.x', label = 'Controls on both levels')
-ax1.set_xlabel('Household size')
+# ax1.set_xlabel('Household size')
 ax1.set_ylabel('Expected secondary\n attack ratio')
 ax1.set_aspect(1.0/ax1.get_data_ratio())
 ax1.text(-1.5, 1.0, 'a)',
@@ -264,7 +264,7 @@ ax2.plot(range(1,7), baseline_ar, '-o', label = 'No interventions')
 ax2.plot(range(1,7), ar_int_50, ':s', label = 'Within-hh controls')
 ax2.plot(range(1,7), ar_ext_50, '--v', label = 'Between-hh controls')
 ax2.plot(range(1,7), ar_both_50, '-.x', label = 'Controls on both levels')
-ax2.set_xlabel('Household size')
+# ax2.set_xlabel('Household size')
 ax2.set_ylabel('Expected secondary\n attack ratio')
 ax2.set_aspect(1.0/ax2.get_data_ratio())
 ax2.text(-1.0, 1.0, 'b)',
@@ -277,7 +277,7 @@ ax3.plot(range(1,7), fpar_int_25, ':s', label = 'Within-hh controls')
 ax3.set_xlabel('Household size')
 ax3.set_ylabel('Expected first\n pass secondary\n attack ratio')
 ax3.set_aspect(1.0/ax3.get_data_ratio())
-ax3.text(-1.5, 0.8, 'c)',
+ax3.text(-1.5, 0.15, 'c)',
             fontsize='medium', verticalalignment='top', fontfamily='serif',
             bbox=dict(facecolor='1', edgecolor='none', pad=3.0))
 
@@ -286,7 +286,7 @@ ax4.plot(range(1,7), fpar_int_50, ':s', label = 'Within-hh controls')
 ax4.set_xlabel('Household size')
 ax4.set_ylabel('Expected first\n pass secondary\n attack ratio')
 ax4.set_aspect(1.0/ax4.get_data_ratio())
-ax4.text(-1.0, 0.8, 'd)',
+ax4.text(-1.0, 0.15, 'd)',
             fontsize='medium', verticalalignment='top', fontfamily='serif',
             bbox=dict(facecolor='1', edgecolor='none', pad=3.0))
 
