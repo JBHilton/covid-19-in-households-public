@@ -12,4 +12,4 @@ output*.txt
 .DS_Store
 __init__.py
 __init__.pyc
-outputs/multigen/*
+outputs/multigen*
