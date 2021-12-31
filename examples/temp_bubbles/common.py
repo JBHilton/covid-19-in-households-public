@@ -27,7 +27,6 @@ def build_mixed_compositions_pairwise(composition_list,
 
     for hh1 in range(no_comps):
         hh2_max = min(no_comps, int((max_size - (hh1+1))))
-        print('Pairwise, hh1=',hh1,', hh2_max=',hh2_max)
         total_prob_1[hh1] = sum(composition_distribution[:hh2_max])
         for hh2 in range(no_comps):
             if (hh2>=hh1) and (hh2<hh2_max):
