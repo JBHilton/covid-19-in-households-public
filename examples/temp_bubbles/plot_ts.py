@@ -9,17 +9,17 @@ from mpl_toolkits.axes_grid1 import make_axes_locatable
 if isdir('plots/temp_bubbles') is False:
     mkdir('plots/temp_bubbles')
 
-with open('outputs/temp_bubbles_6_12/baseline_ts.pkl', 'rb') as f:
+with open('outputs/temp_bubbles/baseline_ts.pkl', 'rb') as f:
     (baseline_ts) = load(f)
-with open('outputs/temp_bubbles_6_12/ts_0.pkl', 'rb') as f:
+with open('outputs/temp_bubbles/ts_0.pkl', 'rb') as f:
     (ts_0) = load(f)
-with open('outputs/temp_bubbles_6_12/ts_1.pkl', 'rb') as f:
+with open('outputs/temp_bubbles/ts_1.pkl', 'rb') as f:
     (ts_1) = load(f)
-with open('outputs/temp_bubbles_6_12/ts_2.pkl', 'rb') as f:
+with open('outputs/temp_bubbles/ts_2.pkl', 'rb') as f:
     (ts_2) = load(f)
-with open('outputs/temp_bubbles_6_12/ts_3.pkl', 'rb') as f:
+with open('outputs/temp_bubbles/ts_3.pkl', 'rb') as f:
     (ts_3) = load(f)
-with open('outputs/temp_bubbles_6_12/ts_4.pkl', 'rb') as f:
+with open('outputs/temp_bubbles/ts_4.pkl', 'rb') as f:
     (ts_4) = load(f)
 
 fig, ax = subplots()
