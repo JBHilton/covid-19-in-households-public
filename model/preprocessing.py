@@ -713,6 +713,7 @@ class SEIRInput(ModelInput):
             return calculate_sitp_rmse(x, self, spec['SITP'])
 
         pars = minimize(sitp_rmse, array([1e-1,1]), bounds=((0,None),(0,1))).x
+        self.pars = pars
         beta_int = pars[0]
         self.density_expo = pars[1]
         print('Estimated beta_int=',pars[0],', estimated density=',pars[1])
@@ -764,6 +765,9 @@ class SEPIRInput(ModelInput):
             return calculate_sitp_rmse(x, self, spec['SITP'])
 
         pars = minimize(sitp_rmse, array([1e-1,1]), bounds=((0,None),(0,1))).x
+        self.sitp = calculate_sitp(pars, self, spec['SITP'])
+        print(self.sitp)
+        self.pars = pars
         beta_int = pars[0]
         self.density_expo = pars[1]
         print('Estimated beta_int=',pars[0],', estimated density=',pars[1])

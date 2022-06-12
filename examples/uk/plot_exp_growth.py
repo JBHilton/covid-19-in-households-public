@@ -6,7 +6,9 @@ from pickle import load
 from matplotlib.pyplot import subplots
 from matplotlib.pyplot import yscale
 from matplotlib.cm import get_cmap
-from numpy import arange, exp, log, where
+from numpy import arange, array, exp, log, where
+from model.preprocessing import calculate_sitp
+from model.specs import TRANCHE2_SITP
 
 if isdir('plots/uk') is False:
     mkdir('plots/uk')
@@ -18,6 +20,8 @@ with open('outputs/uk/results.pkl', 'rb') as f:
     H, time_series = load(f)
 with open('outputs/uk/fitted_model_input.pkl', 'rb') as f:
     model_input = load(f)
+
+model_SITP = model_input.sitp
 
 t = time_series['time']
 t_15_loc = where(t > 15)[0][0]
@@ -54,3 +58,26 @@ ax.set_ylim(0.1 * total_cases[0], 1e-2)
 ax.legend(ncol=1, loc='upper left')
 ax.set_box_aspect(1)
 fig.savefig('plots/uk/exp_growth.png', bbox_inches='tight', dpi=300)
+
+fig, ax = subplots(1, 1, sharex=True)
+
+cmap = get_cmap('tab20')
+alpha = 1
+ax.plot(
+        arange(2,7),
+        array(TRANCHE2_SITP),
+        'ko',
+        label='Data',
+        alpha=alpha)
+ax.plot(
+        arange(2,7),
+        model_SITP,
+        'r.',
+        label='Model fit',
+        alpha=alpha)
+ax.set_xlabel('Household size')
+ax.set_ylabel('SITP')
+ax.set_ylim([0, 0.5])
+ax.legend(ncol=1, loc='upper right')
+ax.set_box_aspect(1)
+fig.savefig('plots/uk/sitp_plot.png', bbox_inches='tight', dpi=300)

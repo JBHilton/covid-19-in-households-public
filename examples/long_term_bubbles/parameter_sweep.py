@@ -166,7 +166,7 @@ class BubbleAnalysis:
         peaks = 100 * max(I)
         R_end = 100 * R[-1]
 
-        return [growth_rate, peaks, R_end, attack_ratio, hh_outbreak_prop]
+        return [growth_rate, peaks, R_end, hh_outbreak_prop, attack_ratio]
 
 def main(no_of_workers,
          bubble_prob_vals,
@@ -209,7 +209,7 @@ def main(no_of_workers,
         len(bubble_prob_range),
         len(external_mix_range))
 
-    fname = 'outputs/long_term_bubbles/results.pkl'
+    fname = 'outputs/long_term_bubbles/testing_results.pkl'
     with open(fname, 'wb') as f:
         dump(
             (growth_rate_data,
@@ -228,10 +228,10 @@ if __name__ == '__main__':
     parser.add_argument('--no_of_workers', type=int, default=8)
     parser.add_argument('--bubble_prob_vals',
                         type=int,
-                        default=[0.0, 1.01, 0.05])
+                        default=[0.0, 1.01, 0.5])
     parser.add_argument('--external_mix_vals',
                         type=int,
-                        default=[0.0, 0.99, 0.05])
+                        default=[0.0, 0.99, 0.5])
     args = parser.parse_args()
 
     main(args.no_of_workers,

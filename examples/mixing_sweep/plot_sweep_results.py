@@ -30,7 +30,7 @@ r_min = 0.01 * floor(100 * growth_rate.min())
 r_max = 0.01 * floor(100 * growth_rate.max())
 rtick = r_min + 0.25 * (r_max - r_min) * arange(5)
 peak_min = floor(peaks.min())
-peak_max = 25
+peak_max = 5 * ceil(peaks.max() / 5)
 peaktick = peak_min + 0.25 * (peak_max - peak_min) * arange(5)
 R_end_min = floor(R_end.min())
 R_end_max = 10 * ceil(R_end.max() / 10)
@@ -40,6 +40,8 @@ hh_prop_max = 10 * ceil(hh_prop.max() / 10)
 hh_proptick = hh_prop_min + 0.25 * (hh_prop_max - hh_prop_min) * arange(5)
 attack_ratio_min = attack_ratio.min()
 attack_ratio_max = attack_ratio.max()
+
+contour_ticks = [10, 30, 50, 70, 90]
 
 # fig, ax = subplots(1, 1, sharex=True)
 # axim=ax.imshow(growth_rate,
@@ -204,7 +206,43 @@ ax4.spines['top'].set_visible(False)
 ax4.spines['right'].set_visible(False)
 cbar.outline.set_visible(False)
 
-fig.savefig('plots/mixing_sweep/grid_plot.png',
+axim = ax1.contour(growth_rate,
+                  colors='k',
+                  levels=rtick,
+                  vmin=r_min,
+                  vmax=r_max,
+                  extent=(0, 1, 0, 1),
+                  aspect=1)
+ax1.clabel(axim, fontsize=9, inline=1, fmt='%1.1f')
+
+axim = ax2.contour(peaks,
+                  colors='k',
+                  levels=peaktick,
+                  vmin=peak_min,
+                  vmax=peak_max,
+                  extent=(0, 1, 0, 1),
+                  aspect=1)
+ax2.clabel(axim, fontsize=9, inline=1, fmt='%1.1f')
+
+axim = ax3.contour(R_end,
+                  colors='k',
+                  levels=R_endtick,
+                  vmin=R_end_min,
+                  vmax=R_end_max,
+                  extent=(0, 1, 0, 1),
+                  aspect=1)
+ax3.clabel(axim, fontsize=9, inline=1, fmt='%1.1f')
+
+axim = ax4.contour(hh_prop,
+                  colors='k',
+                  levels=hh_proptick,
+                  vmin=hh_prop_min,
+                  vmax=hh_prop_max,
+                  extent=(0, 1, 0, 1),
+                  aspect=1)
+ax4.clabel(axim, fontsize=9, inline=1, fmt='%1.1f')
+
+fig.savefig('plots/mixing_sweep/ms_grid_plot.eps',
             bbox_inches='tight',
             dpi=300)
 close()
@@ -290,7 +328,54 @@ ax4.text(-1.0, 0.15, 'd)',
             fontsize='medium', verticalalignment='top', fontfamily='serif',
             bbox=dict(facecolor='1', edgecolor='none', pad=3.0))
 
-fig.savefig('plots/mixing_sweep/ar_grid.png',
+fig.savefig('plots/mixing_sweep/ms_ar_grid.eps',
             bbox_inches='tight',
             dpi=300)
+close()
+
+my_green = [0.592, 0.584, 0.420]
+
+fig, (ax1, ax2) = subplots(1, 2)
+fig.tight_layout()
+ax1.plot(range(1,7), baseline_ar, '-', color=my_green, label = 'No interventions')
+ax1.plot(range(1,7), ar_int_25, ':s', color=my_green, label = 'Within-hh controls')
+ax1.plot(range(1,7), ar_ext_25, '--v', color=my_green, label = 'Between-hh controls')
+ax1.plot(range(1,7), ar_both_25, '-.x', color=my_green, label = 'Controls on both levels')
+ax1.set_xlabel('Household size', color='k')
+ax1.set_ylabel('Expected secondary\n attack ratio', color='k')
+ax1.set_aspect(1.0/ax1.get_data_ratio())
+ax1.set_title('25% reduction in transmission', color='k')
+ax1.spines['top'].set_visible(False)
+ax1.spines['right'].set_visible(False)
+ax1.spines['bottom'].set_color('k')
+ax1.spines['left'].set_color('k')
+ax1.tick_params(colors='k', which='both')
+for i in range(len(ax1.get_xticklabels())):
+    ax1.get_xticklabels()[i].set_color('k')
+for i in range(len(ax1.get_yticklabels())):
+    ax1.get_yticklabels()[i].set_color('k')
+
+ax2.plot(range(1,7), baseline_ar, '-', color=my_green, label = 'No interventions')
+ax2.plot(range(1,7), ar_int_50, ':s', color=my_green, label = 'Within-hh controls')
+ax2.plot(range(1,7), ar_ext_50, '--v', color=my_green, label = 'Between-hh controls')
+ax2.plot(range(1,7), ar_both_50, '-.x', color=my_green, label = 'Controls on both levels')
+ax2.set_xlabel('Household size', color='k')
+# ax2.set_ylabel('Expected secondary\n attack ratio', color='k')
+ax2.set_aspect(1.0/ax1.get_data_ratio())
+ax2.set_title('50% reduction in transmission', color='k')
+ax2.spines['top'].set_visible(False)
+ax2.spines['right'].set_visible(False)
+ax2.spines['bottom'].set_color('k')
+ax2.spines['left'].set_color('k')
+ax2.tick_params(colors='k', which='both')
+for i in range(len(ax2.get_xticklabels())):
+    ax2.get_xticklabels()[i].set_color('k')
+for i in range(len(ax2.get_yticklabels())):
+    ax2.get_yticklabels()[i].set_color('k')
+ax2.legend(loc='center left', bbox_to_anchor=(1, 0.5), fancybox=True, framealpha=0.0)
+
+fig.savefig('plots/mixing_sweep/ms_poster_plot.svg',
+            bbox_inches='tight',
+            dpi=300,
+            transparent=True)
 close()

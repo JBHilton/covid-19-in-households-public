@@ -16,8 +16,7 @@ from scipy.sparse import csc_matrix as sparse
 from scipy.sparse.linalg import inv
 from time import time as get_time
 from model.preprocessing import ( estimate_beta_ext, estimate_growth_rate,
-        SEPIRInput, HouseholdPopulation,
-        make_initial_condition)
+        SEPIRInput, HouseholdPopulation)
 from model.specs import (draw_random_two_age_SEPIR_specs, TWO_AGE_SEPIR_SPEC,
     TWO_AGE_SEPIR_SPEC_FOR_FITTING, TWO_AGE_UK_SPEC)
 from model.common import SEPIRRateEquations
