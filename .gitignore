@@ -13,3 +13,4 @@ output*.txt
 __init__.py
 __init__.pyc
 outputs/multigen*
+plots/

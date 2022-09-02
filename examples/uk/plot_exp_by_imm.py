@@ -49,8 +49,6 @@ def make_exp_growth_plot(time_series, lab, ax, ax_lab, lab_pos):
                 label=lgd[1],
                 alpha=alpha)
         yscale('log')
-        ax.set_xlabel('Time in days')
-        ax.set_ylabel('Prevalence')
         ax.set_ylim(0.1 * total_cases[0], 1.0)
         ax.set_box_aspect(1)
         ax.text(lab_pos[0], lab_pos[1], ax_lab,
@@ -74,5 +72,10 @@ for i in range(6):
             H, ts = load(f)
         make_exp_growth_plot(ts, imm_label[i], axes[i], ax_label[i], label_pos[i%2])
 
+ax_4.set_xlabel('Time in days')
+ax_5.set_xlabel('Time in days')
+ax_0.set_ylabel('Prevalence')
+ax_2.set_ylabel('Prevalence')
+ax_4.set_ylabel('Prevalence')
 ax_1.legend(bbox_to_anchor=(1.05, 1), ncol=1, loc='upper left')
 fig.savefig('plots/uk/exp_growth_by_traj.png', bbox_inches='tight', dpi=300)

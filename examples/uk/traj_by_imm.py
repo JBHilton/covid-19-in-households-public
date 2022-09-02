@@ -1,4 +1,5 @@
-'''This runs the UK-like model with a single set of parameters for 100 days
+'''This runs the UK-like model with a single set of parameters for 100 days for
+a range of starting immunity levels.
 '''
 from numpy import array, log
 from os import mkdir
@@ -11,7 +12,6 @@ from model.preprocessing import ( estimate_beta_ext, estimate_growth_rate,
 from model.specs import TWO_AGE_SEPIR_SPEC_FOR_FITTING, TWO_AGE_UK_SPEC
 from model.common import SEPIRRateEquations
 from model.imports import NoImportModel
-# pylint: disable=invalid-name
 
 if isdir('outputs/uk') is False:
     mkdir('outputs/uk')
