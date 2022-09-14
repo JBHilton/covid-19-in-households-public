@@ -12,7 +12,7 @@ from pandas import read_csv
 from random import choices
 from scipy.integrate import solve_ivp
 from scipy.interpolate import interp1d
-from model.preprocessing import ( estimate_beta_ext, estimate_growth_rate,
+from model.preprocessing import ( estimate_beta_ext, estimate_growth_rate, ModelInput,
         SEPIRInput, HouseholdPopulation, make_initial_condition_by_eigenvector)
 from model.specs import (TWO_AGE_SEPIR_SPEC_FOR_FITTING, TWO_AGE_UK_SPEC,
         TRANCHE2_SITP, PRODROME_PERIOD, PRODROME_SCALING, LATENT_PERIOD, SYMPTOM_PERIOD)
@@ -201,7 +201,7 @@ for d in range(1,len(test_dates)):
     H_all_time = hstack((H_all_time, H))
 
 def calculate_test_probability(H0, pos_data):
-    series_prob = 1
+    log_prob = 0
     current_H = H0
     for d in range(1,len(test_dates)):
         this_week = (test_dates[d-1], test_dates[d])
@@ -211,6 +211,79 @@ def calculate_test_probability(H0, pos_data):
         test_results = simulate_testing(H_test_date)
         test_series.append(test_results)
         H_cond, prob = filter_for_positives(H_test_date, pos_data[d])
-        series_prob *= prob
+        log_prob += log(prob)
         current_H = H_cond
-    return series_prob
+    return log_prob
+
+class SEPIRInputForEstimation(ModelInput):
+    def __init__(self, beta_int, density_expo, spec, composition_list, composition_distribution):
+        super().__init__(spec, composition_list, composition_distribution)
+
+        self.expandables = ['sus',
+                         'inf_scales']
+
+        self.R_compartment = 4
+
+        self.sus = spec['sus']
+        self.inf_scales = [spec['prodromal_trans_scaling'],
+                ones(shape(spec['prodromal_trans_scaling']))]
+
+
+
+        self.alpha_2 = self.spec['symp_onset_rate']
+
+        self.gamma = self.spec['recovery_rate']
+
+        self.ave_trans = \
+            ((self.inf_scales[0].dot(self.ave_hh_by_class) / self.ave_hh_size) /
+            self.alpha_2) +  \
+            ((self.inf_scales[1].dot(self.ave_hh_by_class) / self.ave_hh_size) /
+             self.gamma)
+
+        self.prog_rates = array([self.alpha_2, self.gamma])
+
+        self.density_expo = density_expo
+
+        self.k_home = beta_int * self.k_home
+
+        ext_eig = max(eig(
+            diag(self.sus).dot((1/spec['symp_onset_rate']) *
+             (self.k_ext).dot(self.inf_scales[0]) +
+             (1/spec['recovery_rate']) *
+              (self.k_ext).dot(diag(self.inf_scales[1])))
+            )[0])
+        if spec['fit_method'] == 'R*':
+            external_scale = spec['R*'] / (self.ave_hh_size*spec['SITP'])
+        else:
+            external_scale = 1
+        self.k_ext = external_scale * self.k_ext / ext_eig
+
+    @property
+    def alpha_1(self):
+        return self.spec['incubation_rate']
+
+def calculate_llh(beta_int, density_expo):
+    model_input = SEPIRInputForEstimation( beta_int, density_expo, SPEC, composition_list, comp_dist)
+    model_input.k_ext *= 0
+    household_population = HouseholdPopulation(
+        composition_list, comp_dist, model_input)
+
+    rhs = SEPIRRateEquations(model_input,
+                            household_population,
+                            CoupledImportModel(background_time,background_all_infs))
+    H0 = make_initial_condition_by_eigenvector(1., model_input, household_population, rhs, 0.0, 0.0)
+    return calculate_test_probability(H0, test_series)
+
+beta_int_range = arange(0.0, 0.01, 0.001)
+density_expo_range = arange(0.0, 1.0, 0.1)
+
+params = array([
+        [b, e]
+        for b in beta_int_range
+        for e in density_expo_range])
+
+llh_array = zeros(len(params),)
+
+for i in range(len(params)):
+    print("params=", params[i,:])
+    llh_array[i] = calculate_llh(params[i,0], params[i,1])
