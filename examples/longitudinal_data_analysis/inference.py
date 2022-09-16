@@ -182,24 +182,30 @@ def simulate_testing(H):
 
 test_dates = arange(1, tspan[-1], 7)
 
-test_series = []
+def generate_test_series(H0, rhs):
 
-H_all_time = H0.reshape(-1,1)
-time_points = array([])
+    test_series = []
 
-current_H = H0
-for d in range(1,len(test_dates)):
-    this_week = (test_dates[d-1], test_dates[d])
-    solution = solve_ivp(rhs, this_week, current_H, first_step=0.001, atol=1e-16)
-    time = solution.t
-    time_points = hstack((time_points, time))
-    H = solution.y
-    H_test_date = H[:, -1]
-    test_results = simulate_testing(H_test_date)
-    test_series.append(test_results)
-    H_cond, prob = filter_for_positives(H_test_date, test_results)
-    current_H = H_cond
-    H_all_time = hstack((H_all_time, H))
+    H_all_time = H0.reshape(-1,1)
+    time_points = array([])
+
+    current_H = H0
+    for d in range(1,len(test_dates)):
+        this_week = (test_dates[d-1], test_dates[d])
+        solution = solve_ivp(rhs, this_week, current_H, first_step=0.001, atol=1e-16)
+        time = solution.t
+        time_points = hstack((time_points, time))
+        H = solution.y
+        H_test_date = H[:, -1]
+        test_results = simulate_testing(H_test_date)
+        test_series.append(test_results)
+        H_cond, prob = filter_for_positives(H_test_date, test_results)
+        current_H = H_cond
+        H_all_time = hstack((H_all_time, H))
+    
+    return test_series
+
+test_series = generate_test_series(H0, rhs)
 
 def calculate_test_probability(H0, rhs, pos_data):
     log_prob = 0
@@ -209,9 +215,7 @@ def calculate_test_probability(H0, rhs, pos_data):
         solution = solve_ivp(rhs, this_week, current_H, first_step=0.001, atol=1e-16)
         H = solution.y
         H_test_date = H[:, -1]
-        test_results = simulate_testing(H_test_date)
-        test_series.append(test_results)
-        H_cond, prob = filter_for_positives(H_test_date, pos_data[d])
+        H_cond, prob = filter_for_positives(H_test_date, pos_data[d-1])
         log_prob += log(prob)
         current_H = H_cond
     return log_prob
@@ -263,7 +267,7 @@ class SEPIRInputForEstimation(ModelInput):
     def alpha_1(self):
         return self.spec['incubation_rate']
 
-def calculate_llh(beta_int, density_expo):
+def calculate_llh(beta_int, density_expo, test_series):
     model_input = SEPIRInputForEstimation( beta_int, density_expo, SPEC, composition_list, comp_dist)
     model_input.k_ext *= 0
     household_population = HouseholdPopulation(
@@ -275,8 +279,8 @@ def calculate_llh(beta_int, density_expo):
     H0 = make_initial_condition_by_eigenvector(1., model_input, household_population, rhs, 0.0, 0.0)
     return calculate_test_probability(H0, rhs, test_series)
 
-beta_int_range = arange(0.0, 0.01, 0.001)
-density_expo_range = arange(0.0, 1.0, 0.1)
+beta_int_range = arange(0.0, 0.01, 0.002)
+density_expo_range = arange(0.0, 1.0, 0.2)
 
 params = array([
         [b, e]
@@ -287,4 +291,41 @@ llh_array = zeros(len(params),)
 
 for i in range(len(params)):
     print("params=", params[i,:])
-    llh_array[i] = calculate_llh(params[i,0], params[i,1])
+    llh_array[i] = calculate_llh(params[i,0], params[i,1], test_series)
+
+test_data_list = [generate_test_series(H0, rhs) for i in range(50)]
+
+llh_array = zeros(len(params),)
+
+for i in range(len(params)):
+    print("params=", params[i,:])
+    for j in range(len(test_data_list)):
+        llh_array[i] += calculate_llh(params[i,0], params[i,1], test_data_list[j])
+
+with open('outputs/longitudinal_data_analysis/llh_array_50.pkl', 'wb') as f:
+    dump(llh_array, f)
+
+from matplotlib.pyplot import axes, close, colorbar, imshow, set_cmap, subplots
+from mpl_toolkits.axes_grid1 import make_axes_locatable
+from seaborn import heatmap
+
+if isdir('plots/longitudinal_data_analysis') is False:
+    mkdir('plots/longitudinal_data_analysis')
+
+llh_array = llh_array.reshape((len(beta_int_range), len(density_expo_range)))
+
+fig, ax = subplots(1, 1, constrained_layout=True)
+axim = ax.contour(llh_array,
+                  colors='k',
+                  extent=(0, 1, 0, 1),
+                  aspect=1)
+ax.clabel(axim, fontsize=9, inline=1, fmt='%1.1f')
+ax.set_xlabel("density exponent")
+ax.set_ylabel("beta_int")
+ax.set_title("Log likelihood")
+
+fig.savefig('plots/longitudinal_data_analysis/llh_array.png',
+            bbox_inches='tight',
+            dpi=300,
+            transparent=False)
+close()
