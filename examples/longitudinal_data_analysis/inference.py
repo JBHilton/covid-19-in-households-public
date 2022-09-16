@@ -4,7 +4,8 @@ and estimate probability of observing longitudinal testing results.
 '''
 
 from cgi import test
-from numpy import arange, array, hstack, log, ones, size, where, zeros
+from numpy import arange, array, diag, hstack, log, ones, shape, size, where, zeros
+from numpy.linalg import eig
 from os import mkdir
 from os.path import isdir, isfile
 from pickle import load, dump
@@ -200,7 +201,7 @@ for d in range(1,len(test_dates)):
     current_H = H_cond
     H_all_time = hstack((H_all_time, H))
 
-def calculate_test_probability(H0, pos_data):
+def calculate_test_probability(H0, rhs, pos_data):
     log_prob = 0
     current_H = H0
     for d in range(1,len(test_dates)):
@@ -272,7 +273,7 @@ def calculate_llh(beta_int, density_expo):
                             household_population,
                             CoupledImportModel(background_time,background_all_infs))
     H0 = make_initial_condition_by_eigenvector(1., model_input, household_population, rhs, 0.0, 0.0)
-    return calculate_test_probability(H0, test_series)
+    return calculate_test_probability(H0, rhs, test_series)
 
 beta_int_range = arange(0.0, 0.01, 0.001)
 density_expo_range = arange(0.0, 1.0, 0.1)
