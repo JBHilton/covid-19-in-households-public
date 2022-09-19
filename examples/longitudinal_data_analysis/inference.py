@@ -171,12 +171,22 @@ def filter_for_positives(H, pos_by_class):
     H_conditional *= (1/test_prob)
     return H_conditional, test_prob
 
+def filter_for_anti(H, pos_by_class):
+    possible_states = where(
+                    (rhs.states_rec_only - pos_by_class).sum(axis=1)==0)[0]
+    H_conditional = zeros(size(H))
+    H_conditional[possible_states] = H[possible_states]
+    test_prob = sum(H_conditional)
+    H_conditional *= (1/test_prob)
+    return H_conditional, test_prob
+
 '''Now write a function to simulate testing on a given day'''
 
 def simulate_testing(H):
     test_state = choices(range(len(H)), weights=H)
     pos_by_class = rhs.states_pro_only[test_state,:]+rhs.states_inf_only[test_state,:]
-    return pos_by_class
+    rec_by_class = rhs.states_rec_only[test_state,:]
+    return pos_by_class, rec_by_class
 
 '''Now generate the testing data'''
 
@@ -184,7 +194,8 @@ test_dates = arange(1, tspan[-1], 7)
 
 def generate_test_series(H0, rhs):
 
-    test_series = []
+    pos_series = []
+    anti_series = []
 
     H_all_time = H0.reshape(-1,1)
     time_points = array([])
@@ -197,17 +208,19 @@ def generate_test_series(H0, rhs):
         time_points = hstack((time_points, time))
         H = solution.y
         H_test_date = H[:, -1]
-        test_results = simulate_testing(H_test_date)
-        test_series.append(test_results)
-        H_cond, prob = filter_for_positives(H_test_date, test_results)
+        pos, rec = simulate_testing(H_test_date)
+        pos_series.append(pos)
+        anti_series.append(rec)
+        H_cond, prob = filter_for_positives(H_test_date, pos)
+        H_cond, prob = filter_for_anti(H_cond, rec)
         current_H = H_cond
         H_all_time = hstack((H_all_time, H))
     
-    return test_series
+    return pos_series, anti_series
 
-test_series = generate_test_series(H0, rhs)
+pos_series, anti_series = generate_test_series(H0, rhs)
 
-def calculate_test_probability(H0, rhs, pos_data):
+def calculate_test_probability(H0, rhs, pos_data, anti_data):
     log_prob = 0
     current_H = H0
     for d in range(1,len(test_dates)):
@@ -215,8 +228,9 @@ def calculate_test_probability(H0, rhs, pos_data):
         solution = solve_ivp(rhs, this_week, current_H, first_step=0.001, atol=1e-16)
         H = solution.y
         H_test_date = H[:, -1]
-        H_cond, prob = filter_for_positives(H_test_date, pos_data[d-1])
-        log_prob += log(prob)
+        H_cond, pos_prob = filter_for_positives(H_test_date, pos_data[d-1])
+        H_cond, anti_prob = filter_for_anti(H_cond, anti_data[d-1])
+        log_prob += log(pos_prob) + log(anti_prob)
         current_H = H_cond
     return log_prob
 
@@ -267,7 +281,7 @@ class SEPIRInputForEstimation(ModelInput):
     def alpha_1(self):
         return self.spec['incubation_rate']
 
-def calculate_llh(beta_int, density_expo, test_series):
+def calculate_llh(beta_int, density_expo, pos_data, anti_data):
     model_input = SEPIRInputForEstimation( beta_int, density_expo, SPEC, composition_list, comp_dist)
     model_input.k_ext *= 0
     household_population = HouseholdPopulation(
@@ -277,7 +291,7 @@ def calculate_llh(beta_int, density_expo, test_series):
                             household_population,
                             CoupledImportModel(background_time,background_all_infs))
     H0 = make_initial_condition_by_eigenvector(1., model_input, household_population, rhs, 0.0, 0.0)
-    return calculate_test_probability(H0, rhs, test_series)
+    return calculate_test_probability(H0, rhs, pos_data, anti_data)
 
 beta_int_range = arange(0.0, 0.01, 0.002)
 density_expo_range = arange(0.0, 1.0, 0.2)
@@ -291,18 +305,19 @@ llh_array = zeros(len(params),)
 
 for i in range(len(params)):
     print("params=", params[i,:])
-    llh_array[i] = calculate_llh(params[i,0], params[i,1], test_series)
+    llh_array[i] = calculate_llh(params[i,0], params[i,1], pos_series, anti_series)
 
-test_data_list = [generate_test_series(H0, rhs) for i in range(50)]
+no_hh_in_data = 50
+test_data_list = [generate_test_series(H0, rhs) for i in range(no_hh_in_data)]
 
 llh_array = zeros(len(params),)
 
 for i in range(len(params)):
     print("params=", params[i,:])
-    for j in range(len(test_data_list)):
-        llh_array[i] += calculate_llh(params[i,0], params[i,1], test_data_list[j])
+    for j in range(no_hh_in_data):
+        llh_array[i] += calculate_llh(params[i,0], params[i,1], test_data_list[j][0], test_data_list[j][1])
 
-with open('outputs/longitudinal_data_analysis/llh_array_50.pkl', 'wb') as f:
+with open('outputs/longitudinal_data_analysis/llh_array.pkl', 'wb') as f:
     dump(llh_array, f)
 
 from matplotlib.pyplot import axes, close, colorbar, imshow, set_cmap, subplots
