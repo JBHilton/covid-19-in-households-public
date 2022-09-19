@@ -26,19 +26,21 @@ if isdir('outputs/longitudinal_data_analysis') is False:
 
 '''Start by running the population-level epidemic.'''
 
+tspan = (0.0, 365)
+
 if isfile('outputs/longitudinal_data_analysis/background_epidemic.pkl'):
     with open('outputs/longitudinal_data_analysis/background_epidemic.pkl', 'rb') as f:
-        background_time, background_all_infs = load(f)
+        uk_comp_list, uk_comp_dist, background_time, background_all_infs = load(f)
 else:
     DOUBLING_TIME = 3
     growth_rate = log(2) / DOUBLING_TIME
 
     # List of observed household compositions
-    composition_list = read_csv(
+    uk_comp_list = read_csv(
         'inputs/eng_and_wales_adult_child_composition_list.csv',
         header=0).to_numpy()
     # Proportion of households which are in each composition
-    comp_dist = read_csv(
+    uk_comp_dist = read_csv(
         'inputs/eng_and_wales_adult_child_composition_dist.csv',
         header=0).to_numpy().squeeze()
 
@@ -48,9 +50,9 @@ else:
             model_input = load(f)
     else:
         SPEC = {**TWO_AGE_SEPIR_SPEC_FOR_FITTING, **TWO_AGE_UK_SPEC}
-        model_input_to_fit = SEPIRInput(SPEC, composition_list, comp_dist)
+        model_input_to_fit = SEPIRInput(SPEC, uk_comp_list, uk_comp_dist)
         household_population_to_fit = HouseholdPopulation(
-            composition_list, comp_dist, model_input_to_fit)
+            uk_comp_list, uk_comp_dist, model_input_to_fit)
         rhs_to_fit = SEPIRRateEquations(model_input_to_fit, household_population_to_fit, NoImportModel(5,2))
         beta_ext = estimate_beta_ext(household_population_to_fit, rhs_to_fit, growth_rate)
         model_input = model_input_to_fit
@@ -61,18 +63,17 @@ else:
 
     if isfile('outputs/longitudinal_data_analysis/background_population.pkl') is True:
         with open('outputs/longitudinal_data_analysis/background_population.pkl', 'rb') as f:
-            household_population = load(f)
+            uk_comp_list, uk_comp_dist, household_population = load(f)
     else:
         # With the parameters chosen, we calculate Q_int:
         household_population = HouseholdPopulation(
-            composition_list, comp_dist, model_input)
+            uk_comp_list, uk_comp_dist, model_input)
         with open('outputs/longitudinal_data_analysis/background_population.pkl', 'wb') as f:
-            dump(household_population, f)
+            dump((uk_comp_list, uk_comp_dist, household_population), f)
 
     rhs = SEPIRRateEquations(model_input, household_population, NoImportModel(5,2))
 
     H0 = make_initial_condition_by_eigenvector(growth_rate, model_input, household_population, rhs, 1e-5, 0.0)
-    tspan = (0.0, 365)
     solution = solve_ivp(rhs, tspan, H0, first_step=0.001, atol=1e-16)
 
     background_time = solution.t
@@ -82,7 +83,7 @@ else:
     background_all_infs = model_input.inf_scales[0] * background_P + model_input.inf_scales[1] * background_I
 
     with open('outputs/longitudinal_data_analysis/background_epidemic.pkl', 'wb') as f:
-        dump((background_time, background_all_infs), f)
+        dump((uk_comp_list, uk_comp_dist, background_time, background_all_infs), f)
 
 '''Create an import model coupling single HH to epidemic'''
 
@@ -104,9 +105,6 @@ class CoupledImportModel(ImportModel):
 
 '''Now construct the household population object for a single household coupled to the main epidemic'''
 
-composition_list = array([[2, 2]]) # 2 adult 2 child household
-comp_dist = array([1])
-
 SINGLE_HH_SEPIR_SPEC = {
     'compartmental_structure': 'SEPIR', # This is which subsystem key to use
     'SITP': TRANCHE2_SITP,                     # Secondary inf probability
@@ -120,49 +118,63 @@ SINGLE_HH_SEPIR_SPEC = {
     'sus': array([1,1]),          # Relative susceptibility by
                                   # age/vulnerability class
     'fit_method' : 'EL'
-}
+    }
 
 SPEC = {**TWO_AGE_SEPIR_SPEC_FOR_FITTING, **TWO_AGE_UK_SPEC}
 
-model_input = SEPIRInput(SPEC, composition_list, comp_dist)
-model_input.k_ext *= 0
-household_population = HouseholdPopulation(
-    composition_list, comp_dist, model_input)
+def make_random_single_hh_system(full_comp_list, full_comp_dist):
 
-rhs = SEPIRRateEquations(model_input,
-                         household_population,
-                         CoupledImportModel(background_time,background_all_infs))
-H0 = make_initial_condition_by_eigenvector(1., model_input, household_population, rhs, 0.0, 0.0)
+    hh_id = choices(range(len(full_comp_list)), weights=full_comp_dist)
+    composition_list = full_comp_list[hh_id]
+    comp_dist = array([1])
 
-'''Now solve'''
+    model_input = SEPIRInput(SPEC, composition_list, comp_dist)
+    model_input.k_ext *= 0
+    household_population = HouseholdPopulation(
+        composition_list, comp_dist, model_input)
 
-tspan = (0.0, 365)
-solution = solve_ivp(rhs, tspan, H0, first_step=0.001, atol=1e-16)
+    rhs = SEPIRRateEquations(model_input,
+                            household_population,
+                            CoupledImportModel(background_time,background_all_infs))
+    H0 = make_initial_condition_by_eigenvector(1., model_input, household_population, rhs, 0.0, 0.0)
 
-time = solution.t
-H = solution.y
-S = H.T.dot(household_population.states[:, ::5])
-E = H.T.dot(household_population.states[:, 1::5])
-P = H.T.dot(household_population.states[:, 2::5])
-I = H.T.dot(household_population.states[:, 3::5])
-R = H.T.dot(household_population.states[:, 4::5])
-time_series = {
-'time':time,
-'S':S,
-'E':E,
-'P':P,
-'I':I,
-'R':R
-}
+    return composition_list, comp_dist, H0, rhs
 
-with open('outputs/longitudinal_data_analysis/results.pkl', 'wb') as f:
-    dump((H, time_series), f)
+# composition_list = array([[2, 2]]) # 2 adult 2 child household
+# comp_dist = array([1])
+
+# SINGLE_HH_SEPIR_SPEC = {
+#     'compartmental_structure': 'SEPIR', # This is which subsystem key to use
+#     'SITP': TRANCHE2_SITP,                     # Secondary inf probability
+#     'R*': 1.,                      # Household-level reproduction number
+#     'recovery_rate': 1 / SYMPTOM_PERIOD,           # Recovery rate
+#     'incubation_rate': 1 / LATENT_PERIOD,         # E->P incubation rate
+#     'symp_onset_rate': 1 / PRODROME_PERIOD,         # P->I prodromal to symptomatic rate
+#     'prodromal_trans_scaling':
+#      PRODROME_SCALING * ones(2,),          # Prodromal transmission intensity relative to
+#                                 # full inf transmission
+#     'sus': array([1,1]),          # Relative susceptibility by
+#                                   # age/vulnerability class
+#     'fit_method' : 'EL'
+# }
+
+# SPEC = {**TWO_AGE_SEPIR_SPEC_FOR_FITTING, **TWO_AGE_UK_SPEC}
+
+# model_input = SEPIRInput(SPEC, composition_list, comp_dist)
+# model_input.k_ext *= 0
+# household_population = HouseholdPopulation(
+#     composition_list, comp_dist, model_input)
+
+# rhs = SEPIRRateEquations(model_input,
+#                          household_population,
+#                          CoupledImportModel(background_time,background_all_infs))
+# H0 = make_initial_condition_by_eigenvector(1., model_input, household_population, rhs, 0.0, 0.0)
 
 '''Generate some household testing data from the model solution'''
 '''First make a function which takes in a day's test positivity
 and outputs a conditional distribution and a probability'''
 
-def filter_for_positives(H, pos_by_class):
+def filter_for_positives(H, rhs, pos_by_class):
     possible_states = where(
                     (rhs.states_pro_only+rhs.states_inf_only - pos_by_class).sum(axis=1)==0)[0]
     H_conditional = zeros(size(H))
@@ -171,7 +183,7 @@ def filter_for_positives(H, pos_by_class):
     H_conditional *= (1/test_prob)
     return H_conditional, test_prob
 
-def filter_for_anti(H, pos_by_class):
+def filter_for_anti(H, rhs, pos_by_class):
     possible_states = where(
                     (rhs.states_rec_only - pos_by_class).sum(axis=1)==0)[0]
     H_conditional = zeros(size(H))
@@ -182,7 +194,7 @@ def filter_for_anti(H, pos_by_class):
 
 '''Now write a function to simulate testing on a given day'''
 
-def simulate_testing(H):
+def simulate_testing(H, rhs):
     test_state = choices(range(len(H)), weights=H)
     pos_by_class = rhs.states_pro_only[test_state,:]+rhs.states_inf_only[test_state,:]
     rec_by_class = rhs.states_rec_only[test_state,:]
@@ -208,17 +220,19 @@ def generate_test_series(H0, rhs):
         time_points = hstack((time_points, time))
         H = solution.y
         H_test_date = H[:, -1]
-        pos, rec = simulate_testing(H_test_date)
+        pos, rec = simulate_testing(H_test_date, rhs)
         pos_series.append(pos)
         anti_series.append(rec)
-        H_cond, prob = filter_for_positives(H_test_date, pos)
-        H_cond, prob = filter_for_anti(H_cond, rec)
+        H_cond, prob = filter_for_positives(H_test_date, rhs, pos)
+        H_cond, prob = filter_for_anti(H_cond, rhs, rec)
         current_H = H_cond
         H_all_time = hstack((H_all_time, H))
     
     return pos_series, anti_series
 
-pos_series, anti_series = generate_test_series(H0, rhs)
+# composition_list, comp_dist, rhs, H0 = make_random_single_hh_system(uk_comp_list, uk_comp_dist)
+
+# pos_series, anti_series = generate_test_series(H0, rhs)
 
 def calculate_test_probability(H0, rhs, pos_data, anti_data):
     log_prob = 0
@@ -228,8 +242,8 @@ def calculate_test_probability(H0, rhs, pos_data, anti_data):
         solution = solve_ivp(rhs, this_week, current_H, first_step=0.001, atol=1e-16)
         H = solution.y
         H_test_date = H[:, -1]
-        H_cond, pos_prob = filter_for_positives(H_test_date, pos_data[d-1])
-        H_cond, anti_prob = filter_for_anti(H_cond, anti_data[d-1])
+        H_cond, pos_prob = filter_for_positives(H_test_date, rhs, pos_data[d-1])
+        H_cond, anti_prob = filter_for_anti(H_cond, rhs, anti_data[d-1])
         log_prob += log(pos_prob) + log(anti_prob)
         current_H = H_cond
     return log_prob
@@ -281,7 +295,7 @@ class SEPIRInputForEstimation(ModelInput):
     def alpha_1(self):
         return self.spec['incubation_rate']
 
-def calculate_llh(beta_int, density_expo, pos_data, anti_data):
+def calculate_llh(beta_int, density_expo, pos_data, anti_data, SPEC, composition_list, comp_dist):
     model_input = SEPIRInputForEstimation( beta_int, density_expo, SPEC, composition_list, comp_dist)
     model_input.k_ext *= 0
     household_population = HouseholdPopulation(
@@ -301,21 +315,34 @@ params = array([
         for b in beta_int_range
         for e in density_expo_range])
 
-llh_array = zeros(len(params),)
+# llh_array = zeros(len(params),)
 
-for i in range(len(params)):
-    print("params=", params[i,:])
-    llh_array[i] = calculate_llh(params[i,0], params[i,1], pos_series, anti_series)
+# for i in range(len(params)):
+#     print("params=", params[i,:])
+#     llh_array[i] = calculate_llh(params[i,0],
+#                                  params[i,1],
+#                                  pos_series,
+#                                  anti_series,
+#                                  SPEC,
+#                                  composition_list,
+#                                  comp_dist)
 
 no_hh_in_data = 50
-test_data_list = [generate_test_series(H0, rhs) for i in range(no_hh_in_data)]
+system_list = [make_random_single_hh_system(uk_comp_list, uk_comp_dist) for i in range(no_hh_in_data)]
+test_data_list = [generate_test_series(system_list[i][2], system_list[i][3]) for i in range(no_hh_in_data)]
 
 llh_array = zeros(len(params),)
 
 for i in range(len(params)):
     print("params=", params[i,:])
     for j in range(no_hh_in_data):
-        llh_array[i] += calculate_llh(params[i,0], params[i,1], test_data_list[j][0], test_data_list[j][1])
+        llh_array[i] += calculate_llh(params[i,0],
+                                      params[i,1],
+                                      test_data_list[j][0],
+                                      test_data_list[j][1],
+                                      SPEC,
+                                      system_list[j][0],
+                                      system_list[j][1])
 
 with open('outputs/longitudinal_data_analysis/llh_array.pkl', 'wb') as f:
     dump(llh_array, f)
@@ -339,7 +366,7 @@ ax.set_xlabel("density exponent")
 ax.set_ylabel("beta_int")
 ax.set_title("Log likelihood")
 
-fig.savefig('plots/longitudinal_data_analysis/llh_array.png',
+fig.savefig('plots/longitudinal_data_analysis/llh_array_rand.png',
             bbox_inches='tight',
             dpi=300,
             transparent=False)
