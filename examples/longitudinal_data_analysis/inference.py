@@ -30,7 +30,7 @@ tspan = (0.0, 365)
 
 if isfile('outputs/longitudinal_data_analysis/background_epidemic.pkl'):
     with open('outputs/longitudinal_data_analysis/background_epidemic.pkl', 'rb') as f:
-        uk_comp_list, uk_comp_dist, background_time, background_all_infs = load(f)
+        uk_comp_list, uk_comp_dist, background_time, background_all_infs, background_input = load(f)
 else:
     DOUBLING_TIME = 3
     growth_rate = log(2) / DOUBLING_TIME
@@ -82,8 +82,10 @@ else:
     background_I = background_H.T.dot(household_population.states[:, 3::5])
     background_all_infs = model_input.inf_scales[0] * background_P + model_input.inf_scales[1] * background_I
 
+    background_input = model_input
+
     with open('outputs/longitudinal_data_analysis/background_epidemic.pkl', 'wb') as f:
-        dump((uk_comp_list, uk_comp_dist, background_time, background_all_infs), f)
+        dump((uk_comp_list, uk_comp_dist, background_time, background_all_infs, background_input), f)
 
 '''Create an import model coupling single HH to epidemic'''
 
@@ -122,13 +124,60 @@ SINGLE_HH_SEPIR_SPEC = {
 
 SPEC = {**TWO_AGE_SEPIR_SPEC_FOR_FITTING, **TWO_AGE_UK_SPEC}
 
+class SEPIRInputForEstimation(ModelInput):
+    def __init__(self, beta_int, density_expo, spec, composition_list, composition_distribution):
+        super().__init__(spec, composition_list, composition_distribution)
+
+        self.expandables = ['sus',
+                         'inf_scales']
+
+        self.R_compartment = 4
+
+        self.sus = spec['sus']
+        self.inf_scales = [spec['prodromal_trans_scaling'],
+                ones(shape(spec['prodromal_trans_scaling']))]
+
+
+
+        self.alpha_2 = self.spec['symp_onset_rate']
+
+        self.gamma = self.spec['recovery_rate']
+
+        self.ave_trans = \
+            ((self.inf_scales[0].dot(self.ave_hh_by_class) / self.ave_hh_size) /
+            self.alpha_2) +  \
+            ((self.inf_scales[1].dot(self.ave_hh_by_class) / self.ave_hh_size) /
+             self.gamma)
+
+        self.prog_rates = array([self.alpha_2, self.gamma])
+
+        self.density_expo = density_expo
+
+        self.k_home = beta_int * self.k_home
+
+        ext_eig = max(eig(
+            diag(self.sus).dot((1/spec['symp_onset_rate']) *
+             (self.k_ext).dot(self.inf_scales[0]) +
+             (1/spec['recovery_rate']) *
+              (self.k_ext).dot(diag(self.inf_scales[1])))
+            )[0])
+        if spec['fit_method'] == 'R*':
+            external_scale = spec['R*'] / (self.ave_hh_size*spec['SITP'])
+        else:
+            external_scale = 1
+        self.k_ext = external_scale * self.k_ext / ext_eig
+
+    @property
+    def alpha_1(self):
+        return self.spec['incubation_rate']
+
 def make_random_single_hh_system(full_comp_list, full_comp_dist):
 
     hh_id = choices(range(len(full_comp_list)), weights=full_comp_dist)
     composition_list = full_comp_list[hh_id]
     comp_dist = array([1])
 
-    model_input = SEPIRInput(SPEC, composition_list, comp_dist)
+    model_input = background_input
     model_input.k_ext *= 0
     household_population = HouseholdPopulation(
         composition_list, comp_dist, model_input)
@@ -248,55 +297,12 @@ def calculate_test_probability(H0, rhs, pos_data, anti_data):
         current_H = H_cond
     return log_prob
 
-class SEPIRInputForEstimation(ModelInput):
-    def __init__(self, beta_int, density_expo, spec, composition_list, composition_distribution):
-        super().__init__(spec, composition_list, composition_distribution)
-
-        self.expandables = ['sus',
-                         'inf_scales']
-
-        self.R_compartment = 4
-
-        self.sus = spec['sus']
-        self.inf_scales = [spec['prodromal_trans_scaling'],
-                ones(shape(spec['prodromal_trans_scaling']))]
-
-
-
-        self.alpha_2 = self.spec['symp_onset_rate']
-
-        self.gamma = self.spec['recovery_rate']
-
-        self.ave_trans = \
-            ((self.inf_scales[0].dot(self.ave_hh_by_class) / self.ave_hh_size) /
-            self.alpha_2) +  \
-            ((self.inf_scales[1].dot(self.ave_hh_by_class) / self.ave_hh_size) /
-             self.gamma)
-
-        self.prog_rates = array([self.alpha_2, self.gamma])
-
-        self.density_expo = density_expo
-
-        self.k_home = beta_int * self.k_home
-
-        ext_eig = max(eig(
-            diag(self.sus).dot((1/spec['symp_onset_rate']) *
-             (self.k_ext).dot(self.inf_scales[0]) +
-             (1/spec['recovery_rate']) *
-              (self.k_ext).dot(diag(self.inf_scales[1])))
-            )[0])
-        if spec['fit_method'] == 'R*':
-            external_scale = spec['R*'] / (self.ave_hh_size*spec['SITP'])
-        else:
-            external_scale = 1
-        self.k_ext = external_scale * self.k_ext / ext_eig
-
-    @property
-    def alpha_1(self):
-        return self.spec['incubation_rate']
-
 def calculate_llh(beta_int, density_expo, pos_data, anti_data, SPEC, composition_list, comp_dist):
-    model_input = SEPIRInputForEstimation( beta_int, density_expo, SPEC, composition_list, comp_dist)
+    model_input = SEPIRInputForEstimation( beta_int,
+                                           density_expo,
+                                           SPEC,
+                                           composition_list,
+                                           comp_dist)
     model_input.k_ext *= 0
     household_population = HouseholdPopulation(
         composition_list, comp_dist, model_input)
@@ -366,7 +372,7 @@ ax.set_xlabel("density exponent")
 ax.set_ylabel("beta_int")
 ax.set_title("Log likelihood")
 
-fig.savefig('plots/longitudinal_data_analysis/llh_array_rand.png',
+fig.savefig('plots/longitudinal_data_analysis/llh_array_with_beta.png',
             bbox_inches='tight',
             dpi=300,
             transparent=False)

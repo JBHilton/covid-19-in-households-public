@@ -769,6 +769,7 @@ class SEPIRInput(ModelInput):
         print(self.sitp)
         self.pars = pars
         beta_int = pars[0]
+        self.beta_int = beta_int
         self.density_expo = pars[1]
         print('Estimated beta_int=',pars[0],', estimated density=',pars[1])
 
