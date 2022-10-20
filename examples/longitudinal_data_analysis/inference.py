@@ -87,6 +87,9 @@ else:
     with open('outputs/longitudinal_data_analysis/background_epidemic.pkl', 'wb') as f:
         dump((uk_comp_list, uk_comp_dist, background_time, background_all_infs, background_input), f)
 
+fitted_beta_int = background_input.beta_int
+fitted_density_expo = background_input.density_expo
+
 '''Create an import model coupling single HH to epidemic'''
 
 class CoupledImportModel(ImportModel):
@@ -153,6 +156,8 @@ class SEPIRInputForEstimation(ModelInput):
 
         self.density_expo = density_expo
 
+        self.beta_int = beta_int
+
         self.k_home = beta_int * self.k_home
 
         ext_eig = max(eig(
@@ -174,20 +179,45 @@ class SEPIRInputForEstimation(ModelInput):
 def make_random_single_hh_system(full_comp_list, full_comp_dist):
 
     hh_id = choices(range(len(full_comp_list)), weights=full_comp_dist)
-    composition_list = full_comp_list[hh_id]
-    comp_dist = array([1])
+    single_hh_comp = full_comp_list[hh_id]
 
-    model_input = background_input
+    model_input = SEPIRInputForEstimation( fitted_beta_int,
+                                           fitted_density_expo,
+                                           SPEC,
+                                           single_hh_comp,
+                                           array([1]))
     model_input.k_ext *= 0
     household_population = HouseholdPopulation(
-        composition_list, comp_dist, model_input)
+        single_hh_comp, array([1]), model_input)
 
     rhs = SEPIRRateEquations(model_input,
                             household_population,
                             CoupledImportModel(background_time,background_all_infs))
     H0 = make_initial_condition_by_eigenvector(1., model_input, household_population, rhs, 0.0, 0.0)
 
-    return composition_list, comp_dist, H0, rhs
+    return single_hh_comp, H0, rhs
+
+H0_list = []
+rhs_list = []
+
+for hh_id, comp in enumerate(uk_comp_list):
+
+    model_input = SEPIRInputForEstimation( fitted_beta_int,
+                                           fitted_density_expo,
+                                           SPEC,
+                                           array([comp]),
+                                           array([1]))
+    model_input.k_ext *= 0
+    household_population = HouseholdPopulation(
+        array([comp]), array([1]), model_input)
+
+    rhs = SEPIRRateEquations(model_input,
+                            household_population,
+                            CoupledImportModel(background_time,background_all_infs))
+    H0 = make_initial_condition_by_eigenvector(1., model_input, household_population, rhs, 0.0, 0.0)
+
+    H0_list.append(H0)
+    rhs_list.append(rhs)
 
 # composition_list = array([[2, 2]]) # 2 adult 2 child household
 # comp_dist = array([1])
@@ -297,15 +327,16 @@ def calculate_test_probability(H0, rhs, pos_data, anti_data):
         current_H = H_cond
     return log_prob
 
-def calculate_llh(beta_int, density_expo, pos_data, anti_data, SPEC, composition_list, comp_dist):
+def calculate_llh(beta_int, density_expo, pos_data, anti_data, hh_id):
+    comp = uk_comp_list[hh_id]
     model_input = SEPIRInputForEstimation( beta_int,
                                            density_expo,
                                            SPEC,
-                                           composition_list,
-                                           comp_dist)
+                                           array([comp]),
+                                           array([1]))
     model_input.k_ext *= 0
     household_population = HouseholdPopulation(
-        composition_list, comp_dist, model_input)
+        array([comp]), array([1]), model_input)
 
     rhs = SEPIRRateEquations(model_input,
                             household_population,
@@ -313,7 +344,7 @@ def calculate_llh(beta_int, density_expo, pos_data, anti_data, SPEC, composition
     H0 = make_initial_condition_by_eigenvector(1., model_input, household_population, rhs, 0.0, 0.0)
     return calculate_test_probability(H0, rhs, pos_data, anti_data)
 
-beta_int_range = arange(0.0, 0.01, 0.002)
+beta_int_range = arange(0.0025, 0.015, 0.0025)
 density_expo_range = arange(0.0, 1.0, 0.2)
 
 params = array([
@@ -333,24 +364,60 @@ params = array([
 #                                  composition_list,
 #                                  comp_dist)
 
+def build_systems_with_params(beta_int, density_expo):
+        
+    temp_H0_list = []
+    temp_rhs_list = []
+
+    for hh_id, comp in enumerate(uk_comp_list):
+
+        model_input = SEPIRInputForEstimation( beta_int,
+                                            density_expo,
+                                            SPEC,
+                                            array([comp]),
+                                            array([1]))
+        model_input.k_ext *= 0
+        household_population = HouseholdPopulation(
+            array([comp]), array([1]), model_input)
+
+        rhs = SEPIRRateEquations(model_input,
+                                household_population,
+                                CoupledImportModel(background_time,background_all_infs))
+        H0 = make_initial_condition_by_eigenvector(1., model_input, household_population, rhs, 0.0, 0.0)
+
+        temp_H0_list.append(H0)
+        temp_rhs_list.append(rhs)
+
+    return temp_H0_list, temp_rhs_list
+
+H0_list_by_param = []
+rhs_list_by_param = []
+
+for i in range(len(params)):
+    print("Building systems for params=", params[i,:])
+    temp_H0_list, temp_rhs_list = build_systems_with_params(params[i, 0], params[i, 1])
+    H0_list_by_param.append(temp_H0_list)
+    rhs_list_by_param.append(temp_rhs_list)
+
 no_hh_in_data = 50
-system_list = [make_random_single_hh_system(uk_comp_list, uk_comp_dist) for i in range(no_hh_in_data)]
-test_data_list = [generate_test_series(system_list[i][2], system_list[i][3]) for i in range(no_hh_in_data)]
+sample_comp_ids = choices(range(len(uk_comp_list)), weights=uk_comp_dist, k=no_hh_in_data)
+sample_H0s = [H0_list[hh_id] for hh_id in sample_comp_ids]
+sample_rhss = [rhs_list[hh_id] for hh_id in sample_comp_ids]
+test_data_list = [generate_test_series(sample_H0s[i], sample_rhss[i]) for i in range(no_hh_in_data)]
 
 llh_array = zeros(len(params),)
 
 for i in range(len(params)):
-    print("params=", params[i,:])
+    print("Doing likelihood calculations for params=", params[i,:])
+    temp_H0_list = H0_list_by_param[i]
+    temp_rhs_list = rhs_list_by_param[i]
     for j in range(no_hh_in_data):
-        llh_array[i] += calculate_llh(params[i,0],
-                                      params[i,1],
-                                      test_data_list[j][0],
-                                      test_data_list[j][1],
-                                      SPEC,
-                                      system_list[j][0],
-                                      system_list[j][1])
+        llh_array[i] += calculate_test_probability(temp_H0_list[sample_comp_ids[j]],
+                                                temp_rhs_list[sample_comp_ids[j]],
+                                                test_data_list[j][0],
+                                                test_data_list[j][1])
 
-with open('outputs/longitudinal_data_analysis/llh_array.pkl', 'wb') as f:
+with open('outputs/longitudinal_data_analysis/llh_array_50.pkl', 'wb') as f:
     dump(llh_array, f)
 
 from matplotlib.pyplot import axes, close, colorbar, imshow, set_cmap, subplots
@@ -365,14 +432,15 @@ llh_array = llh_array.reshape((len(beta_int_range), len(density_expo_range)))
 fig, ax = subplots(1, 1, constrained_layout=True)
 axim = ax.contour(llh_array,
                   colors='k',
-                  extent=(0, 1, 0, 1),
+                  extent=(0, 1, 0, max(beta_int_range)),
                   aspect=1)
+ax.scatter([background_input.density_expo], [background_input.beta_int])
 ax.clabel(axim, fontsize=9, inline=1, fmt='%1.1f')
 ax.set_xlabel("density exponent")
 ax.set_ylabel("beta_int")
 ax.set_title("Log likelihood")
 
-fig.savefig('plots/longitudinal_data_analysis/llh_array_with_beta.png',
+fig.savefig('plots/longitudinal_data_analysis/llh_array_50.png',
             bbox_inches='tight',
             dpi=300,
             transparent=False)
