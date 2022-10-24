@@ -26,7 +26,7 @@ if isdir('outputs/longitudinal_data_analysis') is False:
 
 '''Start by running the population-level epidemic.'''
 
-tspan = (0.0, 365)
+tspan = (0.0, 90)
 
 if isfile('outputs/longitudinal_data_analysis/background_epidemic.pkl'):
     with open('outputs/longitudinal_data_analysis/background_epidemic.pkl', 'rb') as f:
@@ -219,36 +219,6 @@ for hh_id, comp in enumerate(uk_comp_list):
     H0_list.append(H0)
     rhs_list.append(rhs)
 
-# composition_list = array([[2, 2]]) # 2 adult 2 child household
-# comp_dist = array([1])
-
-# SINGLE_HH_SEPIR_SPEC = {
-#     'compartmental_structure': 'SEPIR', # This is which subsystem key to use
-#     'SITP': TRANCHE2_SITP,                     # Secondary inf probability
-#     'R*': 1.,                      # Household-level reproduction number
-#     'recovery_rate': 1 / SYMPTOM_PERIOD,           # Recovery rate
-#     'incubation_rate': 1 / LATENT_PERIOD,         # E->P incubation rate
-#     'symp_onset_rate': 1 / PRODROME_PERIOD,         # P->I prodromal to symptomatic rate
-#     'prodromal_trans_scaling':
-#      PRODROME_SCALING * ones(2,),          # Prodromal transmission intensity relative to
-#                                 # full inf transmission
-#     'sus': array([1,1]),          # Relative susceptibility by
-#                                   # age/vulnerability class
-#     'fit_method' : 'EL'
-# }
-
-# SPEC = {**TWO_AGE_SEPIR_SPEC_FOR_FITTING, **TWO_AGE_UK_SPEC}
-
-# model_input = SEPIRInput(SPEC, composition_list, comp_dist)
-# model_input.k_ext *= 0
-# household_population = HouseholdPopulation(
-#     composition_list, comp_dist, model_input)
-
-# rhs = SEPIRRateEquations(model_input,
-#                          household_population,
-#                          CoupledImportModel(background_time,background_all_infs))
-# H0 = make_initial_condition_by_eigenvector(1., model_input, household_population, rhs, 0.0, 0.0)
-
 '''Generate some household testing data from the model solution'''
 '''First make a function which takes in a day's test positivity
 and outputs a conditional distribution and a probability'''
@@ -281,7 +251,7 @@ def simulate_testing(H, rhs):
 
 '''Now generate the testing data'''
 
-test_dates = arange(1, tspan[-1], 7)
+test_dates = arange(1, tspan[-1], 2)
 
 def generate_test_series(H0, rhs):
 
@@ -308,10 +278,6 @@ def generate_test_series(H0, rhs):
         H_all_time = hstack((H_all_time, H))
     
     return pos_series, anti_series
-
-# composition_list, comp_dist, rhs, H0 = make_random_single_hh_system(uk_comp_list, uk_comp_dist)
-
-# pos_series, anti_series = generate_test_series(H0, rhs)
 
 def calculate_test_probability(H0, rhs, pos_data, anti_data):
     log_prob = 0
@@ -344,25 +310,13 @@ def calculate_llh(beta_int, density_expo, pos_data, anti_data, hh_id):
     H0 = make_initial_condition_by_eigenvector(1., model_input, household_population, rhs, 0.0, 0.0)
     return calculate_test_probability(H0, rhs, pos_data, anti_data)
 
-beta_int_range = arange(0.0025, 0.015, 0.0025)
+beta_int_range = arange(0.0050, 0.015, 0.0025)
 density_expo_range = arange(0.0, 1.0, 0.2)
 
 params = array([
         [b, e]
         for b in beta_int_range
         for e in density_expo_range])
-
-# llh_array = zeros(len(params),)
-
-# for i in range(len(params)):
-#     print("params=", params[i,:])
-#     llh_array[i] = calculate_llh(params[i,0],
-#                                  params[i,1],
-#                                  pos_series,
-#                                  anti_series,
-#                                  SPEC,
-#                                  composition_list,
-#                                  comp_dist)
 
 def build_systems_with_params(beta_int, density_expo):
         
@@ -399,11 +353,23 @@ for i in range(len(params)):
     H0_list_by_param.append(temp_H0_list)
     rhs_list_by_param.append(temp_rhs_list)
 
+'''Generate a bunch of samples of testing data so we don't have to do it again on every try:'''
+
+if isfile('outputs/longitudinal_data_analysis/sample_test_data.pkl') is True:
+    with open('outputs/longitudinal_data_analysis/sample_test_data.pkl', 'rb') as f:
+        sample_comp_ids, sample_H0s, sample_rhss, sample_test_data = load(f)
+else:
+    no_test_samples = 1000
+    sample_comp_ids = choices(range(len(uk_comp_list)), weights=uk_comp_dist, k=no_test_samples)
+    sample_H0s = [H0_list[hh_id] for hh_id in sample_comp_ids]
+    sample_rhss = [rhs_list[hh_id] for hh_id in sample_comp_ids]
+    sample_test_data = [generate_test_series(sample_H0s[i], sample_rhss[i]) for i in range(no_test_samples)]
+    with open('outputs/longitudinal_data_analysis/background_population.pkl', 'wb') as f:
+        dump((sample_comp_ids, sample_H0s, sample_rhss, sample_test_data), f)
+
 no_hh_in_data = 50
-sample_comp_ids = choices(range(len(uk_comp_list)), weights=uk_comp_dist, k=no_hh_in_data)
-sample_H0s = [H0_list[hh_id] for hh_id in sample_comp_ids]
-sample_rhss = [rhs_list[hh_id] for hh_id in sample_comp_ids]
-test_data_list = [generate_test_series(sample_H0s[i], sample_rhss[i]) for i in range(no_hh_in_data)]
+which_samples = choices(range(len(sample_test_data)), k=no_hh_in_data)
+test_data_list = [sample_test_data[sample_id] for sample_id in which_samples]
 
 llh_array = zeros(len(params),)
 
@@ -412,12 +378,12 @@ for i in range(len(params)):
     temp_H0_list = H0_list_by_param[i]
     temp_rhs_list = rhs_list_by_param[i]
     for j in range(no_hh_in_data):
-        llh_array[i] += calculate_test_probability(temp_H0_list[sample_comp_ids[j]],
-                                                temp_rhs_list[sample_comp_ids[j]],
+        llh_array[i] += calculate_test_probability(temp_H0_list[sample_comp_ids[which_samples[j]]],
+                                                temp_rhs_list[sample_comp_ids[which_samples[j]]],
                                                 test_data_list[j][0],
                                                 test_data_list[j][1])
 
-with open('outputs/longitudinal_data_analysis/llh_array_50.pkl', 'wb') as f:
+with open('outputs/longitudinal_data_analysis/llh_array_50_fineres.pkl', 'wb') as f:
     dump(llh_array, f)
 
 from matplotlib.pyplot import axes, close, colorbar, imshow, set_cmap, subplots
@@ -440,7 +406,7 @@ ax.set_xlabel("density exponent")
 ax.set_ylabel("beta_int")
 ax.set_title("Log likelihood")
 
-fig.savefig('plots/longitudinal_data_analysis/llh_array_50.png',
+fig.savefig('plots/longitudinal_data_analysis/llh_array_50_fine_2.png',
             bbox_inches='tight',
             dpi=300,
             transparent=False)
