@@ -364,7 +364,7 @@ else:
     sample_H0s = [H0_list[hh_id] for hh_id in sample_comp_ids]
     sample_rhss = [rhs_list[hh_id] for hh_id in sample_comp_ids]
     sample_test_data = [generate_test_series(sample_H0s[i], sample_rhss[i]) for i in range(no_test_samples)]
-    with open('outputs/longitudinal_data_analysis/background_population.pkl', 'wb') as f:
+    with open('outputs/longitudinal_data_analysis/sample_test_data.pkl', 'wb') as f:
         dump((sample_comp_ids, sample_H0s, sample_rhss, sample_test_data), f)
 
 no_hh_in_data = 50
