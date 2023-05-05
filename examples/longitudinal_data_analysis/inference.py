@@ -241,6 +241,18 @@ def filter_for_anti(H, rhs, pos_by_class):
     H_conditional *= (1/test_prob)
     return H_conditional, test_prob
 
+def filter_for_test_results(H, rhs, pos_by_class, sero_by_class):
+    possible_states = where(
+                    ((rhs.states_pro_only+rhs.states_inf_only - pos_by_class).sum(axis=1) +
+                    (rhs.states_rec_only - sero_by_class).sum(axis=1)) == 0)[0]
+    # print(possible_states)
+    H_conditional = zeros(size(H))
+    H_conditional[possible_states] = H[possible_states]
+    test_prob = sum(H_conditional)
+    # print(test_prob)
+    H_conditional *= (1/test_prob)
+    return H_conditional, test_prob
+
 '''Now write a function to simulate testing on a given day'''
 
 def simulate_testing(H, rhs):
@@ -282,15 +294,17 @@ def generate_test_series(H0, rhs):
 def calculate_test_probability(H0, rhs, pos_data, anti_data):
     log_prob = 0
     current_H = H0
-    for d in range(1,len(test_dates)):
-        this_week = (test_dates[d-1], test_dates[d])
+    total_current_inf = array(pos_data).sum(axis=(1,2))
+    first_case_date = where(total_current_inf>0)[0][0]
+    this_hh_test_dates = hstack((array([0]), test_dates[first_case_date:]))
+    for d in range(1,len(this_hh_test_dates)):
+        this_week = (this_hh_test_dates[d-1], this_hh_test_dates[d])
         solution = solve_ivp(rhs, this_week, current_H, first_step=0.001, atol=1e-16)
         H = solution.y
         H_test_date = H[:, -1]
-        H_cond, pos_prob = filter_for_positives(H_test_date, rhs, pos_data[d-1])
-        H_cond, anti_prob = filter_for_anti(H_cond, rhs, anti_data[d-1])
-        log_prob += log(pos_prob) + log(anti_prob)
+        H_cond, test_prob = filter_for_test_results(H_test_date, rhs, pos_data[d-1], anti_data[d-1])
         current_H = H_cond
+        log_prob += log(test_prob)
     return log_prob
 
 def calculate_llh(beta_int, density_expo, pos_data, anti_data, hh_id):
@@ -310,8 +324,8 @@ def calculate_llh(beta_int, density_expo, pos_data, anti_data, hh_id):
     H0 = make_initial_condition_by_eigenvector(1., model_input, household_population, rhs, 0.0, 0.0)
     return calculate_test_probability(H0, rhs, pos_data, anti_data)
 
-beta_int_range = arange(0.0050, 0.015, 0.0025)
-density_expo_range = arange(0.0, 1.0, 0.2)
+beta_int_range = arange(0.0050, 0.015, 0.00125)
+density_expo_range = arange(0.0, 1.0, 0.1)
 
 params = array([
         [b, e]
@@ -367,9 +381,17 @@ else:
     with open('outputs/longitudinal_data_analysis/sample_test_data.pkl', 'wb') as f:
         dump((sample_comp_ids, sample_H0s, sample_rhss, sample_test_data), f)
 
-no_hh_in_data = 50
+no_hh_in_data = 25
 which_samples = choices(range(len(sample_test_data)), k=no_hh_in_data)
 test_data_list = [sample_test_data[sample_id] for sample_id in which_samples]
+
+'''This function truncates a household's testing data so that it begins when the first case is detected.'''
+def reduce_test_data(test_data):
+    total_current_inf = array(test_data).sum(axis=(1,2))
+    first_case_date = where(total_current_inf>0)[0][0]
+    short_time_pts = test_dates[first_case_date:]
+    short_test_data = [test_data[0][first_case_date:], test_data[1][first_case_date:]]
+    return short_time_pts, short_test_data
 
 llh_array = zeros(len(params),)
 
@@ -383,7 +405,7 @@ for i in range(len(params)):
                                                 test_data_list[j][0],
                                                 test_data_list[j][1])
 
-with open('outputs/longitudinal_data_analysis/llh_array_50_fineres.pkl', 'wb') as f:
+with open('outputs/longitudinal_data_analysis/llh_array_25.pkl', 'wb') as f:
     dump(llh_array, f)
 
 from matplotlib.pyplot import axes, close, colorbar, imshow, set_cmap, subplots
@@ -406,7 +428,7 @@ ax.set_xlabel("density exponent")
 ax.set_ylabel("beta_int")
 ax.set_title("Log likelihood")
 
-fig.savefig('plots/longitudinal_data_analysis/llh_array_50_fine_2.png',
+fig.savefig('plots/longitudinal_data_analysis/llh_array_25.png',
             bbox_inches='tight',
             dpi=300,
             transparent=False)
