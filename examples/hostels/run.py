@@ -6,38 +6,45 @@ from os.path import isdir, isfile
 from pickle import load, dump
 from copy import deepcopy
 from multiprocessing import Pool
-from numpy import arange, array, exp, log, sum, where
+from numpy import arange, array, exp, log, ones, sum, where
 from numpy.linalg import eig
 from numpy.random import rand
 from pandas import read_csv
 from time import time as get_time
+from scipy.stats import binom
 from scipy.integrate import solve_ivp
 from model.preprocessing import ( AR_by_size, estimate_beta_ext,
         estimate_growth_rate, SEPIRInput, HouseholdPopulation,
         make_initial_condition_by_eigenvector)
-from functions import HOSTEL_VACC_SEIR_SPEC, HostelSEIRInput
-from model.common import SEPIRRateEquations
-from model.imports import FixedImportModel, NoImportModel
+from examples.hostels.functions import HOSTEL_VACC_SEIR_SPEC, HostelSEIRInput
+from model.common import SEIRRateEquations
+from model.imports import CoupledSEIRImports, FixedImportModel, NoImportModel
 from pickle import load, dump
 # pylint: disable=invalid-name
+
+no_days = 90
+
+# Assume external prevalence is fixed at 10% and comes in weekly
+wks = arange(1, no_days+7, 7)
+prev_curve = 0.1 * ones(len(wks),)
 
 if isdir('outputs/hostel_vacc') is False:
     mkdir('outputs/hostel_vacc')
 
-SPEC = HOSTEL_VACC_SEIR_SPEC
+HH_SIZE = 20 # Total size of households
 
-vacc_efficacy = 0.5
-vacc_inf_reduction = 0.5
+SPEC = HOSTEL_VACC_SEIR_SPEC
+R_comp = 4
 
 # List of observed care home compositions
 composition_list = []
-for nv in range(21):
-    composition_list.append([nv, 20-nv])
+for nv in range(HH_SIZE + 1):
+    composition_list.append([nv, HH_SIZE - nv])
 composition_list = array(composition_list)
 # Proportion of care homes which are in each composition
 comp_dist = array(composition_list.shape[0] * [1 / composition_list.shape[0]])
 
-model_input = HOSTEL_VACC_SEIR_SPEC(SPEC, composition_list, comp_dist)
+model_input = HostelSEIRInput(SPEC, composition_list, comp_dist)
 
 prev=0 # Starting prevalence
 antibody_prev=0 # Starting antibody prev/immunity
@@ -48,7 +55,7 @@ class VaccAnalysis:
 
     def __call__(self, p):
         try:
-            result = self._implement_mixing(p)
+            result = self._implement_vacc(p)
         except ValueError as err:
             print(
                 'Exception raised for parameters={0}\n\tException: {1}'.format(
@@ -57,32 +64,24 @@ class VaccAnalysis:
             return 0.0
         return result
 
-    def _implement_mixing(self, p):
+    def _implement_vacc(self, p):
+
+        # For now I'll assume that p[0] is uptake and p[1] is connection to external population
         print('p=',p)
-        this_spec = deepcopy(self.basic_spec)
-        this_spec['sus'] = [1-p[0], 1] # p[0] is efficacy in terms of susceptibility reduction
-        this_spec['inf_scales'] = [1-p[1], 1] # p[1] is efficacy in terms of 
-        model_input = SEPIRInput(this_spec, composition_list, comp_dist)
-        model_input.k_home = (1 - p[0]) * model_input.k_home
-        model_input.k_ext = (1 - p[1]) * beta_ext * model_input.k_ext
+        this_comp_dist = binom.pmf(arange(HH_SIZE, 0, -1), HH_SIZE, p[0])
+        this_spec = deepcopy(basic_spec)
+        this_spec['beta_ext'] = p[1]
+        model_input = HostelSEIRInput(this_spec, composition_list, this_comp_dist)
 
         household_population = HouseholdPopulation(
-            composition_list, comp_dist, model_input)
+            composition_list, this_comp_dist, model_input)
 
-        rhs = SEPIRRateEquations(model_input,
+        rhs = SEIRRateEquations(model_input,
                                  household_population,
-                                 NoImportModel(5,2))
+                                 CoupledSEIRImports())
 
-        growth_rate = estimate_growth_rate(household_population,
-                                           rhs,
-                                           gr_interval,
-                                           gr_tol,
-                                           x0=1e-3,
-                                           r_min_discount=0.99)
-        if growth_rate is None:
-            growth_rate = 0
-
-        H0, first_pass_ar = make_initial_condition_by_eigenvector(growth_rate,
+        # Initialise with zero infecteds - shouldn't matter what we use for growth rate
+        H0, first_pass_ar = make_initial_condition_by_eigenvector(1e-2,
                                                    model_input,
                                                    household_population,
                                                    rhs,
@@ -90,7 +89,6 @@ class VaccAnalysis:
                                                    antibody_prev,
                                                    True)
 
-        no_days = 90
         tspan = (0.0, no_days)
         solution = solve_ivp(rhs, tspan, H0, first_step=0.001, atol=1e-16)
 
@@ -122,8 +120,7 @@ class VaccAnalysis:
 
         ar_by_size = AR_by_size(household_population, H, R_comp)
 
-        return [growth_rate,
-                peaks,
+        return [peaks,
                 R_end,
                 hh_outbreak_prop,
                 attack_ratio,
@@ -131,20 +128,20 @@ class VaccAnalysis:
                 first_pass_ar]
 
 def main(no_of_workers,
-         internal_mix_vals,
+         uptake_vals,
          external_mix_vals):
     main_start = get_time()
-    mixing_system = MixingAnalysis()
+    mixing_system = VaccAnalysis()
     results = []
-    internal_mix_range = arange(internal_mix_vals[0],
-                                internal_mix_vals[1],
-                                internal_mix_vals[2])
+    uptake_range = arange(uptake_vals[0],
+                                uptake_vals[1],
+                                uptake_vals[2])
     external_mix_range = arange(external_mix_vals[0],
                                 external_mix_vals[1],
                                 external_mix_vals[2])
     params = array([
         [i, e]
-        for i in internal_mix_range
+        for i in uptake_range
         for e in external_mix_range])
 
     with Pool(no_of_workers) as pool:
@@ -153,41 +150,27 @@ def main(no_of_workers,
 
     print('Parameter sweep took',get_time()-main_start,'seconds.')
 
-    growth_rate_data = array([r[0] for r in results]).reshape(
-        len(internal_mix_range),
+    peak_data = array([r[0] for r in results]).reshape(
+        len(uptake_range),
         len(external_mix_range))
-    peak_data = array([r[1] for r in results]).reshape(
-        len(internal_mix_range),
+    end_data = array([r[1] for r in results]).reshape(
+        len(uptake_range),
         len(external_mix_range))
-    end_data = array([r[2] for r in results]).reshape(
-        len(internal_mix_range),
+    hh_prop_data = array([r[2] for r in results]).reshape(
+        len(uptake_range),
         len(external_mix_range))
-    hh_prop_data = array([r[3] for r in results]).reshape(
-        len(internal_mix_range),
+    attack_ratio_data = array([r[3] for r in results]).reshape(
+        len(uptake_range),
         len(external_mix_range))
-    attack_ratio_data = array([r[4] for r in results]).reshape(
-        len(internal_mix_range),
-        len(external_mix_range))
-    ar_by_size_data = array([r[5] for r in results]).reshape(
-        len(internal_mix_range),
-        len(external_mix_range),
-        model_input_to_fit.max_hh_size)
-    first_pass_ar_data = array([r[6] for r in results]).reshape(
-        len(internal_mix_range),
-        len(external_mix_range),
-        model_input_to_fit.max_hh_size)
 
-    fname = 'outputs/mixing_sweep/results.pkl'
+    fname = 'outputs/hostel_vacc/results.pkl'
     with open(fname, 'wb') as f:
         dump(
-            (growth_rate_data,
-             peak_data,
+            (peak_data,
              end_data,
              hh_prop_data,
              attack_ratio_data,
-             ar_by_size_data,
-             first_pass_ar_data,
-             internal_mix_range,
+             uptake_range,
              external_mix_range),
             f)
 
@@ -196,7 +179,7 @@ def main(no_of_workers,
 if __name__ == '__main__':
     parser = ArgumentParser()
     parser.add_argument('--no_of_workers', type=int, default=8)
-    parser.add_argument('--internal_mix_vals',
+    parser.add_argument('--uptake_vals',
                         type=int,
                         default=[0.0, 0.99, 0.05])
     parser.add_argument('--external_mix_vals',
@@ -205,5 +188,5 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     main(args.no_of_workers,
-         args.internal_mix_vals,
+         args.uptake_vals,
          args.external_mix_vals)

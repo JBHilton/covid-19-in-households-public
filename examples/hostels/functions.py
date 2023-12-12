@@ -12,7 +12,7 @@ from scipy.special import binom as binom_coeff
 from scipy.stats import binom
 from pandas import read_excel, read_csv
 from tqdm import tqdm
-from model.common import (sparse, my_int, build_state_matrix, RateEquations)
+from model.common import (sparse, my_int, RateEquations)
 from model.imports import import_model_from_spec, NoImportModel
 from model.preprocessing import ModelInput
 from model.subsystems import (inf_events,
@@ -22,6 +22,9 @@ LATENT_PERIOD = 0.2 * 5.8   # Time in days from infection to infectiousness
 PRODROME_PERIOD = 0.8 * 5.8 # Time in days from infectiousness to symptom onset
 SYMPTOM_PERIOD = 5          # Time in days from symptom onset to recovery
 
+VACC_EFF = 0.5
+VACC_INF_RED = 0.5
+
 HOSTEL_VACC_SEIR_SPEC = {
     'compartmental_structure': 'SEIR', # This is which subsystem key to use
     'beta_int': 0.1,                     # Secondary inf probability
@@ -29,11 +32,15 @@ HOSTEL_VACC_SEIR_SPEC = {
     'recovery_rate': 1 / (PRODROME_PERIOD +
                           SYMPTOM_PERIOD),           # Recovery rate
     'incubation_rate': 1 / LATENT_PERIOD,         # E->I incubation rate
-    'sus': array([1,1]),          # Relative susceptibility by vacc. status
-    'inf_scales': array([1,1]),    # Relative infectivity by vacc. status
+    'sus': array([VACC_EFF,1]),          # Relative susceptibility by vacc. status
+    'inf_scales': array([VACC_INF_RED,1]),    # Relative infectivity by vacc. status
     'density_expo': 1,             # Mixing density level
     'k_home': array([[1, 1], [1, 1]]),
-    'k_all': array([[1, 1], [1, 1]])
+    'k_all': array([[1, 1], [1, 1]]),
+    'fine_bds' : arange(0,81,5),    # Boundaries used in contact data
+    'coarse_bds': array([0]),
+    # Load in age pyramid:
+    'pop_pyramid_file_name': 'inputs/United Kingdom-2019.csv'
 }
 
 class HostelSEIRInput(ModelInput):

@@ -116,3 +116,18 @@ class CareHomeImportModel(ImportModel):
 
     def infected(self, t):
         return self.infected_interpolant(t)
+
+class CoupledSEIRImports(ImportModel):
+    def __init__(
+            self,
+            time,
+            prev):
+        self.prev_interpolant = interp1d(
+            time, prev,
+            kind='nearest',
+            bounds_error=False,
+            fill_value='extrapolate',
+            assume_sorted=True)
+
+    def prodromal(self, t):
+        return self.prev_interpolant(t)
