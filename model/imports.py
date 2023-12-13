@@ -54,8 +54,11 @@ class FixedImportModel(ImportModel):
 class StepImportModel(ImportModel):
     def __init__(
             self,
+            no_inf_compartments,
+            no_age_classes,
             time,
             external_prevalance):       # External prevalence is now a age classes by inf compartments array
+        super().__init__(no_inf_compartments, no_age_classes)
         self.prevalence_interpolant = []
         for i in range(self.no_entries):
             self.prevalence_interpolant.append(interp1d(
@@ -66,7 +69,7 @@ class StepImportModel(ImportModel):
                 assume_sorted=True))
 
     def cases(self, t):
-        imports = zeros(no_entries,)
+        imports = zeros(self.no_entries,)
         for i in range(self.no_entries):
             imports[i] = self.prevalence_interpolant[i](t)
         return imports
@@ -116,18 +119,3 @@ class CareHomeImportModel(ImportModel):
 
     def infected(self, t):
         return self.infected_interpolant(t)
-
-class CoupledSEIRImports(ImportModel):
-    def __init__(
-            self,
-            time,
-            prev):
-        self.prev_interpolant = interp1d(
-            time, prev,
-            kind='nearest',
-            bounds_error=False,
-            fill_value='extrapolate',
-            assume_sorted=True)
-
-    def prodromal(self, t):
-        return self.prev_interpolant(t)

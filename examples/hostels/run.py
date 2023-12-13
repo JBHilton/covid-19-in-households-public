@@ -18,7 +18,7 @@ from model.preprocessing import ( AR_by_size, estimate_beta_ext,
         make_initial_condition_by_eigenvector)
 from examples.hostels.functions import HOSTEL_VACC_SEIR_SPEC, HostelSEIRInput
 from model.common import SEIRRateEquations
-from model.imports import CoupledSEIRImports, FixedImportModel, NoImportModel
+from model.imports import StepImportModel
 from pickle import load, dump
 # pylint: disable=invalid-name
 
@@ -26,12 +26,12 @@ no_days = 90
 
 # Assume external prevalence is fixed at 10% and comes in weekly
 wks = arange(1, no_days+7, 7)
-prev_curve = 0.1 * ones(len(wks),)
+prev_curve = 0.1 * ones((2, len(wks)))
 
 if isdir('outputs/hostel_vacc') is False:
     mkdir('outputs/hostel_vacc')
 
-HH_SIZE = 20 # Total size of households
+HH_SIZE = 5 # Total size of households
 
 SPEC = HOSTEL_VACC_SEIR_SPEC
 R_comp = 4
@@ -48,6 +48,9 @@ model_input = HostelSEIRInput(SPEC, composition_list, comp_dist)
 
 prev=0 # Starting prevalence
 antibody_prev=0 # Starting antibody prev/immunity
+
+basic_spec = HOSTEL_VACC_SEIR_SPEC
+p = [0.5, 0.5]
 
 class VaccAnalysis:
     def __init__(self):
@@ -68,7 +71,7 @@ class VaccAnalysis:
 
         # For now I'll assume that p[0] is uptake and p[1] is connection to external population
         print('p=',p)
-        this_comp_dist = binom.pmf(arange(HH_SIZE, 0, -1), HH_SIZE, p[0])
+        this_comp_dist = binom.pmf(arange(HH_SIZE, -1, -1), HH_SIZE, p[0])
         this_spec = deepcopy(basic_spec)
         this_spec['beta_ext'] = p[1]
         model_input = HostelSEIRInput(this_spec, composition_list, this_comp_dist)
@@ -77,17 +80,16 @@ class VaccAnalysis:
             composition_list, this_comp_dist, model_input)
 
         rhs = SEIRRateEquations(model_input,
-                                 household_population,
-                                 CoupledSEIRImports())
+                                    household_population,
+                                    StepImportModel(1, 2, wks, prev_curve))
 
         # Initialise with zero infecteds - shouldn't matter what we use for growth rate
-        H0, first_pass_ar = make_initial_condition_by_eigenvector(1e-2,
-                                                   model_input,
-                                                   household_population,
-                                                   rhs,
-                                                   prev,
-                                                   antibody_prev,
-                                                   True)
+        H0 = make_initial_condition_by_eigenvector(1e-2,
+                                                    model_input,
+                                                    household_population,
+                                                    rhs,
+                                                    prev,
+                                                    antibody_prev)
 
         tspan = (0.0, no_days)
         solution = solve_ivp(rhs, tspan, H0, first_step=0.001, atol=1e-16)
@@ -118,14 +120,10 @@ class VaccAnalysis:
         peaks = 100 * max(I) #
         R_end = 100 * R[-1]
 
-        ar_by_size = AR_by_size(household_population, H, R_comp)
-
         return [peaks,
                 R_end,
                 hh_outbreak_prop,
-                attack_ratio,
-                ar_by_size,
-                first_pass_ar]
+                attack_ratio]
 
 def main(no_of_workers,
          uptake_vals,
@@ -181,10 +179,10 @@ if __name__ == '__main__':
     parser.add_argument('--no_of_workers', type=int, default=8)
     parser.add_argument('--uptake_vals',
                         type=int,
-                        default=[0.0, 0.99, 0.05])
+                        default=[0.1, 0.99, 0.2])
     parser.add_argument('--external_mix_vals',
                         type=int,
-                        default=[0.0, 0.99, 0.05])
+                        default=[0.1, 0.99, 0.2])
     args = parser.parse_args()
 
     main(args.no_of_workers,
