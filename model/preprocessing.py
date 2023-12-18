@@ -1157,7 +1157,7 @@ def get_multiplier_by_path_integral(r,
     discount_matrix = r * spidentity(Q_int.shape[0]) - Q_int
     reward_mat = FOI_by_state.dot(index_prob)
     start = get_time()
-    sA_iLU = spilu(discount_matrix)
+    sA_iLU = spilu(discount_matrix.tocsc())
     M = LinearOperator(discount_matrix.shape, sA_iLU.solve)
     # print('Precondtioner computed in {0}s'.format(get_time() - start))
     mult_start = get_time()
