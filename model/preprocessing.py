@@ -18,6 +18,7 @@ from scipy.special import binom as binom_coeff
 from scipy.stats import binom
 from time import time as get_time
 from tqdm import tqdm
+import warnings
 from model.common import ( sparse, my_int )
 from model.imports import import_model_from_spec
 from model.subsystems import subsystem_key
@@ -201,7 +202,9 @@ def make_initial_condition_by_eigenvector(growth_rate,
 
     reverse_comp_dist = diag(household_population.composition_distribution). \
                         dot(household_population.composition_list)
-    reverse_comp_dist = reverse_comp_dist.dot(diag(1/reverse_comp_dist.sum(0)))
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        reverse_comp_dist = reverse_comp_dist.dot(diag(1/reverse_comp_dist.sum(0)))
 
     Q_int = rhs.Q_int
     FOI_by_state = zeros((Q_int.shape[0],household_population.no_risk_groups))
