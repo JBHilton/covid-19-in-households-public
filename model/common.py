@@ -7,6 +7,11 @@ import pdb
 from scipy.sparse import csc_matrix as sparse
 from model.subsystems import subsystem_key
 
+from os import mkdir
+from os.path import isdir
+if isdir('outputs') is False:
+    mkdir('outputs')
+
 
 def build_external_import_matrix(household_population, FOI):
     '''Gets sparse matrices containing rates of external infection in a
