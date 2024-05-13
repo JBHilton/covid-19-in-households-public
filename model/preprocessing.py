@@ -696,7 +696,7 @@ class SIRInput(ModelInput):
         self.k_ext = external_scale * self.k_ext / ext_eig
 
 class SEIRInput(ModelInput):
-    def __init__(self, spec, composition_list, composition_distribution):
+    def __init__(self, spec, composition_list, composition_distribution, print_ests=True):
         super().__init__(spec, composition_list, composition_distribution)
 
         self.expandables = ['sus',
@@ -717,11 +717,12 @@ class SEIRInput(ModelInput):
 
         pars = minimize(sitp_rmse, array([1e-1,1]), bounds=((0,None),(0,1))).x
         self.pars = pars
-        beta_int = pars[0]
+        self.beta_int = pars[0]
         self.density_expo = pars[1]
-        print('Estimated beta_int=',pars[0],', estimated density=',pars[1])
+        if print_ests:
+            print('Estimated beta_int=',pars[0],', estimated density=',pars[1])
 
-        self.k_home = beta_int * self.k_home
+        self.k_home = self.beta_int * self.k_home
 
         ext_eig = max(eig(
             diag(self.sus).dot((1/spec['recovery_rate']) *
@@ -1298,7 +1299,11 @@ def estimate_beta_ext(household_population,rhs,r):
                                                  index_prob,
                                                  index_states,
                                                  no_index_states)
-    evalue = (speig(multiplier.T,k=1)[0]).real
+    
+    if multiplier.shape==(1,1):
+        evalue = multiplier[0, 0]
+    else:
+        evalue = (speig(multiplier.T,k=1)[0]).real
 
     beta_ext = 1/evalue
 
