@@ -8,7 +8,7 @@ from model.preprocessing import (
 from model.specs import TWO_AGE_SEPIR_SPEC, TWO_AGE_UK_SPEC
 from model.common import SEPIRRateEquations
 from model.imports import NoImportModel
-from pickle import load, dump
+from pickle import dump
 # pylint: disable=invalid-name
 
 SPEC = {**TWO_AGE_SEPIR_SPEC, **TWO_AGE_UK_SPEC}
@@ -27,7 +27,7 @@ household_population = HouseholdPopulation(
 rhs = SEPIRRateEquations(
     model_input,
     household_population,
-    NoImportModel(5,2))
+    NoImportModel(5, 2))
 
 H0 = make_initial_condition(
     household_population, rhs)
@@ -39,24 +39,17 @@ simple_model_end = get_time()
 
 time = solution.t
 H = solution.y
-S = H.T.dot(household_population.states[:, ::5])
-E = H.T.dot(household_population.states[:, 1::5])
-P = H.T.dot(household_population.states[:, 2::5])
-I = H.T.dot(household_population.states[:, 3::5])
-R = H.T.dot(household_population.states[:, 4::5])
 time_series = {
-'time':time,
-'S':S,
-'E':E,
-'P':P,
-'I':P,
-'R':R
+    'time': time,
+    'S': H.T.dot(household_population.states[:, ::5]),
+    'E': H.T.dot(household_population.states[:, 1::5]),
+    'P': H.T.dot(household_population.states[:, 2::5]),
+    'I': H.T.dot(household_population.states[:, 3::5]),
+    'R': H.T.dot(household_population.states[:, 4::5])
 }
 
-print(
-    'Solution took ',
-    simple_model_end-simple_model_start,
-    ' seconds.')
+print('Solution took {} seconds.'.format(
+    simple_model_end - simple_model_start))
 
 with open('simple.pkl', 'wb') as f:
     dump((H, time_series, model_input), f)
