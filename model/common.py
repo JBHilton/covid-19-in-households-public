@@ -1,10 +1,11 @@
 '''Module for additional computations required by the model'''
 from numpy import (
-    arange, diag, isnan, ix_,
+    arange, diag, isnan, ix_, ones, outer,
     shape, sum, where, zeros)
 from numpy import int64 as my_int
 import pdb
 from scipy.sparse import csc_matrix as sparse
+from scipy.sparse import diags
 from model.subsystems import subsystem_key
 
 from os import mkdir
@@ -66,6 +67,151 @@ def build_external_import_matrix_SEPIRQ(
 
     return Q_ext_p, Q_ext_i
 
+class MatrixImportRateEquations:
+    '''This class represents a functor for evaluating the rate equations for
+    the model with no imports of infection from outside the population. The
+    state of the class contains all essential variables'''
+    # pylint: disable=invalid-name
+    def __init__(self,
+                 model_input,
+                 household_population,
+                 import_model,
+                 epsilon=1.0):
+
+        self.compartmental_structure = \
+            household_population.compartmental_structure
+        self.no_compartments = subsystem_key[self.compartmental_structure][1]
+        self.model_input = model_input
+        self.household_population = household_population
+        self.epsilon = epsilon
+        self.Q_int = household_population.Q_int
+        self.composition_by_state = household_population.composition_by_state
+        self.states_sus_only = \
+            household_population.states[:, ::self.no_compartments]
+        self.s_present = where(self.states_sus_only.sum(axis=1) > 0)[0]
+        self.states_new_cases_only = \
+            household_population.states[
+                :, model_input.new_case_compartment::self.no_compartments]
+        self.inf_compartment_list = \
+            subsystem_key[self.compartmental_structure][2]
+        self.no_inf_compartments = len(self.inf_compartment_list)
+        self.import_model = import_model
+        self.ext_matrix_list = []
+        self.inf_by_state_list = []
+        for ic in range(self.no_inf_compartments):
+            self.ext_matrix_list.append(
+                diag(model_input.sus).dot(
+                    model_input.k_ext).dot(
+                        diag(model_input.inf_scales[ic])))
+            self.inf_by_state_list.append(household_population.states[
+                :, self.inf_compartment_list[ic]::self.no_compartments])
+        
+        self.total_size = len(household_population.which_composition) 
+        self.matrix_shape = (self.total_size, self.total_size)
+        self.inf_event_row = household_population.inf_event_row
+        self.inf_event_col = household_population.inf_event_col
+        self.inf_event_class = household_population.inf_event_class
+
+        # Pre-allocate import matrix, should improve performance. First bit might not be needed!
+        # self.base_import_mat = sparse(self.matrix_shape,)
+        # for rc in range(household_population.no_risk_groups):
+        #     print(len(self.states_sus_only[where(self.inf_event_class==rc)[0], rc]))
+        #     print(len(self.inf_event_row[where(self.inf_event_class==rc)[0]]))
+        #     print(self.base_import_mat.shape)
+        #     self.base_import_mat += sparse((self.states_sus_only[where(self.inf_event_class==rc)[0], rc],
+        #                           self.inf_event_row[where(self.inf_event_class==rc)[0]],
+        #                           self.inf_event_col[where(self.inf_event_class==rc)[0]]),
+        #                           shape = self.base_import_mat.shape)
+        #     self.base_import_mat += sparse((-self.states_sus_only[where(self.inf_event_class==rc)[0], rc],
+        #                           self.inf_event_row[where(self.inf_event_class==rc)[0]],
+        #                           self.inf_event_row[where(self.inf_event_class==rc)[0]]),
+        #                           shape = self.matrix_shape)
+        self.import_rate_mat = sparse(self.matrix_shape,)
+
+        denom = model_input.ave_hh_by_class
+        outflow_mat = sum(
+            [(self.ext_matrix_list[ic].dot((self.inf_by_state_list[ic]/model_input.ave_hh_by_class).T)).T
+            for ic in range(self.no_inf_compartments)],
+            axis=0)
+        
+        self.ext_rate_mat_list = []
+        self.adjuster_list = []
+        for rc in range(self.household_population.no_risk_groups):
+            this_sus = self.states_sus_only[:, rc]
+            this_class_rows = self.inf_event_row[where(self.inf_event_class==rc)[0]]
+            this_class_cols = self.inf_event_col[where(self.inf_event_class==rc)[0]]
+            outer_prod = outer(this_sus, outflow_mat[:, rc])
+            outer_prod[~this_class_rows, :] = 0
+            self.ext_rate_mat_list.append(sparse(outer_prod))
+            adjuster_mat = sparse((ones(len(this_class_rows),), (this_class_rows, this_class_cols)), shape=self.matrix_shape)
+            self.adjuster_list.append(adjuster_mat)
+        self.Q_ext = 0 * self.Q_int
+
+    def __call__(self, t, H):
+        '''hh_ODE_rates calculates the rates of the ODE system describing the
+        household ODE model'''
+        # print("t=",t)
+        self.Q_ext *= 0
+
+        for rc in range(self.household_population.no_risk_groups):
+            # print("rc=",rc)
+            # print(self.ext_rate_mat_list[rc].shape)
+            # print(self.adjuster_list[rc].shape)
+            # print((self.ext_rate_mat_list[rc].T.dot(H)).shape)
+            # print(diag(self.ext_rate_mat_list[rc].T.dot(H)).shape)
+            # print((diag(self.ext_rate_mat_list[rc].dot(H)).dot(self.adjuster_list[rc].toarray())).shape)
+
+            self.Q_ext += diags(self.ext_rate_mat_list[rc].dot(H)).multiply(self.adjuster_list[rc]).T
+        diagonal_idexes = (arange(self.total_size), arange(self.total_size))
+        S = self.Q_ext.sum(axis=1).getA().squeeze()
+        self.Q_ext += sparse((-S, diagonal_idexes))
+        # Q_ext = sum([(diag(self.ext_rate_mat_list[rc].T.dot(H)).dot(self.adjuster_list[rc]))\
+        #               for rc in range(self.household_population.no_risk_groups)], axis=0)
+        
+        # FOI = self.states_sus_only.dot(self.model_input.k_ext.dot(self.import_model.cases(t)))
+
+        # self.import_rate_mat = 0 * self.import_mat
+        # vals = FOI[self.inf_event_row, self.inf_event_class]
+        # self.import_rate_mat += sparse((vals, (self.inf_event_row, self.inf_event_col)), shape=self.matrix_shape)
+
+        # diagonal_idexes = (arange(self.total_size), arange(self.total_size))
+        # S = self.import_rate_mat.sum(axis=1).getA().squeeze()
+        # self.import_rate_mat += sparse((-S, diagonal_idexes))
+        if (H < 0).any():
+            # pdb.set_trace()
+            H[where(H < 0)[0]] = 0
+        if isnan(H).any():
+            # pdb.set_trace()
+            raise ValueError('State vector contains NaNs at t={0}'.format(t))
+        # print(self.Q_ext.shape)
+        dH = ((H.T * (self.Q_int + self.Q_ext)).T).squeeze()
+        return dH
+
+    def external_matrices(self, t, H):
+        FOI = self.get_FOI_by_class(t, H)
+        return build_external_import_matrix(
+            self.household_population,
+            FOI)
+
+    def get_FOI_by_class(self, t, H):
+        '''This calculates the age-stratified force-of-infection (FOI) on each
+        household composition'''
+        # Average number of each class by household
+        denom = H.T.dot(self.composition_by_state)
+
+        FOI = self.states_sus_only.dot(diag(self.import_model.cases(t)))
+
+        for ic in range(self.no_inf_compartments):
+            states_inf_only = self.inf_by_state_list[ic]
+            inf_by_class = zeros(shape(denom))
+            inf_by_class[denom > 0] = (
+                H.T.dot(states_inf_only)[denom > 0]
+                / denom[denom > 0]).squeeze()
+            FOI += self.states_sus_only.dot(
+                    diag(self.ext_matrix_list[ic].dot(
+                        self.epsilon * inf_by_class.T)))
+
+        return FOI
 
 class RateEquations:
     '''This class represents a functor for evaluating the rate equations for
@@ -167,6 +313,36 @@ class SEIRRateEquations(RateEquations):
     @property
     def states_rec_only(self):
         return self.household_population.states[:, 3::self.no_compartments]
+    
+class MatrixImportSEIRRateEquations(MatrixImportRateEquations):
+    @property
+    def states_exp_only(self):
+        return self.household_population.states[:, 1::self.no_compartments]
+
+    @property
+    def states_inf_only(self):
+        return self.household_population.states[:, 2::self.no_compartments]
+
+    @property
+    def states_rec_only(self):
+        return self.household_population.states[:, 3::self.no_compartments]
+    
+class SEIRCRateEquations(RateEquations):
+    @property
+    def states_exp_only(self):
+        return self.household_population.states[:, 1::self.no_compartments]
+
+    @property
+    def states_inf_only(self):
+        return self.household_population.states[:, 2::self.no_compartments]
+
+    @property
+    def states_rec_only(self):
+        return self.household_population.states[:, 3::self.no_compartments]
+
+    @property
+    def states_cum_only(self):
+        return self.household_population.states[:, 4::self.no_compartments]
 
 
 class SEPIRRateEquations(RateEquations):
