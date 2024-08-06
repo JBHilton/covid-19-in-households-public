@@ -1,7 +1,7 @@
 '''This runs the UK-like model with a single set of parameters for 100 days
 '''
 from copy import deepcopy
-from numpy import array, log
+from numpy import array, log, where
 from os import mkdir
 from os.path import isdir, isfile
 from pickle import load, dump
@@ -68,10 +68,10 @@ start_state = (1/model_input.ave_hh_size) * array([S0.sum(),
 tspan = (0.0, 365)
 import time
 nm_start = time.time()
-solution_UM = solve_ivp(rhs, tspan, H0, first_step=0.001, atol=1e-16)
+solution = solve_ivp(rhs, tspan, H0, first_step=0.001, atol=1e-16)
 print("Non-matrix took", time.time()- nm_start)
 m_start = time.time()
-solution = solve_ivp(rhs_M, tspan, H0, first_step=0.001, atol=1e-16)
+solution_M = solve_ivp(rhs_M, tspan, H0, first_step=0.001, atol=1e-16)
 print("M took", time.time() - m_start)
 
 time = solution.t
@@ -86,6 +86,20 @@ time_series = {
 'E':E,
 'I':I,
 'R':R
+}
+
+time_M = solution_M.t
+H_M = solution_M.y
+S_M = H_M.T.dot(household_population.states[:, ::4])
+E_M = H_M.T.dot(household_population.states[:, 1::4])
+I_M = H_M.T.dot(household_population.states[:, 2::4])
+R_M = H_M.T.dot(household_population.states[:, 3::4])
+time_series_M = {
+'time':time_M,
+'S':S_M,
+'E':E_M,
+'I':I_M,
+'R':R_M
 }
 
 with open('outputs/uk/SEIR_results.pkl', 'wb') as f:

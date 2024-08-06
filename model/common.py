@@ -129,7 +129,7 @@ class MatrixImportRateEquations:
         self.import_rate_mat = sparse(self.matrix_shape,)
 
         denom = model_input.ave_hh_by_class
-        outflow_mat = sum(
+        self.outflow_mat = sum(
             [(self.ext_matrix_list[ic].dot((self.inf_by_state_list[ic]/model_input.ave_hh_by_class).T)).T
             for ic in range(self.no_inf_compartments)],
             axis=0)
@@ -140,8 +140,8 @@ class MatrixImportRateEquations:
             this_sus = self.states_sus_only[:, rc]
             this_class_rows = self.inf_event_row[where(self.inf_event_class==rc)[0]]
             this_class_cols = self.inf_event_col[where(self.inf_event_class==rc)[0]]
-            outer_prod = outer(this_sus, outflow_mat[:, rc])
-            outer_prod[~this_class_rows, :] = 0
+            outer_prod = zeros(self.matrix_shape)
+            outer_prod[this_class_rows, :] = outer(this_sus[this_class_rows], self.outflow_mat[:, rc])
             self.ext_rate_mat_list.append(sparse(outer_prod))
             adjuster_mat = sparse((ones(len(this_class_rows),), (this_class_rows, this_class_cols)), shape=self.matrix_shape)
             self.adjuster_list.append(adjuster_mat)
@@ -161,7 +161,9 @@ class MatrixImportRateEquations:
             # print(diag(self.ext_rate_mat_list[rc].T.dot(H)).shape)
             # print((diag(self.ext_rate_mat_list[rc].dot(H)).dot(self.adjuster_list[rc].toarray())).shape)
 
-            self.Q_ext += diags(self.ext_rate_mat_list[rc].dot(H)).multiply(self.adjuster_list[rc]).T
+            self.Q_ext += diags(self.ext_rate_mat_list[rc].dot(H))*(self.adjuster_list[rc])
+            # print(sum(diags(self.ext_rate_mat_list[rc].dot(H))))
+        # print("Ext inf rate", sum(sum(self.Q_ext).squeeze()))
         diagonal_idexes = (arange(self.total_size), arange(self.total_size))
         S = self.Q_ext.sum(axis=1).getA().squeeze()
         self.Q_ext += sparse((-S, diagonal_idexes))
