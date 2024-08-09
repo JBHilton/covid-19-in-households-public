@@ -1,7 +1,7 @@
 '''This runs the UK-like model with a single set of parameters for 100 days
 '''
 from copy import deepcopy
-from numpy import array, log, where
+from numpy import arange, array, log, where
 from os import mkdir
 from os.path import isdir, isfile
 from pickle import load, dump
@@ -10,8 +10,8 @@ from scipy.integrate import solve_ivp
 from model.preprocessing import ( estimate_beta_ext, estimate_growth_rate,
         SEIRInput, HouseholdPopulation, make_initial_condition_by_eigenvector)
 from model.specs import TWO_AGE_SEIR_SPEC_FOR_FITTING, TWO_AGE_UK_SPEC
-from model.common import SEIRRateEquations, MatrixImportSEIRRateEquations
-from model.imports import NoImportModel
+from model.common import SEIRRateEquations, MatrixImportSEIRRateEquations, UnloopedSEIRRateEquations
+from model.imports import FixedImportModel, NoImportModel
 # pylint: disable=invalid-name
 
 if isdir('outputs/uk') is False:
@@ -42,13 +42,13 @@ print('Estimated beta is',beta_ext)
 with open('outputs/uk/fitted_SEIR_input.pkl', 'wb') as f:
     dump(model_input, f)
 
-
 # With the parameters chosen, we calculate Q_int:
 household_population = HouseholdPopulation(
     composition_list, comp_dist, model_input)
 
-rhs = SEIRRateEquations(model_input, household_population, NoImportModel(4,2))
-rhs_M = MatrixImportSEIRRateEquations(model_input, household_population, NoImportModel(4,2))
+rhs = SEIRRateEquations(model_input, household_population, FixedImportModel(4,2, array([.1, .1])))
+rhs_M = MatrixImportSEIRRateEquations(model_input, household_population, FixedImportModel(4,2, array([.1, .1])))
+rhs_U = UnloopedSEIRRateEquations(model_input, household_population, FixedImportModel(4,2, array([.1, .1])))
 
 r_est = estimate_growth_rate(household_population, rhs_M, [0.001, 5], 1e-9)
 
@@ -68,39 +68,62 @@ start_state = (1/model_input.ave_hh_size) * array([S0.sum(),
 tspan = (0.0, 365)
 import time
 nm_start = time.time()
-solution = solve_ivp(rhs, tspan, H0, first_step=0.001, atol=1e-16)
+solution = solve_ivp(rhs, tspan, H0, first_step=0.001, atol=1e-16, t_eval = arange(0., 365., 1.))
 print("Non-matrix took", time.time()- nm_start)
-m_start = time.time()
-solution_M = solve_ivp(rhs_M, tspan, H0, first_step=0.001, atol=1e-16)
-print("M took", time.time() - m_start)
+# m_start = time.time()
+# solution_M = solve_ivp(rhs_M, tspan, H0, first_step=0.001, atol=1e-16, t_eval = arange(0., 365., 1.))
+# print("M took", time.time() - m_start)
+u_start = time.time()
+solution_U = solve_ivp(rhs_U, tspan, H0, first_step=0.001, atol=1e-16, t_eval = arange(0., 365., 1.))
+print("U took", time.time() - u_start)
 
-time = solution.t
+t = solution.t
 H = solution.y
 S = H.T.dot(household_population.states[:, ::4])
 E = H.T.dot(household_population.states[:, 1::4])
 I = H.T.dot(household_population.states[:, 2::4])
 R = H.T.dot(household_population.states[:, 3::4])
 time_series = {
-'time':time,
+'time':t,
 'S':S,
 'E':E,
 'I':I,
 'R':R
 }
 
-time_M = solution_M.t
+t_M = solution_M.t
 H_M = solution_M.y
 S_M = H_M.T.dot(household_population.states[:, ::4])
 E_M = H_M.T.dot(household_population.states[:, 1::4])
 I_M = H_M.T.dot(household_population.states[:, 2::4])
 R_M = H_M.T.dot(household_population.states[:, 3::4])
 time_series_M = {
-'time':time_M,
+'time':t_M,
 'S':S_M,
 'E':E_M,
 'I':I_M,
 'R':R_M
 }
+
+t_U = solution_U.t
+H_U = solution_U.y
+S_U = H_U.T.dot(household_population.states[:, ::4])
+E_U = H_U.T.dot(household_population.states[:, 1::4])
+I_U = H_U.T.dot(household_population.states[:, 2::4])
+R_U = H_U.T.dot(household_population.states[:, 3::4])
+time_series_U = {
+'time':t_U,
+'S':S_U,
+'E':E_U,
+'I':I_U,
+'R':R_U
+}
+
+# Print disagreement with cutoff of 1e-12 so that we don't return high errors when
+# both are very close to zero, i.e. if H_M~1e-n, H~1e-m for large n and m we don't
+# want the relative error to me 1e-(n-m).
+print("Max relative error in H_M for H>1e-12 is", max(abs((H-H_M))[H>1e-12]/H[H>1e-12]))
+print("Max relative error in H_U for H>1e-12 is", max(abs((H-H_U))[H>1e-12]/H[H>1e-12]))
 
 with open('outputs/uk/SEIR_results.pkl', 'wb') as f:
     dump((H, time_series), f)
