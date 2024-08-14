@@ -1,6 +1,6 @@
 '''Module for additional computations required by the model'''
 from numpy import (
-    arange, diag, isnan, ix_, ones, outer,
+    arange, asarray, diag, isnan, ix_, ones, outer,
     shape, sum, where, zeros)
 from numpy import int64 as my_int
 import pdb
@@ -215,6 +215,7 @@ class UnloopedRateEquations:
                  model_input,
                  household_population,
                  import_model,
+                 sources="ALL",
                  epsilon=1.0):
 
         self.compartmental_structure = \
@@ -222,6 +223,7 @@ class UnloopedRateEquations:
         self.no_compartments = subsystem_key[self.compartmental_structure][1]
         self.model_input = model_input
         self.household_population = household_population
+        self.sources = sources
         self.epsilon = epsilon
         self.Q_int = household_population.Q_int
         self.composition_by_state = household_population.composition_by_state
@@ -259,28 +261,15 @@ class UnloopedRateEquations:
             for ic in range(self.no_inf_compartments)],
             axis=0)
         
-        self.ext_rate_mat_list = []
-        self.adjuster_list = []
-        for rc in range(self.household_population.no_risk_groups):
-            this_sus = self.states_sus_only[:, rc]
-            this_class_rows = self.inf_event_row[where(self.inf_event_class==rc)[0]]
-            this_class_cols = self.inf_event_col[where(self.inf_event_class==rc)[0]]
-            outer_prod = zeros(self.matrix_shape)
-            outer_prod[this_class_rows, :] = outer(this_sus[this_class_rows], self.outflow_mat[:, rc])
-            self.ext_rate_mat_list.append(sparse(outer_prod))
-            adjuster_mat = sparse((ones(len(this_class_rows),), (this_class_rows, this_class_cols)), shape=self.matrix_shape) -\
-                sparse((ones(len(this_class_rows),), (this_class_rows, this_class_rows)), shape=self.matrix_shape)
-            self.adjuster_list.append(adjuster_mat)
         self.Q_ext = 0 * self.Q_int
         self.Q_import = 0 * self.Q_int
-        self.diagonal_idexes = (arange(self.total_size), arange(self.total_size))
         self.between_hh_rate  = self.states_sus_only.dot(diag(self.import_model.cases(0)))
         self.import_rates = self.states_sus_only.dot(diag(self.import_model.cases(0)))
 
     def __call__(self, t, H):
         '''hh_ODE_rates calculates the rates of the ODE system describing the
         household ODE model'''
-        # print("t=",t)
+
         self.external_matrices(t, H)
 
         if (H < 0).any():
@@ -289,48 +278,33 @@ class UnloopedRateEquations:
         if isnan(H).any():
             # pdb.set_trace()
             raise ValueError('State vector contains NaNs at t={0}'.format(t))
-        # print(self.Q_ext.shape)
-        dH = ((H.T * (self.Q_int + self.Q_ext)).T).squeeze()
+        
+        dH = ((H.T * (self.Q_int + self.Q_ext + self.Q_import)).T).squeeze()
         return dH
 
     def external_matrices(self, t, H):
-        self.Q_ext *= 0
-        # self.Q_import *= 0
-        self.between_hh_rate = self.states_sus_only.dot(diag(self.outflow_mat.T.dot(H)))
-        self.import_rates =  self.states_sus_only.dot(diag(self.import_model.cases(t)))
-        for rc in range(self.household_population.no_risk_groups):
-            self.Q_ext += sparse((self.between_hh_rate[self.inf_event_row[where(self.inf_event_class==rc)[0]], rc],
-                                     (self.inf_event_row[where(self.inf_event_class==rc)[0]],
-                                     self.inf_event_col[where(self.inf_event_class==rc)[0]])), shape=self.matrix_shape) -\
-                                        sparse((self.between_hh_rate[self.inf_event_row[where(self.inf_event_class==rc)[0]], rc],
-                                     (self.inf_event_row[where(self.inf_event_class==rc)[0]],
-                                     self.inf_event_row[where(self.inf_event_class==rc)[0]])), shape=self.matrix_shape)
-            self.Q_import += sparse((self.import_rates[self.inf_event_row[where(self.inf_event_class==rc)[0]], rc],
-                                     (self.inf_event_row[where(self.inf_event_class==rc)[0]],
-                                     self.inf_event_col[where(self.inf_event_class==rc)[0]])), shape=self.matrix_shape) -\
-                                        sparse((self.import_rates[self.inf_event_row[where(self.inf_event_class==rc)[0]], rc],
-                                     (self.inf_event_row[where(self.inf_event_class==rc)[0]],
-                                     self.inf_event_row[where(self.inf_event_class==rc)[0]])), shape=self.matrix_shape)
+        if (self.sources=="ALL")|(self.sources=="BETWEEN"):
+            self.between_hh_rate = self.states_sus_only.dot(diag(self.outflow_mat.T.dot(H)))
 
-    def get_FOI_by_class(self, t, H):
-        '''This calculates the age-stratified force-of-infection (FOI) on each
-        household composition'''
-        # Average number of each class by household
-        denom = H.T.dot(self.composition_by_state)
+            self.Q_ext *= 0
+            
+            self.Q_ext += sparse((self.between_hh_rate[self.inf_event_row, self.inf_event_class],
+                                        (self.inf_event_row,
+                                        self.inf_event_col)), shape=self.matrix_shape) -\
+                                        sparse((self.between_hh_rate[self.inf_event_row, self.inf_event_class],
+                                        (self.inf_event_row,
+                                        self.inf_event_row)), shape=self.matrix_shape)
+        if (self.sources=="ALL")|(self.sources=="IMPORT"):
+            self.import_rates =  self.states_sus_only.dot(diag(self.import_model.cases(t)))
 
-        FOI = self.states_sus_only.dot(diag(self.import_model.cases(t)))
+            self.Q_import *= 0
 
-        for ic in range(self.no_inf_compartments):
-            states_inf_only = self.inf_by_state_list[ic]
-            inf_by_class = zeros(shape(denom))
-            inf_by_class[denom > 0] = (
-                H.T.dot(states_inf_only)[denom > 0]
-                / denom[denom > 0]).squeeze()
-            FOI += self.states_sus_only.dot(
-                    diag(self.ext_matrix_list[ic].dot(
-                        self.epsilon * inf_by_class.T)))
-
-        return FOI
+            self.Q_import += sparse((self.import_rates[self.inf_event_row, self.inf_event_class],
+                                        (self.inf_event_row,
+                                        self.inf_event_col)), shape=self.matrix_shape) -\
+                                        sparse((self.import_rates[self.inf_event_row, self.inf_event_class],
+                                        (self.inf_event_row,
+                                        self.inf_event_row)), shape=self.matrix_shape)
 
 class RateEquations:
     '''This class represents a functor for evaluating the rate equations for
@@ -396,6 +370,8 @@ class RateEquations:
         denom = H.T.dot(self.composition_by_state)
 
         FOI = self.states_sus_only.dot(diag(self.import_model.cases(t)))
+        # print(asarray(FOI).squeeze().max())
+
 
         for ic in range(self.no_inf_compartments):
             states_inf_only = self.inf_by_state_list[ic]

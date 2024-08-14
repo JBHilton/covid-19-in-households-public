@@ -46,9 +46,12 @@ with open('outputs/uk/fitted_SEIR_input.pkl', 'wb') as f:
 household_population = HouseholdPopulation(
     composition_list, comp_dist, model_input)
 
-rhs = SEIRRateEquations(model_input, household_population, FixedImportModel(4,2, array([.1, .1])))
-rhs_M = MatrixImportSEIRRateEquations(model_input, household_population, FixedImportModel(4,2, array([.1, .1])))
-rhs_U = UnloopedSEIRRateEquations(model_input, household_population, FixedImportModel(4,2, array([.1, .1])))
+no_imports = NoImportModel(4, 2)
+fixed_imports = FixedImportModel(4,2, array([.1, .1]))
+
+rhs = SEIRRateEquations(model_input, household_population, fixed_imports)
+rhs_M = MatrixImportSEIRRateEquations(model_input, household_population, fixed_imports)
+rhs_U = UnloopedSEIRRateEquations(model_input, household_population, fixed_imports)
 
 r_est = estimate_growth_rate(household_population, rhs_M, [0.001, 5], 1e-9)
 
@@ -123,7 +126,7 @@ time_series_U = {
 # both are very close to zero, i.e. if H_M~1e-n, H~1e-m for large n and m we don't
 # want the relative error to me 1e-(n-m).
 print("Max relative error in H_M for H>1e-12 is", max(abs((H-H_M))[H>1e-12]/H[H>1e-12]))
-print("Max relative error in H_U for H>1e-12 is", max(abs((H-H_U))[H>1e-12]/H[H>1e-12]))
+print("Max relative error in H_U for H>1e-9 is", max(abs((H-H_U))[H>1e-9]/H[H>1e-9]))
 
 with open('outputs/uk/SEIR_results.pkl', 'wb') as f:
     dump((H, time_series), f)
