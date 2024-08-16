@@ -51,7 +51,7 @@ fixed_imports = FixedImportModel(4,2, array([.1, .1]))
 
 rhs = SEIRRateEquations(model_input, household_population, fixed_imports)
 rhs_M = MatrixImportSEIRRateEquations(model_input, household_population, fixed_imports)
-rhs_U = UnloopedSEIRRateEquations(model_input, household_population, fixed_imports)
+rhs_U = UnloopedSEIRRateEquations(model_input, household_population, fixed_imports, sources="ALL")
 
 r_est = estimate_growth_rate(household_population, rhs_M, [0.001, 5], 1e-9)
 

@@ -202,6 +202,30 @@ class MatrixImportRateEquations:
                         self.epsilon * inf_by_class.T)))
 
         return FOI
+    
+def update_ext_matrices(rhs, t, H):
+        if (rhs.sources=="ALL")|(rhs.sources=="BETWEEN"):
+            rhs.between_hh_rate = rhs.inf_event_sus.dot(diag(rhs.outflow_mat.T.dot(H)))
+
+            rhs.Q_ext -= rhs.Q_ext
+            
+            rhs.Q_ext += sparse((rhs.between_hh_rate[arange(len(rhs.inf_event_row)), rhs.inf_event_class],
+                                        (rhs.inf_event_row,
+                                        rhs.inf_event_col)), shape=rhs.matrix_shape) -\
+                                        sparse((rhs.between_hh_rate[arange(len(rhs.inf_event_row)), rhs.inf_event_class],
+                                        (rhs.inf_event_row,
+                                        rhs.inf_event_row)), shape=rhs.matrix_shape)
+        if (rhs.sources=="ALL")|(rhs.sources=="IMPORT"):
+            rhs.import_rates =  rhs.inf_event_sus.dot(diag(rhs.import_model.cases(t)))
+
+            rhs.Q_import -= rhs.Q_import
+
+            rhs.Q_import += sparse((rhs.import_rates[arange(len(rhs.inf_event_row)), rhs.inf_event_class],
+                                        (rhs.inf_event_row,
+                                        rhs.inf_event_col)), shape=rhs.matrix_shape) -\
+                                        sparse((rhs.import_rates[arange(len(rhs.inf_event_row)), rhs.inf_event_class],
+                                        (rhs.inf_event_row,
+                                        rhs.inf_event_row)), shape=rhs.matrix_shape)
 
 class UnloopedRateEquations:
     '''This class represents a functor for evaluating the rate equations for
@@ -265,12 +289,13 @@ class UnloopedRateEquations:
         self.Q_import = 0 * self.Q_int
         self.between_hh_rate  = self.states_sus_only.dot(diag(self.import_model.cases(0)))
         self.import_rates = self.states_sus_only.dot(diag(self.import_model.cases(0)))
+        self.inf_event_sus = self.states_sus_only[self.inf_event_row, :]
 
     def __call__(self, t, H):
         '''hh_ODE_rates calculates the rates of the ODE system describing the
         household ODE model'''
 
-        self.external_matrices(t, H)
+        update_ext_matrices(self, t, H)
 
         if (H < 0).any():
             # pdb.set_trace()
@@ -284,25 +309,25 @@ class UnloopedRateEquations:
 
     def external_matrices(self, t, H):
         if (self.sources=="ALL")|(self.sources=="BETWEEN"):
-            self.between_hh_rate = self.states_sus_only.dot(diag(self.outflow_mat.T.dot(H)))
+            self.between_hh_rate = self.inf_event_sus.dot(diag(self.outflow_mat.T.dot(H)))
 
             self.Q_ext *= 0
             
-            self.Q_ext += sparse((self.between_hh_rate[self.inf_event_row, self.inf_event_class],
+            self.Q_ext += sparse((self.between_hh_rate[arange(len(self.inf_event_row)), self.inf_event_class],
                                         (self.inf_event_row,
                                         self.inf_event_col)), shape=self.matrix_shape) -\
-                                        sparse((self.between_hh_rate[self.inf_event_row, self.inf_event_class],
+                                        sparse((self.between_hh_rate[arange(len(self.inf_event_row)), self.inf_event_class],
                                         (self.inf_event_row,
                                         self.inf_event_row)), shape=self.matrix_shape)
         if (self.sources=="ALL")|(self.sources=="IMPORT"):
-            self.import_rates =  self.states_sus_only.dot(diag(self.import_model.cases(t)))
+            self.import_rates =  self.inf_event_sus.dot(diag(self.import_model.cases(t)))
 
             self.Q_import *= 0
 
-            self.Q_import += sparse((self.import_rates[self.inf_event_row, self.inf_event_class],
+            self.Q_import += sparse((self.import_rates[arange(len(self.inf_event_row)), self.inf_event_class],
                                         (self.inf_event_row,
                                         self.inf_event_col)), shape=self.matrix_shape) -\
-                                        sparse((self.import_rates[self.inf_event_row, self.inf_event_class],
+                                        sparse((self.import_rates[arange(len(self.inf_event_row)), self.inf_event_class],
                                         (self.inf_event_row,
                                         self.inf_event_row)), shape=self.matrix_shape)
 
