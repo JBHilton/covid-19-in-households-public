@@ -496,6 +496,42 @@ class SEPIRRateEquations(RateEquations):
         return self.household_population.states[:, 4::self.no_compartments]
 
 
+class MatrixImportSEPIRRateEquations(MatrixImportRateEquations):
+    @property
+    def states_exp_only(self):
+        return self.household_population.states[:, 1::self.no_compartments]
+
+    @property
+    def states_pro_only(self):
+        return self.household_population.states[:, 2::self.no_compartments]
+
+    @property
+    def states_inf_only(self):
+        return self.household_population.states[:, 3::self.no_compartments]
+
+    @property
+    def states_rec_only(self):
+        return self.household_population.states[:, 4::self.no_compartments]
+
+
+class UnloopedSEPIRRateEquations(UnloopedRateEquations):
+    @property
+    def states_exp_only(self):
+        return self.household_population.states[:, 1::self.no_compartments]
+
+    @property
+    def states_pro_only(self):
+        return self.household_population.states[:, 2::self.no_compartments]
+
+    @property
+    def states_inf_only(self):
+        return self.household_population.states[:, 3::self.no_compartments]
+
+    @property
+    def states_rec_only(self):
+        return self.household_population.states[:, 4::self.no_compartments]
+
+
 class SEPIRQRateEquations(RateEquations):
     def __init__(self,
                  model_input,

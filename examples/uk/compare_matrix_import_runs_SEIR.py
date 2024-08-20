@@ -8,9 +8,9 @@ from pickle import load, dump
 from pandas import read_csv
 from scipy.integrate import solve_ivp
 from model.preprocessing import ( estimate_beta_ext, estimate_growth_rate,
-        SEPIRInput, HouseholdPopulation, make_initial_condition_by_eigenvector)
-from model.specs import TWO_AGE_SEPIR_SPEC_FOR_FITTING, TWO_AGE_UK_SPEC
-from model.common import SEPIRRateEquations, MatrixImportSEPIRRateEquations, UnloopedSEPIRRateEquations
+        SEIRInput, HouseholdPopulation, make_initial_condition_by_eigenvector)
+from model.specs import TWO_AGE_SEIR_SPEC_FOR_FITTING, TWO_AGE_UK_SPEC
+from model.common import SEIRRateEquations, MatrixImportSEIRRateEquations, UnloopedSEIRRateEquations
 from model.imports import FixedImportModel, NoImportModel
 # pylint: disable=invalid-name
 
@@ -30,11 +30,11 @@ comp_dist = read_csv(
     header=0).to_numpy().squeeze()
 
 
-SPEC = {**TWO_AGE_SEPIR_SPEC_FOR_FITTING, **TWO_AGE_UK_SPEC}
-model_input_to_fit = SEPIRInput(SPEC, composition_list, comp_dist)
+SPEC = {**TWO_AGE_SEIR_SPEC_FOR_FITTING, **TWO_AGE_UK_SPEC}
+model_input_to_fit = SEIRInput(SPEC, composition_list, comp_dist)
 household_population_to_fit = HouseholdPopulation(
     composition_list, comp_dist, model_input_to_fit)
-rhs_to_fit = SEPIRRateEquations(model_input_to_fit, household_population_to_fit, NoImportModel(4,2))
+rhs_to_fit = SEIRRateEquations(model_input_to_fit, household_population_to_fit, NoImportModel(4,2))
 beta_ext = estimate_beta_ext(household_population_to_fit, rhs_to_fit, growth_rate)
 model_input = deepcopy(model_input_to_fit)
 model_input.k_ext *= beta_ext
@@ -44,22 +44,20 @@ print('Estimated beta is',beta_ext)
 household_population = HouseholdPopulation(
     composition_list, comp_dist, model_input)
 
-no_imports = NoImportModel(5, 2)
-fixed_imports = FixedImportModel(5,2, array([.1, .1]))
+no_imports = NoImportModel(4, 2)
+fixed_imports = FixedImportModel(4,2, array([.1, .1]))
 
-rhs = SEPIRRateEquations(model_input, household_population, fixed_imports)
-rhs_M = MatrixImportSEPIRRateEquations(model_input, household_population, fixed_imports)
-rhs_U = UnloopedSEPIRRateEquations(model_input, household_population, fixed_imports, sources="ALL")
+rhs = SEIRRateEquations(model_input, household_population, fixed_imports)
+rhs_M = MatrixImportSEIRRateEquations(model_input, household_population, fixed_imports)
+rhs_U = UnloopedSEIRRateEquations(model_input, household_population, fixed_imports, sources="ALL")
 
 H0 = make_initial_condition_by_eigenvector(growth_rate, model_input, household_population, rhs_M, 1e-5, 0.0,False,3)
-S0 = H0.T.dot(household_population.states[:, ::5])
-E0 = H0.T.dot(household_population.states[:, 1::5])
-P0 = H0.T.dot(household_population.states[:, 2::5])
-I0 = H0.T.dot(household_population.states[:, 3::5])
-R0 = H0.T.dot(household_population.states[:, 4::5])
+S0 = H0.T.dot(household_population.states[:, ::4])
+E0 = H0.T.dot(household_population.states[:, 1::4])
+I0 = H0.T.dot(household_population.states[:, 2::4])
+R0 = H0.T.dot(household_population.states[:, 3::4])
 start_state = (1/model_input.ave_hh_size) * array([S0.sum(),
                                                    E0.sum(),
-                                                   P0.sum(),
                                                    I0.sum(),
                                                    R0.sum()])
 tspan = (0.0, 365)
@@ -67,21 +65,57 @@ import time
 nm_start = time.time()
 solution = solve_ivp(rhs, tspan, H0, first_step=0.001, atol=1e-16, t_eval = arange(0., 365., 1.))
 print("Non-matrix took", time.time()- nm_start)
-# m_start = time.time()
-# solution_M = solve_ivp(rhs_M, tspan, H0, first_step=0.001, atol=1e-16, t_eval = arange(0., 365., 1.))
-# print("M took", time.time() - m_start)
+m_start = time.time()
+solution_M = solve_ivp(rhs_M, tspan, H0, first_step=0.001, atol=1e-16, t_eval = arange(0., 365., 1.))
+print("M took", time.time() - m_start)
 u_start = time.time()
 solution_U = solve_ivp(rhs_U, tspan, H0, first_step=0.001, atol=1e-16, t_eval = arange(0., 365., 1.))
 print("U took", time.time() - u_start)
 
+t = solution.t
 H = solution.y
+S = H.T.dot(household_population.states[:, ::4])
+E = H.T.dot(household_population.states[:, 1::4])
+I = H.T.dot(household_population.states[:, 2::4])
+R = H.T.dot(household_population.states[:, 3::4])
+time_series = {
+'time':t,
+'S':S,
+'E':E,
+'I':I,
+'R':R
+}
 
-# H_M = solution_M.y
+t_M = solution_M.t
+H_M = solution_M.y
+S_M = H_M.T.dot(household_population.states[:, ::4])
+E_M = H_M.T.dot(household_population.states[:, 1::4])
+I_M = H_M.T.dot(household_population.states[:, 2::4])
+R_M = H_M.T.dot(household_population.states[:, 3::4])
+time_series_M = {
+'time':t_M,
+'S':S_M,
+'E':E_M,
+'I':I_M,
+'R':R_M
+}
 
+t_U = solution_U.t
 H_U = solution_U.y
+S_U = H_U.T.dot(household_population.states[:, ::4])
+E_U = H_U.T.dot(household_population.states[:, 1::4])
+I_U = H_U.T.dot(household_population.states[:, 2::4])
+R_U = H_U.T.dot(household_population.states[:, 3::4])
+time_series_U = {
+'time':t_U,
+'S':S_U,
+'E':E_U,
+'I':I_U,
+'R':R_U
+}
 
 # Print disagreement with cutoff of 1e-9 so that we don't return high errors when
 # both are very close to zero, i.e. if H_M~1e-n, H~1e-m for large n and m we don't
-# want the relative error to be 1e-(n-m).
-# print("Max relative error in H_M for H>1e-9 is", max(abs((H-H_M))[H>1e-9]/H[H>1e-9]))
+# want the relative error to me 1e-(n-m).
+print("Max relative error in H_M for H>1e-9 is", max(abs((H-H_M))[H>1e-9]/H[H>1e-9]))
 print("Max relative error in H_U for H>1e-9 is", max(abs((H-H_U))[H>1e-9]/H[H>1e-9]))
