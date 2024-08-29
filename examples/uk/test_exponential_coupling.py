@@ -3,9 +3,9 @@ We simulate a coupled epidemic, calibrate an exponential curve to it,
 and compare an uncoupled epidemic coupled to that curve.
 '''
 from copy import deepcopy
-# from matplotlib.pyplot import subplots
-# from matplotlib.pyplot import yscale
-# from matplotlib.cm import get_cmap
+from matplotlib.pyplot import subplots
+from matplotlib.pyplot import yscale
+from matplotlib.cm import get_cmap
 from numpy import arange, array, exp, log, outer
 from os import mkdir
 from os.path import isdir, isfile
@@ -55,6 +55,7 @@ base_H0 = make_initial_condition_by_eigenvector(growth_rate, model_input, househ
 tspan = (0.0, 365)
 base_sol = solve_ivp(base_rhs, tspan, base_H0, first_step=0.001, atol=1e-16, t_eval = arange(0., 365., 1.))
 base_H = base_sol.y
+base_t = base_sol.t
 base_cases = (base_H.T.dot(household_population.states[:, 1::5]) +
                base_H.T.dot(household_population.states[:, 2::5]) +
                base_H.T.dot(household_population.states[:, 3::5])) / model_input.ave_hh_by_class
@@ -81,7 +82,7 @@ H0 = base_H[:,15]
 tspan = (0.0, 365)
 solution = solve_ivp(rhs, tspan, H0, first_step=0.001, atol=1e-16, t_eval = arange(0., 365., 1.))
 
-time = solution.t
+t = solution.t
 H = solution.y
 S = H.T.dot(household_population.states[:, ::5])
 E = H.T.dot(household_population.states[:, 1::5])
@@ -94,6 +95,43 @@ total_cases = (E+P+I) / model_input.ave_hh_by_class
 # Check whether coupling to exponential approximates fully coupled model in early growth phase
 print("Difference between coupled model and exponential coupling during exponential period:",
       abs(base_cases[15:30,:] - total_cases[:15, :])/base_cases[15:30, :])
+
+
+lgd=['Exponential curve',
+     'Nonlinear coupled model',
+     'Exponential import model']
+
+fig, ax = subplots(1, 1, sharex=True)
+
+cmap = get_cmap('tab20')
+alpha = 1
+ax.plot(
+        exp_growth_time + 15,
+        exp_curve,
+        'k-',
+        label=lgd[0],
+        alpha=alpha)
+ax.plot(
+        base_t[:30],
+        base_cases[:30],
+        'rx',
+        label=lgd[1],
+        alpha=alpha)
+
+ax.plot(
+        t[:15] + 15,
+        total_cases[:15],
+        'g.',
+        label=lgd[2],
+        alpha=alpha)
+yscale('log')
+ax.set_xlabel('Time in days')
+ax.set_ylabel('Prevalence')
+ax.legend(ncol=1,
+          loc="lower right")
+ax.set_box_aspect(1)
+fig.show()
+
 
 # with open('outputs/uk/exponential_coupling_output.pkl', 'wb') as f:
 #     dump((H), f)
