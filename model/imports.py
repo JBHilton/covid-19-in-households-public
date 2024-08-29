@@ -1,7 +1,8 @@
 '''Class structure describing external importations'''
 from abc import ABC
-from numpy import exp, ones, zeros
+from numpy import diag, exp, ones, zeros
 from scipy.interpolate import interp1d
+from scipy.sparse import csc_matrix as sparse
 
 def import_model_from_spec(spec, det):
     text_to_type = {
@@ -76,24 +77,56 @@ class StepImportModel(ImportModel):
 
 
 class ExponentialImportModel(ImportModel):
-    def __init__(self, r, det_profile, undet_profile):
-        self.r = r
-        self.det_profile = det_profile
-        self.undet_profile = undet_profile
+    '''Couples the model to an exponentially growing supply of infection.
+    To use this model, a RateEquations object with some other import term
+    needs to be constructed and provided as an input argument.'''
+    def __init__(self,
+                 no_inf_compartments,
+                 no_age_classes,
+                 rhs,
+                 growth_rate,
+                 x0):
+        super().__init__(no_inf_compartments, no_age_classes)
+        self.growth_rate = growth_rate
+        self.x0 = x0
+        base_inf_rates = rhs.states_sus_only.dot(
+                    rhs.household_population.model_input.k_ext).dot(diag(x0))
+        total_size = len(rhs.household_population.which_composition)
+        matrix_shape = (total_size, total_size)
+        inf_event_row = rhs.household_population.inf_event_row
+        inf_event_col = rhs.household_population.inf_event_col
+        inf_event_class = rhs.household_population.inf_event_class
+        self.base_matrix = sparse(matrix_shape, )
+        self.base_matrix += sparse((base_inf_rates[inf_event_row, inf_event_class],
+                                   (inf_event_row,
+                                    inf_event_col)),
+                                  shape=matrix_shape) - \
+                            sparse((base_inf_rates[inf_event_row, inf_event_class],
+                                    (inf_event_row,
+                                     inf_event_row)),
+                                   shape=matrix_shape)
 
-    @classmethod
-    def make_from_spec(cls, spec, det):
-        r = float(spec['exponent'])
-        alpha = float(spec['alpha'])
-        det_profile = alpha * det
-        undet_profile = alpha * (ones((10,)) - det)
-        return cls(r, det_profile, undet_profile)
+    def cases(self, t):
+        return exp( self.growth_rate * t) * self.x0
 
-    def detected(self, t):
-        return exp(self.r * t) * self.det_profile
+    def matrix(self, t):
+        '''This calculates an import rate matrix rather than
+        the external prevalence, which might improve performance.'''
+        return exp( self.growth_rate * t) * self.base_matrix
 
-    def undetected(self, t):
-        return exp(self.r * t) * self.undet_profile
+    # @classmethod
+    # def make_from_spec(cls, spec, det):
+    #     r = float(spec['exponent'])
+    #     alpha = float(spec['alpha'])
+    #     det_profile = alpha * det
+    #     undet_profile = alpha * (ones((10,)) - det)
+    #     return cls(r, det_profile, undet_profile)
+    #
+    # def detected(self, t):
+    #     return exp(self.r * t) * self.det_profile
+    #
+    # def undetected(self, t):
+    #     return exp(self.r * t) * self.undet_profile
 
 class CareHomeImportModel(ImportModel):
     def __init__(

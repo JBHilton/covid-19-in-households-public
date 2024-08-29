@@ -11,7 +11,8 @@ from model.preprocessing import ( estimate_beta_ext, estimate_growth_rate,
         SEPIRInput, HouseholdPopulation, make_initial_condition_by_eigenvector)
 from model.specs import TWO_AGE_SEPIR_SPEC_FOR_FITTING, TWO_AGE_UK_SPEC
 from model.common import SEPIRRateEquations, MatrixImportSEPIRRateEquations, UnloopedSEPIRRateEquations
-from model.imports import FixedImportModel, NoImportModel
+from model.imports import FixedImportModel, NoImportModel, ExponentialImportModel
+
 # pylint: disable=invalid-name
 
 if isdir('outputs/uk') is False:
@@ -34,7 +35,7 @@ SPEC = {**TWO_AGE_SEPIR_SPEC_FOR_FITTING, **TWO_AGE_UK_SPEC}
 model_input_to_fit = SEPIRInput(SPEC, composition_list, comp_dist)
 household_population_to_fit = HouseholdPopulation(
     composition_list, comp_dist, model_input_to_fit)
-rhs_to_fit = SEPIRRateEquations(model_input_to_fit, household_population_to_fit, NoImportModel(4,2))
+rhs_to_fit = SEPIRRateEquations(model_input_to_fit, household_population_to_fit, NoImportModel(5,2))
 beta_ext = estimate_beta_ext(household_population_to_fit, rhs_to_fit, growth_rate)
 model_input = deepcopy(model_input_to_fit)
 model_input.k_ext *= beta_ext
@@ -46,12 +47,19 @@ household_population = HouseholdPopulation(
 
 no_imports = NoImportModel(5, 2)
 fixed_imports = FixedImportModel(5,2, array([.1, .1]))
+base_rhs = SEPIRRateEquations(model_input, household_population, no_imports)
+exp_imports = ExponentialImportModel(5,
+                                     2,
+                                     base_rhs,
+                                     growth_rate,
+                                     array([1e-5, 1e-5]))
 
-rhs = SEPIRRateEquations(model_input, household_population, fixed_imports)
-rhs_M = MatrixImportSEPIRRateEquations(model_input, household_population, fixed_imports)
-rhs_U = UnloopedSEPIRRateEquations(model_input, household_population, fixed_imports, sources="ALL")
+rhs = SEPIRRateEquations(model_input, household_population, exp_imports)
+rhs.epsilon = 0
+rhs_M = MatrixImportSEPIRRateEquations(model_input, household_population, exp_imports)
+rhs_U = UnloopedSEPIRRateEquations(model_input, household_population, exp_imports, sources="IMPORT")
 
-H0 = make_initial_condition_by_eigenvector(growth_rate, model_input, household_population, rhs_M, 1e-5, 0.0,False,3)
+H0 = make_initial_condition_by_eigenvector(growth_rate, model_input, household_population, rhs_M, 0., 0.0,False,3)
 S0 = H0.T.dot(household_population.states[:, ::5])
 E0 = H0.T.dot(household_population.states[:, 1::5])
 P0 = H0.T.dot(household_population.states[:, 2::5])
@@ -75,10 +83,12 @@ solution_U = solve_ivp(rhs_U, tspan, H0, first_step=0.001, atol=1e-16, t_eval = 
 print("U took", time.time() - u_start)
 
 H = solution.y
+R = H.T.dot(household_population.states[:, 4::5])
 
 # H_M = solution_M.y
 
 H_U = solution_U.y
+R_U = H_U.T.dot(household_population.states[:, 4::5])
 
 # Print disagreement with cutoff of 1e-9 so that we don't return high errors when
 # both are very close to zero, i.e. if H_M~1e-n, H~1e-m for large n and m we don't

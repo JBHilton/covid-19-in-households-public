@@ -1,11 +1,13 @@
 '''Module for additional computations required by the model'''
 from numpy import (
-    arange, asarray, diag, isnan, ix_, ones, outer,
+    arange, asarray, diag, exp, isnan, ix_, ones, outer,
     shape, sum, where, zeros)
 from numpy import int64 as my_int
 import pdb
 from scipy.sparse import csc_matrix as sparse
 from scipy.sparse import diags
+
+from model.imports import ExponentialImportModel
 from model.subsystems import subsystem_key
 
 from os import mkdir
@@ -216,16 +218,20 @@ def update_ext_matrices(rhs, t, H):
                                         (rhs.inf_event_row,
                                         rhs.inf_event_row)), shape=rhs.matrix_shape)
         if (rhs.sources=="ALL")|(rhs.sources=="IMPORT"):
-            rhs.import_rates =  rhs.inf_event_sus.dot(diag(rhs.import_model.cases(t)))
+            if type(rhs.import_model)==ExponentialImportModel:
+                rhs.Q_import = rhs.import_model.matrix(t)
+            else:
+                rhs.import_rates =  rhs.inf_event_sus.dot(
+                        rhs.model_input.k_ext).dot(diag(rhs.import_model.cases(t)))
 
-            rhs.Q_import -= rhs.Q_import
+                rhs.Q_import -= rhs.Q_import
 
-            rhs.Q_import += sparse((rhs.import_rates[arange(len(rhs.inf_event_row)), rhs.inf_event_class],
-                                        (rhs.inf_event_row,
-                                        rhs.inf_event_col)), shape=rhs.matrix_shape) -\
-                                        sparse((rhs.import_rates[arange(len(rhs.inf_event_row)), rhs.inf_event_class],
-                                        (rhs.inf_event_row,
-                                        rhs.inf_event_row)), shape=rhs.matrix_shape)
+                rhs.Q_import += sparse((rhs.import_rates[arange(len(rhs.inf_event_row)), rhs.inf_event_class],
+                                            (rhs.inf_event_row,
+                                            rhs.inf_event_col)), shape=rhs.matrix_shape) -\
+                                            sparse((rhs.import_rates[arange(len(rhs.inf_event_row)), rhs.inf_event_class],
+                                            (rhs.inf_event_row,
+                                            rhs.inf_event_row)), shape=rhs.matrix_shape)
 
 class UnloopedRateEquations:
     '''This class represents a functor for evaluating the rate equations for
@@ -394,7 +400,7 @@ class RateEquations:
         # Average number of each class by household
         denom = H.T.dot(self.composition_by_state)
 
-        FOI = self.states_sus_only.dot(diag(self.import_model.cases(t)))
+        FOI = self.states_sus_only.dot((self.household_population.model_input.k_ext).dot(diag(self.import_model.cases(t))))
         # print(asarray(FOI).squeeze().max())
 
 

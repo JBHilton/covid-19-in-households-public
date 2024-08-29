@@ -11,7 +11,8 @@ from model.preprocessing import ( estimate_beta_ext, estimate_growth_rate,
         SEIRInput, HouseholdPopulation, make_initial_condition_by_eigenvector)
 from model.specs import TWO_AGE_SEIR_SPEC_FOR_FITTING, TWO_AGE_UK_SPEC
 from model.common import SEIRRateEquations, MatrixImportSEIRRateEquations, UnloopedSEIRRateEquations
-from model.imports import FixedImportModel, NoImportModel
+from model.imports import FixedImportModel, NoImportModel, ExponentialImportModel
+
 # pylint: disable=invalid-name
 
 if isdir('outputs/uk') is False:
@@ -46,6 +47,12 @@ household_population = HouseholdPopulation(
 
 no_imports = NoImportModel(4, 2)
 fixed_imports = FixedImportModel(4,2, array([.1, .1]))
+base_rhs = SEIRRateEquations(model_input, household_population, no_imports)
+exp_imports = ExponentialImportModel(4,
+                                     2,
+                                     base_rhs,
+                                     growth_rate,
+                                     array([1e-5, 1e-5]))
 
 rhs = SEIRRateEquations(model_input, household_population, fixed_imports)
 rhs_M = MatrixImportSEIRRateEquations(model_input, household_population, fixed_imports)
