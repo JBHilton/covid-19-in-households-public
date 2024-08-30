@@ -52,8 +52,9 @@ household_population = HouseholdPopulation(
 no_imports = NoImportModel(5, 2)
 base_rhs = UnloopedSEPIRRateEquations(model_input, household_population, no_imports)
 base_H0 = make_initial_condition_by_eigenvector(growth_rate, model_input, household_population, base_rhs, 1e-5, 0.0)
-tspan = (0.0, 365)
-base_sol = solve_ivp(base_rhs, tspan, base_H0, first_step=0.001, atol=1e-16, t_eval = arange(0., 365., 1.))
+tspan = (0.0, 100)
+t_eval = arange(0., 100., 1.)
+base_sol = solve_ivp(base_rhs, tspan, base_H0, first_step=0.001, atol=1e-16, t_eval = t_eval)
 base_H = base_sol.y
 base_t = base_sol.t
 base_cases = (base_H.T.dot(household_population.states[:, 1::5]) +
@@ -80,7 +81,7 @@ rhs = UnloopedSEPIRRateEquations(model_input, household_population, exp_imports,
 
 H0 = base_H[:,15]
 tspan = (0.0, 365)
-solution = solve_ivp(rhs, tspan, H0, first_step=0.001, atol=1e-16, t_eval = arange(0., 365., 1.))
+solution = solve_ivp(rhs, tspan, H0, first_step=0.001, atol=1e-16, t_eval = t_eval)
 
 t = solution.t
 H = solution.y
@@ -101,35 +102,51 @@ lgd=['Exponential curve',
      'Nonlinear coupled model',
      'Exponential import model']
 
-fig, ax = subplots(1, 1, sharex=True)
+fig, (ax1, ax2) = subplots(1, 2)
 
-cmap = get_cmap('tab20')
 alpha = 1
-ax.plot(
+ax1.plot(
         exp_growth_time + 15,
         exp_curve,
         'k-',
         label=lgd[0],
         alpha=alpha)
-ax.plot(
+ax1.plot(
         base_t[:30],
-        base_cases[:30],
+        base_cases[:30, :],
         'rx',
         label=lgd[1],
         alpha=alpha)
 
-ax.plot(
+ax1.plot(
         t[:15] + 15,
-        total_cases[:15],
+        total_cases[:15, :],
         'g.',
         label=lgd[2],
         alpha=alpha)
-yscale('log')
-ax.set_xlabel('Time in days')
-ax.set_ylabel('Prevalence')
-ax.legend(ncol=1,
-          loc="lower right")
-ax.set_box_aspect(1)
+ax1.set_yscale('log')
+ax1.set_xlabel('Time in days')
+ax1.set_ylabel('Prevalence')
+ax1.set_box_aspect(1)
+
+ax2.plot(
+        base_t,
+        base_cases,
+        'rx',
+        label=lgd[1],
+        alpha=alpha)
+
+ax2.plot(
+        t + 15,
+        total_cases,
+        'g.',
+        label=lgd[2],
+        alpha=alpha)
+ax2.set_xlabel('Time in days')
+ax2.legend(ncol=1,
+          loc="upper center",
+          bbox_to_anchor=(0., 1.5))
+ax2.set_box_aspect(1)
 fig.show()
 
 
