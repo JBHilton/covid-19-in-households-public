@@ -46,20 +46,35 @@ household_population = HouseholdPopulation(
     composition_list, comp_dist, model_input)
 
 no_imports = NoImportModel(5, 2)
-fixed_imports = FixedImportModel(5,2, array([.1, .1]))
+
+# Set up background population for models with nonzero imports
 base_rhs = SEPIRRateEquations(model_input, household_population, no_imports)
+base_H0 = make_initial_condition_by_eigenvector(growth_rate,
+                                                model_input,
+                                                household_population,
+                                                base_rhs,
+                                                1e-3,
+                                                0.0,
+                                                False,
+                                                3)
+x0 = base_H0.T.dot(household_population.states[:, 1::5])
+
+fixed_imports = FixedImportModel(5,
+                                     2,
+                                     base_rhs,
+                                     x0)
 exp_imports = ExponentialImportModel(5,
                                      2,
                                      base_rhs,
                                      growth_rate,
-                                     array([1e-5, 1e-5]))
+                                     x0)
 
 rhs = SEPIRRateEquations(model_input, household_population, exp_imports)
 rhs.epsilon = 0
 rhs_M = MatrixImportSEPIRRateEquations(model_input, household_population, exp_imports)
 rhs_U = UnloopedSEPIRRateEquations(model_input, household_population, exp_imports, sources="IMPORT")
 
-H0 = make_initial_condition_by_eigenvector(growth_rate, model_input, household_population, rhs_M, 0., 0.0,False,3)
+H0 = make_initial_condition_by_eigenvector(growth_rate, model_input, household_population, rhs, 0., 0.0,False,3)
 S0 = H0.T.dot(household_population.states[:, ::5])
 E0 = H0.T.dot(household_population.states[:, 1::5])
 P0 = H0.T.dot(household_population.states[:, 2::5])
@@ -70,6 +85,7 @@ start_state = (1/model_input.ave_hh_size) * array([S0.sum(),
                                                    P0.sum(),
                                                    I0.sum(),
                                                    R0.sum()])
+
 tspan = (0.0, 365)
 import time
 nm_start = time.time()

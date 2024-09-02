@@ -4,10 +4,12 @@ from numpy import (
     shape, sum, where, zeros)
 from numpy import int64 as my_int
 import pdb
+
+from pandas.io.pytables import Fixed
 from scipy.sparse import csc_matrix as sparse
 from scipy.sparse import diags
 
-from model.imports import ExponentialImportModel
+from model.imports import ExponentialImportModel, FixedImportModel, NoImportModel
 from model.subsystems import subsystem_key
 
 from os import mkdir
@@ -218,7 +220,9 @@ def update_ext_matrices(rhs, t, H):
                                         (rhs.inf_event_row,
                                         rhs.inf_event_row)), shape=rhs.matrix_shape)
         if (rhs.sources=="ALL")|(rhs.sources=="IMPORT"):
-            if type(rhs.import_model)==ExponentialImportModel:
+            # if type(rhs.import_model==NoImportModel):
+            #     rhs.Q_import *= 0
+            if (type(rhs.import_model)==FixedImportModel)|(type(rhs.import_model)==ExponentialImportModel):
                 rhs.Q_import = rhs.import_model.matrix(t)
             else:
                 rhs.import_rates =  rhs.inf_event_sus.dot(

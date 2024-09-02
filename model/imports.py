@@ -41,16 +41,38 @@ class FixedImportModel(ImportModel):
             self,
             no_inf_compartments,
             no_age_classes,
-            import_array):
+            rhs,
+            x0):
         '''import_arrays should be a list of arrays. The number of arrays is
         no_inf_compartments and each has length no_age_classes. The jth element of
         the ith array is the rate at which individuals in age class j are infected
         by external cases in infectious compartment i.'''
         super().__init__(no_inf_compartments, no_age_classes)
-        self.import_array = import_array
+        self.x0 = x0
+        base_inf_rates = rhs.states_sus_only.dot(
+            rhs.household_population.model_input.k_ext).dot(diag(x0))
+        total_size = len(rhs.household_population.which_composition)
+        matrix_shape = (total_size, total_size)
+        inf_event_row = rhs.household_population.inf_event_row
+        inf_event_col = rhs.household_population.inf_event_col
+        inf_event_class = rhs.household_population.inf_event_class
+        self.base_matrix = sparse(matrix_shape, )
+        self.base_matrix += sparse((base_inf_rates[inf_event_row, inf_event_class],
+                                    (inf_event_row,
+                                     inf_event_col)),
+                                   shape=matrix_shape) - \
+                            sparse((base_inf_rates[inf_event_row, inf_event_class],
+                                    (inf_event_row,
+                                     inf_event_row)),
+                                   shape=matrix_shape)
 
     def cases(self, t):
-        return self.import_array
+        return self.x0
+
+    def matrix(self, t):
+        '''This calculates an import rate matrix rather than
+        the external prevalence, which might improve performance.'''
+        return self.base_matrix
 
 class StepImportModel(ImportModel):
     def __init__(
