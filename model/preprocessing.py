@@ -579,7 +579,6 @@ def calculate_sitp(x, model_input, sitp_data):
 
     return sitp_array
 
-
 class ModelInput(ABC):
     def __init__(self,
                 spec,
@@ -1200,7 +1199,12 @@ def get_multiplier_eigenvalue(r,
             no_index_states * [i] )),
             shape=(no_index_states, no_index_states))
     # print('multiplier calculation took',get_time()-mult_start,'seconds.')
-    evalue = (speig(multiplier.T,k=1)[0]).real
+    if multiplier.shape==(1,1):
+        evalue = multiplier[0, 0]
+    elif multiplier.shape==(2,2):
+        evalue = (speig(multiplier.T.toarray(), k=1)[0]).real
+    else:
+        evalue = (speig(multiplier.T,k=1)[0]).real
     return evalue
 
 def estimate_growth_rate(household_population,
@@ -1302,6 +1306,8 @@ def estimate_beta_ext(household_population,rhs,r):
     
     if multiplier.shape==(1,1):
         evalue = multiplier[0, 0]
+    elif multiplier.shape==(2,2):
+        evalue = (speig(multiplier.T.toarray(), k=1)[0]).real
     else:
         evalue = (speig(multiplier.T,k=1)[0]).real
 
