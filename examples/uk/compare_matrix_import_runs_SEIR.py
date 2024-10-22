@@ -46,8 +46,8 @@ household_population = HouseholdPopulation(
     composition_list, comp_dist, model_input)
 
 no_imports = NoImportModel(4, 2)
-fixed_imports = FixedImportModel(4,2, array([.1, .1]))
 base_rhs = SEIRRateEquations(model_input, household_population, no_imports)
+fixed_imports = FixedImportModel(4,2, base_rhs, array([.1, .1]))
 exp_imports = ExponentialImportModel(4,
                                      2,
                                      base_rhs,
