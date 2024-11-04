@@ -678,11 +678,11 @@ class SIRInput(ModelInput):
             return calculate_sitp_rmse(x, self, spec['SITP'])
 
         pars = minimize(sitp_rmse, array([1e-1,1]), bounds=((0,None),(0,1))).x
-        beta_int = pars[0]
+        self.beta_int = pars[0]
         self.density_expo = pars[1]
         print('Estimated beta_int=',pars[0],', estimated density=',pars[1])
 
-        self.k_home = beta_int * self.k_home
+        self.k_home = self.beta_int * self.k_home
 
         ext_eig = max(eig(
             diag(self.sus).dot((1/spec['recovery_rate']) *
@@ -827,10 +827,10 @@ class SEPIRQInput(ModelInput):
             return calculate_sitp_rmse(x, self, spec['SITP'])
 
         pars = minimize(sitp_rmse, array([1e-1,1]), bounds=((0,None),(0,1))).x
-        beta_int = pars[0]
+        self.beta_int = pars[0]
         self.density_expo = pars[1]
 
-        self.k_home = beta_int * self.k_home
+        self.k_home = self.beta_int * self.k_home
 
         ext_eig = max(eig(
             diag(self.sus).dot((1/spec['symp_onset_rate']) *
