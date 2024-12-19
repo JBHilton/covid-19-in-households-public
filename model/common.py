@@ -1,6 +1,6 @@
 '''Module for additional computations required by the model'''
 from numpy import (
-    arange, asarray, diag, exp, isnan, ix_, ones, outer,
+    arange, array, asarray, diag, exp, isnan, ix_, ones, outer,
     shape, sum, where, zeros)
 from numpy import int64 as my_int
 import pdb
@@ -305,6 +305,15 @@ class UnloopedRateEquations:
         '''hh_ODE_rates calculates the rates of the ODE system describing the
         household ODE model'''
 
+        jac = self.jacobian(t, H)
+        
+        dH = (jac * H).squeeze()
+        return dH
+
+    def jacobian(self, t, H):
+        '''hh_ODE_rates calculates the rates of the ODE system describing the
+        household ODE model'''
+
         update_ext_matrices(self, t, H)
 
         if (H < 0).any():
@@ -313,9 +322,9 @@ class UnloopedRateEquations:
         if isnan(H).any():
             # pdb.set_trace()
             raise ValueError('State vector contains NaNs at t={0}'.format(t))
-        
-        dH = ((H.T * (self.Q_int + self.Q_ext + self.Q_import)).T).squeeze()
-        return dH
+
+        jac = (self.Q_int + self.Q_ext + self.Q_import).T
+        return jac
 
     def external_matrices(self, t, H):
         if (self.sources=="ALL")|(self.sources=="BETWEEN"):
@@ -340,6 +349,130 @@ class UnloopedRateEquations:
                                         sparse((self.import_rates[arange(len(self.inf_event_row)), self.inf_event_class],
                                         (self.inf_event_row,
                                         self.inf_event_row)), shape=self.matrix_shape)
+
+
+class LogRateEquations:
+    '''This class represents a functor for evaluating the rate equations for
+    the model with no imports of infection from outside the population. The
+    state of the class contains all essential variables. This method uses
+    more preallocation in calculating the external infection terms, although
+    does not currently appear to be more computationally efficient than the
+    RateEquations approach.'''
+
+    # pylint: disable=invalid-name
+    def __init__(self,
+                 model_input,
+                 household_population,
+                 import_model,
+                 sources="ALL",
+                 epsilon=1.0):
+
+        self.compartmental_structure = \
+            household_population.compartmental_structure
+        self.no_compartments = subsystem_key[self.compartmental_structure][1]
+        self.model_input = model_input
+        self.household_population = household_population
+        self.sources = sources
+        self.epsilon = epsilon
+        self.Q_int = household_population.Q_int
+        self.composition_by_state = household_population.composition_by_state
+        self.states_sus_only = \
+            household_population.states[:, ::self.no_compartments]
+        self.s_present = where(self.states_sus_only.sum(axis=1) > 0)[0]
+        self.states_new_cases_only = \
+            household_population.states[
+            :, model_input.new_case_compartment::self.no_compartments]
+        self.inf_compartment_list = \
+            subsystem_key[self.compartmental_structure][2]
+        self.no_inf_compartments = len(self.inf_compartment_list)
+        self.import_model = import_model
+        self.ext_matrix_list = []
+        self.inf_by_state_list = []
+        for ic in range(self.no_inf_compartments):
+            self.ext_matrix_list.append(
+                diag(model_input.sus).dot(
+                    model_input.k_ext).dot(
+                    diag(model_input.inf_scales[ic])))
+            self.inf_by_state_list.append(household_population.states[
+                                          :, self.inf_compartment_list[ic]::self.no_compartments])
+
+        self.total_size = len(household_population.which_composition)
+        self.matrix_shape = (self.total_size, self.total_size)
+        self.inf_event_row = household_population.inf_event_row
+        self.inf_event_col = household_population.inf_event_col
+        self.inf_event_class = household_population.inf_event_class
+
+        self.import_rate_mat = sparse(self.matrix_shape, )
+
+        denom = model_input.ave_hh_by_class
+        self.outflow_mat = sum(
+            [(self.ext_matrix_list[ic].dot((self.inf_by_state_list[ic] / model_input.ave_hh_by_class).T)).T
+             for ic in range(self.no_inf_compartments)],
+            axis=0)
+
+        self.Q_ext = 0 * self.Q_int
+        self.Q_import = 0 * self.Q_int
+        self.between_hh_rate = self.states_sus_only.dot(diag(self.import_model.cases(0)))
+        self.import_rates = self.states_sus_only.dot(diag(self.import_model.cases(0)))
+        self.inf_event_sus = self.states_sus_only[self.inf_event_row, :]
+
+    def __call__(self, t, Z):
+        '''hh_ODE_rates calculates the rates of the ODE system describing the
+        household ODE model'''
+
+        print(t)
+
+        H = exp(Z)
+
+        jac = self.jacobian(t, H)
+
+        diffmat = outer(exp(-Z.T), H)
+
+        dZ = (diffmat *  jac.T).sum(0).squeeze()
+
+        # dZ = (exp(-Z).T * (H.T * jac.T)).squeeze()
+        return dZ
+
+    def jacobian(self, t, H):
+        '''hh_ODE_rates calculates the rates of the ODE system describing the
+        household ODE model'''
+
+        update_ext_matrices(self, t, H)
+
+        # if (H < 0).any():
+        #     # pdb.set_trace()
+        #     H[where(H < 0)[0]] = 0
+        # if isnan(H).any():
+        #     # pdb.set_trace()
+        #     raise ValueError('State vector contains NaNs at t={0}'.format(t))
+
+        jac = (self.Q_int + self.Q_ext + self.Q_import).T
+        return jac
+
+    def external_matrices(self, t, H):
+        if (self.sources == "ALL") | (self.sources == "BETWEEN"):
+            self.between_hh_rate = self.inf_event_sus.dot(diag(self.outflow_mat.T.dot(H)))
+
+            self.Q_ext *= 0
+
+            self.Q_ext += sparse((self.between_hh_rate[arange(len(self.inf_event_row)), self.inf_event_class],
+                                  (self.inf_event_row,
+                                   self.inf_event_col)), shape=self.matrix_shape) - \
+                          sparse((self.between_hh_rate[arange(len(self.inf_event_row)), self.inf_event_class],
+                                  (self.inf_event_row,
+                                   self.inf_event_row)), shape=self.matrix_shape)
+        if (self.sources == "ALL") | (self.sources == "IMPORT"):
+            self.import_rates = self.inf_event_sus.dot(diag(self.import_model.cases(t)))
+
+            self.Q_import *= 0
+
+            self.Q_import += sparse((self.import_rates[arange(len(self.inf_event_row)), self.inf_event_class],
+                                     (self.inf_event_row,
+                                      self.inf_event_col)), shape=self.matrix_shape) - \
+                             sparse((self.import_rates[arange(len(self.inf_event_row)), self.inf_event_class],
+                                     (self.inf_event_row,
+                                      self.inf_event_row)), shape=self.matrix_shape)
+
 
 class RateEquations:
     '''This class represents a functor for evaluating the rate equations for
@@ -469,6 +602,31 @@ class UnloopedSEIRRateEquations(UnloopedRateEquations):
     @property
     def states_rec_only(self):
         return self.household_population.states[:, 3::self.no_compartments]
+
+class UnloopedSEpIpRpEsIsRsRateEquations(UnloopedRateEquations):
+    @property
+    def states_exp_p_only(self):
+        return self.household_population.states[:, 1::self.no_compartments]
+
+    @property
+    def states_inf_p_only(self):
+        return self.household_population.states[:, 2::self.no_compartments]
+
+    @property
+    def states_rec_p_only(self):
+        return self.household_population.states[:, 3::self.no_compartments]
+
+    @property
+    def states_exp_s_only(self):
+        return self.household_population.states[:, 1::self.no_compartments]
+
+    @property
+    def states_inf_s_only(self):
+        return self.household_population.states[:, 2::self.no_compartments]
+
+    @property
+    def states_rec_s_only(self):
+        return self.household_population.states[:, 3::self.no_compartments]
     
 class SEIRCRateEquations(RateEquations):
     @property
@@ -525,6 +683,23 @@ class MatrixImportSEPIRRateEquations(MatrixImportRateEquations):
 
 
 class UnloopedSEPIRRateEquations(UnloopedRateEquations):
+    @property
+    def states_exp_only(self):
+        return self.household_population.states[:, 1::self.no_compartments]
+
+    @property
+    def states_pro_only(self):
+        return self.household_population.states[:, 2::self.no_compartments]
+
+    @property
+    def states_inf_only(self):
+        return self.household_population.states[:, 3::self.no_compartments]
+
+    @property
+    def states_rec_only(self):
+        return self.household_population.states[:, 4::self.no_compartments]
+
+class LogSEPIRRateEquations(LogRateEquations):
     @property
     def states_exp_only(self):
         return self.household_population.states[:, 1::self.no_compartments]

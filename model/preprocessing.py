@@ -554,6 +554,32 @@ def calculate_sitp_rmse(x, model_input, sitp_data):
 
     return sqrt(err_array.sum())
 
+def calculate_sitp_rmse_w_primaries(x, model_input, sitp_data):
+    ''' This function calculates the root mean square error in the
+    susceptible-infectious transmission probability for a given set of
+    parameters and some empirical data. This version is designed for
+    structures with explicit primary/secondary case compartments.'''
+
+    beta_int = x[0]
+    density_expo = x[1]
+
+    err_array = zeros(sitp_data.shape)
+
+    for n, sitp in enumerate(sitp_data):
+        escape_prob = 1
+        for comp in range(model_input.no_primary_inf_compartments):
+            escape_prob *= 1 / (
+                1  +
+                (beta_int * (1 / model_input.prog_rates[comp]) *
+                (model_input.inf_scales[comp].dot(
+                model_input.ave_hh_by_class / model_input.ave_hh_size
+                ) * model_input.ave_contact_dur) /
+                (n+1)**density_expo))
+        sitp_est = 1 - escape_prob
+        err_array[n] = (sitp - sitp_est)**2
+
+    return sqrt(err_array.sum())
+
 def calculate_sitp(x, model_input, sitp_data):
     ''' This function calculates the root mean square error in the
     susceptible-infectious transmission probability for a given set of
@@ -578,6 +604,31 @@ def calculate_sitp(x, model_input, sitp_data):
         sitp_array[n] = sitp_est
 
     return sitp_array
+def calculate_sitp_w_primaries(x, model_input, sitp_data):
+    ''' This function calculates the root mean square error in the
+    susceptible-infectious transmission probability for a given set of
+    parameters and some empirical data. This is assuming fixed periods in each
+    infectious compartment.'''
+
+    beta_int = x[0]
+    density_expo = x[1]
+
+    sitp_array = zeros(sitp_data.shape)
+
+    for n, sitp in enumerate(sitp_data):
+        escape_prob = 1
+        for comp in range(model_input.no_primary_inf_compartments):
+            escape_prob *= 1 / (
+                1 +
+                (beta_int * (1 / model_input.prog_rates[comp]) *
+                model_input.inf_scales[comp].dot(model_input.ave_hh_by_class / model_input.ave_hh_size) *
+                model_input.ave_contact_dur /
+                (n+1)**density_expo))
+        sitp_est = 1 - escape_prob
+        sitp_array[n] = sitp_est
+
+    return sitp_array
+
 
 class ModelInput(ABC):
     def __init__(self,
@@ -736,6 +787,52 @@ class SEIRInput(ModelInput):
     @property
     def alpha(self):
         return self.spec['incubation_rate']
+
+class SEpIpRpEsIsRsInput(ModelInput):
+    def __init__(self, spec, composition_list, composition_distribution, print_ests=True):
+        super().__init__(spec, composition_list, composition_distribution)
+
+        self.no_primary_inf_compartments = 1
+
+        self.expandables = ['sus',
+                            'inf_scales']
+
+        self.R_compartment = 3
+
+        self.sus = spec['sus']
+        self.inf_scales = [ones((2 * self.no_age_classes,))]
+        self.gamma = self.spec['recovery_rate']
+
+        self.ave_trans = 1 / self.gamma
+
+        self.prog_rates = array([self.gamma])
+
+        def sitp_rmse(x):
+            return calculate_sitp_rmse_w_primaries(x, self, spec['SITP'])
+
+        pars = minimize(sitp_rmse, array([1e-1,1]), bounds=((0,None),(0,1))).x
+        self.pars = pars
+        self.beta_int = pars[0]
+        self.density_expo = pars[1]
+        if print_ests:
+            print('Estimated beta_int=',pars[0],', estimated density=',pars[1])
+
+        self.k_home = self.beta_int * self.k_home
+
+        ext_eig = max(eig(
+            diag(self.sus).dot((1/spec['recovery_rate']) *
+             (self.k_ext).dot(diag(self.inf_scales[0])))
+            )[0])
+        if spec['fit_method'] == 'R*':
+            external_scale = spec['R*'] / (self.ave_hh_size*spec['SITP'])
+        else:
+            external_scale = 1
+        self.k_ext = external_scale * self.k_ext / ext_eig
+
+    @property
+    def alpha(self):
+        return self.spec['incubation_rate']
+
 
 class SEPIRInput(ModelInput):
     def __init__(self, spec, composition_list, composition_distribution):
