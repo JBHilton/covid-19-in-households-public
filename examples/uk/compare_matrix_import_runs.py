@@ -117,7 +117,7 @@ locs_for_err = [where(H_cumsum[:, t]<.999) for t in range(H.shape[1])] # For eac
 
 daily_max_err = asarray([
     max((abs((H[locs_for_err[t], t]-H_U[locs_for_err[t], t]))/H[locs_for_err[t], t]))[0] for t in range(H.shape[1])])
-print("Max relative error in H_U along bottom 99.99% of distribution is", daily_max_err.max())
+print("Max relative error in H_U along bottom 99.9% of distribution is", daily_max_err.max())
 
 # For comparison with static cutoff, check what cutoff we are effectively using here:
 leaveout_locs = [where(H_cumsum[:, t]>=.999) for t in range(H.shape[1])]
