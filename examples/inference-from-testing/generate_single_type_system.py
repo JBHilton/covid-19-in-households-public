@@ -1,6 +1,6 @@
 '''This sets up a single-household0type model
 '''
-from numpy import array, log
+from numpy import array, log, where, zeros
 from os import mkdir
 from os.path import isdir, isfile
 from pickle import load, dump
@@ -16,8 +16,9 @@ from model.imports import FixedImportModel, NoImportModel
 # Calculate (negative) growth rate based on estimated prevalences from Vo study:
 growth_rate = (1/11) * log((29/2343) / (73/2812))
 
+hh_size = 2
 # List of observed household compositions
-composition_list = array([[2]])
+composition_list = array([[hh_size]])
 # Proportion of households which are in each composition
 comp_dist = array([1.])
 
@@ -45,3 +46,15 @@ rhs = UnloopedSEIRRateEquations(model_input, household_population, fixed_imports
 
 Q_int = rhs.Q_int
 Q_ext = rhs.Q_ext
+
+# Generate a set of initial conditions with S = N - i, E = 0, I = i, R = 0
+init_cases = 1 # Change this to get a different number of initial cases
+S0 = hh_size - init_cases
+E0 = 0
+I0 = init_cases
+R0 = 0
+x0 = zeros(Q_int.shape[0])
+init_state = where((rhs.states_sus_only==S0)&
+                    (rhs.states_exp_only==E0)&
+                    (rhs.states_inf_only==I0)&
+                    (rhs.states_rec_only==R0))[0]
