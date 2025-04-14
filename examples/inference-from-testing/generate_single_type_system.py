@@ -58,3 +58,5 @@ init_state = where((rhs.states_sus_only==S0)&
                     (rhs.states_exp_only==E0)&
                     (rhs.states_inf_only==I0)&
                     (rhs.states_rec_only==R0))[0]
+print("len(init_state) =",len(init_state)) # Print to make sure we identify a unique state
+x0[init_state] = 1.
