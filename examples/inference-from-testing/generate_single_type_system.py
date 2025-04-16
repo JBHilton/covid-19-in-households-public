@@ -10,7 +10,7 @@ from model.preprocessing import ( estimate_beta_ext, estimate_growth_rate,
         SEIRInput, HouseholdPopulation, make_initial_condition_by_eigenvector)
 from model.specs import SINGLE_AGE_SEIR_SPEC_FOR_FITTING, SINGLE_AGE_UK_SPEC
 from model.common import SEIRRateEquations, UnloopedSEIRRateEquations
-from model.imports import FixedImportModel, NoImportModel
+from model.imports import ExponentialImportModel, FixedImportModel, NoImportModel
 # pylint: disable=invalid-name
 
 # Calculate (negative) growth rate based on estimated prevalences from Vo study:
@@ -42,10 +42,15 @@ household_population = HouseholdPopulation(
 no_imports = NoImportModel(4, 1)
 base_rhs = SEIRRateEquations(model_input, household_population, no_imports)
 fixed_imports = FixedImportModel(4,1, base_rhs, array([.1]))
+exp_imports = ExponentialImportModel(4,
+                                     1,
+                                     base_rhs,
+                                     growth_rate,
+                                     array([1e-5]))
 rhs = UnloopedSEIRRateEquations(model_input, household_population, fixed_imports, sources="ALL")
 
 Q_int = rhs.Q_int
-Q_ext = rhs.Q_ext
+Q_ext = exp_imports.base_matrix
 
 # Generate a set of initial conditions with S = N - i, E = 0, I = i, R = 0
 init_cases = 1 # Change this to get a different number of initial cases
