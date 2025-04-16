@@ -126,3 +126,43 @@ time_series_U = {
 # want the relative error to me 1e-(n-m).
 print("Max relative error in H_M for H>1e-9 is", max(abs((H-H_M))[H>1e-9]/H[H>1e-9]))
 print("Max relative error in H_U for H>1e-9 is", max(abs((H-H_U))[H>1e-9]/H[H>1e-9]))
+
+# Now check whether directly setting up a model with a given parameter is the same as inputting that parameter as we
+# would in an MCMC routine:
+
+# Set up a model where within-household infection is half as strong as in base model:
+model_input_half_inf = deepcopy(model_input)
+model_input_half_inf.k_home *= 0.5
+
+household_population_half_inf = HouseholdPopulation(
+    composition_list, comp_dist, model_input_half_inf)
+
+rhs_half_inf_direct = UnloopedSEIRRateEquations(model_input_half_inf,
+                                                household_population_half_inf,
+                                                fixed_imports,
+                                                sources="ALL")
+
+# And set up by overwriting Q_int in the rhs object for the base model:
+rhs_half_inf_overwrite = deepcopy(rhs_U)
+rhs_half_inf_overwrite.Q_int_inf *= 0.5
+rhs_half_inf_overwrite.Q_int = rhs_half_inf_overwrite.Q_int_inf +\
+    rhs_half_inf_overwrite.Q_int_fixed
+
+# Check if there is any difference between the two arrays:
+Q_diff = rhs_half_inf_direct.Q_int - rhs_half_inf_overwrite.Q_int
+print(abs(Q_diff).max(None))
+
+# And double check to make sure the subtraction operation isn't trivially zero for some reason:
+Q_diff2 = rhs_half_inf_direct.Q_int - rhs_U.Q_int
+print(abs(Q_diff2).max(None))
+Q_diff3 = rhs_half_inf_overwrite.Q_int - rhs_U.Q_int
+print(abs(Q_diff2).max(None))
+
+# Alternative check: does halving and then multiplying by 2 give the same result as the original model?
+rhs_reset = deepcopy(rhs_half_inf_direct)
+rhs_reset.Q_int_inf *= 2.
+rhs_reset.Q_int = rhs_reset.Q_int_inf +\
+    rhs_reset.Q_int_fixed
+
+Q_diff4 = rhs_reset.Q_int - rhs_U.Q_int
+print(abs(Q_diff4).max(None))

@@ -301,6 +301,17 @@ class UnloopedRateEquations:
         self.import_rates = self.states_sus_only.dot(diag(self.import_model.cases(0)))
         self.inf_event_sus = self.states_sus_only[self.inf_event_row, :]
 
+        # These attributes divide the internal dynamics matrix into an infection events component and everything else for
+        # convenience when implementing MCMC. Infection events happen at a rate which is linear in the per-contact infection
+        # rate and so we can update parameters by multiplying the infection event matrix by a proposed parameter.
+        self.Q_int_inf = sparse((array(self.Q_int[self.inf_event_row, self.inf_event_col]).flatten(),
+                                        (self.inf_event_row,
+                                        self.inf_event_col)), shape=self.matrix_shape) - \
+                         sparse((array(self.Q_int[self.inf_event_row, self.inf_event_col]).flatten(),
+                                 (self.inf_event_row,
+                                  self.inf_event_row)), shape=self.matrix_shape)
+        self.Q_int_fixed = self.Q_int - self.Q_int_inf # "Fixed" as in does not change during MCMC routine
+
     def __call__(self, t, H):
         '''hh_ODE_rates calculates the rates of the ODE system describing the
         household ODE model'''
