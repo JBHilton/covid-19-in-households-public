@@ -312,6 +312,11 @@ class UnloopedRateEquations:
                                   self.inf_event_row)), shape=self.matrix_shape)
         self.Q_int_fixed = self.Q_int - self.Q_int_inf # "Fixed" as in does not change during MCMC routine
 
+        # Set infection rate scalings equal to 1. Changing these scalings during the MCMC routine allows for parameter
+        # updates without having to redefine the entire system from the model_input term onwards.
+        self.int_rate = 1
+        self.ext_rate = 1
+
     def __call__(self, t, H):
         '''hh_ODE_rates calculates the rates of the ODE system describing the
         household ODE model'''
@@ -334,7 +339,10 @@ class UnloopedRateEquations:
             # pdb.set_trace()
             raise ValueError('State vector contains NaNs at t={0}'.format(t))
 
-        jac = (self.Q_int + self.Q_ext + self.Q_import).T
+        jac = (self.Q_int_fixed +
+               self.int_rate * self.Q_int_inf +
+               self.ext_rate * self.Q_ext +
+               self.ext_rate * self.Q_import).T
         return jac
 
     def external_matrices(self, t, H):

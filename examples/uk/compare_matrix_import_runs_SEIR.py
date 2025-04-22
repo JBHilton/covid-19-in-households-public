@@ -166,3 +166,20 @@ rhs_reset.Q_int = rhs_reset.Q_int_inf +\
 
 Q_diff4 = rhs_reset.Q_int - rhs_U.Q_int
 print(abs(Q_diff4).max(None))
+
+# Now check updating system works by running model with directly scaled matrices and updated int_rate attribute.
+rhs_int_rate_update = deepcopy(rhs_U)
+rhs_int_rate_update.int_rate *= 0.5
+
+# Do some timing just in case there's a performance difference
+start1 = time.time()
+solution1 = solve_ivp(rhs_half_inf_overwrite, tspan, H0, first_step=0.001, atol=1e-16, t_eval = arange(0., 365., 1.))
+print("rhs_half_inf_overwrite", time.time()- start1)
+start2 = time.time()
+solution2 = solve_ivp(rhs_int_rate_update, tspan, H0, first_step=0.001, atol=1e-16, t_eval = arange(0., 365., 1.))
+print("rhs_int_rate_update", time.time() - start2)
+
+# Should find that they give identical results:
+H1 = solution1.y
+H2 = solution2.y
+print("Max absolute difference between solutions for H>1e-9 is", max(abs((H1-H2))[H1>1e-9]))
