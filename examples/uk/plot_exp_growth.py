@@ -3,6 +3,8 @@
 from os import mkdir
 from os.path import isdir
 from pickle import load
+import matplotlib
+matplotlib.use('Agg')
 from matplotlib.pyplot import subplots
 from matplotlib.pyplot import yscale
 from matplotlib.cm import get_cmap

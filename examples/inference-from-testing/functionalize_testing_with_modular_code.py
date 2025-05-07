@@ -193,6 +193,16 @@ def llh_with_traj(test_data, test_times, rhs, H0):
         t_all = np.hstack((t_all, solution.t))
     return llh, H_all, t_all
 
+def get_tau_lam_mles(data,test_times,tau_0,lam_0):
+    def f(params):
+        tau = params[0]
+        lam = params[1]
+        return -llh_from_pars(data, test_times, tau, lam)
+
+    mle=sp.optimize.minimize(f,[tau_0,lam_0],bounds=((0.005, 0.15),(2., 5.)))
+    return mle
+
+
 # Plot the results
 def plot_results(solution, household_population, model_input):
     S = H_all.T.dot(household_population.states[:, ::4])
