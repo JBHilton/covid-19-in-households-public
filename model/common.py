@@ -314,8 +314,8 @@ class UnloopedRateEquations:
 
         # Set infection rate scalings equal to 1. Changing these scalings during the MCMC routine allows for parameter
         # updates without having to redefine the entire system from the model_input term onwards.
-        self.int_rate = 1
-        self.ext_rate = 1
+        self.int_rate = 1.
+        self.ext_rate = 1.
 
     def __call__(self, t, H):
         '''hh_ODE_rates calculates the rates of the ODE system describing the
