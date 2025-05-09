@@ -75,6 +75,9 @@ class FixedImportModel(ImportModel):
         return self.base_matrix
 
 class StepImportModel(ImportModel):
+    '''This class provides an inefficient way of implementing a step function for external imports. For any reasonably
+    long increment it will be more efficient to use the FixedImportModel class, and perform successive solves between
+    the increments of the step function.'''
     def __init__(
             self,
             no_inf_compartments,
