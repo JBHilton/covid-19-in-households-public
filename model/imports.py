@@ -23,6 +23,9 @@ class ImportModel(ABC):
         self.no_inf_compartments = no_inf_compartments
         self.no_age_classes = no_age_classes
         self.no_entries = no_inf_compartments * no_age_classes
+
+        self.default_call_property = "cases" # Choose whether to use the cases or matrix property when called from RateEquations
+
     def cases(self, t):     # Cases is a list of import functions
         pass
 
@@ -66,6 +69,8 @@ class FixedImportModel(ImportModel):
                                      inf_event_row)),
                                    shape=matrix_shape)
 
+        self.default_call_property = "matrix" #In this case using matrix is more efficient
+
     def cases(self, t):
         return self.x0
 
@@ -93,6 +98,8 @@ class StepImportModel(ImportModel):
                 bounds_error=False,
                 fill_value='extrapolate',
                 assume_sorted=True))
+
+        self.default_call_property = "cases" #In this case there is no matrix property
 
     def cases(self, t):
         imports = zeros(self.no_entries,)
@@ -130,6 +137,8 @@ class ExponentialImportModel(ImportModel):
                                     (inf_event_row,
                                      inf_event_row)),
                                    shape=matrix_shape)
+
+        self.default_call_property = "matrix" #In this case using matrix is more efficient
 
     def cases(self, t):
         return exp( self.growth_rate * t) * self.x0

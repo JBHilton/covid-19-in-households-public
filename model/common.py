@@ -222,7 +222,7 @@ def update_ext_matrices(rhs, t, H):
         if (rhs.sources=="ALL")|(rhs.sources=="IMPORT"):
             # if type(rhs.import_model==NoImportModel):
             #     rhs.Q_import *= 0
-            if (type(rhs.import_model)==FixedImportModel)|(type(rhs.import_model)==ExponentialImportModel):
+            if rhs.import_model.default_call_property=="matrix":
                 rhs.Q_import = rhs.import_model.matrix(t)
             else:
                 rhs.import_rates =  rhs.inf_event_sus.dot(
