@@ -203,7 +203,7 @@ def llh_from_pars(data, test_times, tau, lam):
 
 
 # Argument to type in console to run run_inference
-mhd = run_simulation(3.0, .09)
+multi_hh_data = run_simulation(3.0, .09)
 
 
 # Run inference to estimate tau and lambda
@@ -219,56 +219,12 @@ def run_inference(multi_hh_data):
     return tau_est, lambda_est
 
 # Run run_inference
-run_inference(mhd)
+run_inference(multi_hh_data)
 
 ###############################
 #Plots
 ###############################
-def plot_results(solution, household_population, model_input):
-    T = solution.t
-    H = solution.y
-    S = H.T.dot(household_population.states[:, 0])
-    E = H.T.dot(household_population.states[:, 1])
-    I = H.T.dot(household_population.states[:, 2])
-    R = H.T.dot(household_population.states[:, 3])
-
-    data_list = [S / model_input.ave_hh_by_class,
-                 E / model_input.ave_hh_by_class,
-                 I / model_input.ave_hh_by_class,
-                 R / model_input.ave_hh_by_class]
-
-    lgd = ['S', 'E', 'I', 'R']
-    fig, axis = subplots(1, 1, sharex=True)
-    cmap = plt.get_cmap('tab20')
-    alpha = 0.5
-    for i in range(len(data_list)):
-        axis.plot(T, data_list[i], label=lgd[i], color=cmap(i / len(data_list)), alpha=alpha)
-    axis.set_ylabel('Proportion of population')
-    axis.legend(ncol=1, bbox_to_anchor=(1, 0.50))
-    plt.savefig('outputs/Trajectories')
-
-def plot_results(solution, household_population, model_input):
-    S = H_all.T.dot(household_population.states[:, ::4])
-    E = H_all.T.dot(household_population.states[:, 1::4])
-    I = H_all.T.dot(household_population.states[:, 2::4])
-    R = H_all.T.dot(household_population.states[:, 3::4])
-
-    data_list = [S / model_input.ave_hh_by_class,
-                 E / model_input.ave_hh_by_class,
-                 I / model_input.ave_hh_by_class,
-                 R / model_input.ave_hh_by_class]
-
-    lgd = ['S', 'E', 'I', 'R']
-    fig, axis = subplots(1, 1, sharex=True)
-    cmap = plt.get_cmap('tab20')
-    alpha = 0.5
-    for i in range(len(data_list)):
-        axis.plot(T, data_list[i], label=lgd[i], color=cmap(i / len(data_list)), alpha=alpha)
-    axis.set_ylabel('Proportion of population')
-    axis.legend(ncol=1, bbox_to_anchor=(1, 0.50))
-    plt.savefig('outputs/Trajectories')
-    plt.close(fig)
-
+#Don't do plotting functions
 
 llh, H_all, t_all = llh_with_traj(sample_data, test_times, rhs, H0)
 
