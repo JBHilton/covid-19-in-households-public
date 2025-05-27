@@ -63,7 +63,7 @@ n_hh = 100  # Number of households for synthetic data
 # Initialize model input based on specifications
 model_input_to_fit = SEIRInput(SPEC, composition_list, comp_dist)
 #true_density_expo = .5 # Todo: bring this in from model input rather than defining directly
-test_times = np.arange(7, 7 * 5, 7)
+test_times = np.array([7, 14, 21])
 
 
 # Simulation function to generate data
@@ -224,103 +224,92 @@ run_inference(multi_hh_data)
 ###############################
 #Plots
 ###############################
-#Don't do plotting functions
 
-llh, H_all, t_all = llh_with_traj(sample_data, test_times, rhs, H0)
+#1D Plot
 
+# Define parameter ranges
+tau_vals = np.linspace(0.05, 0.15, 100)
+lam_vals = np.linspace(2.5, 3.5, 100)
 
-#Plot
-def plot_population_trajectories(H_all, household_population, model_input, t_all, test_times, sample_data):
-    """Plot population trajectories for S, E, I, R and overlay test data."""
-    S = H_all.T.dot(household_population.states[:, ::4])
-    E = H_all.T.dot(household_population.states[:, 1::4])
-    I = H_all.T.dot(household_population.states[:, 2::4])
-    R = H_all.T.dot(household_population.states[:, 3::4])
+# Assume sampled_households is multi_hh_data from earlier
+sampled_households = multi_hh_data
+true_lam = 3.0  # used in run_simulation
+true_tau = tau_0  # which is 0.09
 
-    data_list = [
-        S / model_input.ave_hh_by_class,
-        E / model_input.ave_hh_by_class,
-        I / model_input.ave_hh_by_class,
-        R / model_input.ave_hh_by_class
-    ]
+# Compute log-likelihood with fixed lambda
+llh_fixed_lam = np.zeros(len(tau_vals))
+for i in tqdm(range(len(tau_vals)), desc="Computing llh vs tau"):
+    llh_fixed_lam[i] = llh_from_pars(sampled_households, test_times, tau_vals[i], true_lam)
 
-    lgd = ['S', 'E', 'I', 'R', "Test data"]
+# Compute log-likelihood with fixed tau
+llh_fixed_tau = np.zeros(len(lam_vals))
+for i in tqdm(range(len(lam_vals)), desc="Computing llh vs lambda"):
+    llh_fixed_tau[i] = llh_from_pars(sampled_households, test_times, true_tau, lam_vals[i])
 
-    fig, axis = plt.subplots(1, 1, sharex=True)
-    cmap = get_cmap('tab20')
-    alpha = 0.5
+# Run inference to get estimated parameters
+tau_hat, lam_hat = run_inference(multi_hh_data)
 
-    for i in range(len(data_list)):
-        axis.plot(t_all, data_list[i], label=lgd[i], color=cmap(i / len(data_list)), alpha=alpha)
+# Plot
+fig, (ax1, ax2) = plt.subplots(1, 2, sharey=True)
 
-    axis.plot(test_times, sample_data / model_input.ave_hh_by_class, marker=".", ls="", ms=20, label=lgd[-1])
-    axis.set_ylabel('Proportion of population')
-    axis.legend(ncol=1, bbox_to_anchor=(1, 0.50))
+ax1.plot(tau_vals, llh_fixed_lam, label='Log likelihood vs tau')
+ax1.set_xlabel("tau")
+ax1.set_ylabel("log likelihood")
+ax1.axvline(true_tau, color='k', linestyle='--', label='true value')
+ax1.axvline(tau_hat, color='r', linestyle='--', label='estimated value')
+ax1.legend(loc='lower right')
 
-    plt.savefig('outputs/LLh with Trajectories')
-    plt.close(fig)
+ax2.plot(lam_vals, llh_fixed_tau, label='Log likelihood vs lambda')
+ax2.set_xlabel("lambda")
+ax2.set_ylabel("log likelihood")
+ax2.axvline(true_lam, color='k', linestyle='--', label='true value')
+ax2.axvline(lam_hat, color='r', linestyle='--', label='estimated value')
+ax2.legend(loc='lower right')
 
-def plot_1D_llh(tau_vals, lam_vals, llh_fixed_lam, llh_fixed_tau, tau_hat, lam_hat):
-    """Plot 1D log-likelihoods for tau and lambda."""
-    tau_vals = np.linspace(0.05, 0.15, 100)
-    lam_vals = np.linspace(2.5, 3.5, 100)
+plt.tight_layout()
+plt.savefig('outputs/1D llh')
+plt.close(fig)
 
-    llh_fixed_lam = np.zeros((len(tau_vals),))
-    for i in range(len(tau_vals)):
-        # print("tau=",tau_vals[i])
-        llh_fixed_lam[i] = llh_from_pars(sampled_households, test_times, tau_vals[i], true_lam)
+#2D Plot (heat map)
 
-    llh_fixed_tau = np.zeros((len(lam_vals),))
-    for i in range(len(lam_vals)):
-        # print("lam=",lam_vals[i])
-        llh_fixed_tau[i] = llh_from_pars(sampled_households, test_times, model_input.beta_int, lam_vals[i])
+# Define the tau and lambda ranges
+tau_vals = np.arange(0.060, 0.105, 0.01)
+lam_vals = np.arange(2., 4.0, 0.25)
 
-    fig, (ax1, ax2) = plt.subplots(1, 2, sharey=True)
+# Initialize a matrix to store log-likelihoods
+llh_vals = np.zeros((len(tau_vals), len(lam_vals)))
 
-    ax1.plot(tau_vals, llh_fixed_lam, label='Log likelihood vs tau')
-    ax1.set_xlabel("tau")
-    ax1.set_ylabel("log likelihood")
-    ax1.axvline(model_input.beta_int, color='k', linestyle='--', label='true value for lambda')
-    ax1.axvline(tau_hat, color='r', linestyle='--', label='estimated value for lambda')
-    ax1.legend(loc='lower right')
+# Compute the log-likelihoods
+for i in range(len(tau_vals)):
+    for j in range(len(lam_vals)):
+        llh_vals[i, j] = llh_from_pars(multi_hh_data, test_times, tau_vals[i], lam_vals[j])
+        print("tau =", tau_vals[i], ", lam =", lam_vals[j], ", llh[tau, lam] =", llh_vals[i, j])
 
-    ax2.plot(lam_vals, llh_fixed_tau, label='Log likelihood vs lambda')
-    ax2.set_xlabel("lambda")
-    ax2.set_ylabel("log likelihood")
-    ax2.axvline(3., color='k', linestyle='--', label='true value for tau')
-    ax2.axvline(lam_hat, color='r', linestyle='--', label='estimated value for tau')
-    ax2.legend(loc='lower right')
+# Save the grid of results to a pickle file
+with open('outputs/inference-from-testing/synth-data-gridded-par-ests.pkl', 'wb') as f:
+    dump((tau_vals, lam_vals, llh_vals), f)
 
-    plt.savefig('outputs/1D llh')
-    plt.close(fig)
+# Create the plot
+fig, ax = plt.subplots(1, 1)
 
-def plot_2D_llh(tau_vals, lam_vals, llh_vals):
-    """Plot 2D log-likelihood surface."""
-    tau_vals = arange(0.060, 0.105, 0.01)
-    lam_vals = arange(2., 4.0, 0.25)
-    llh_vals = np.zeros((len(tau_vals), len(lam_vals)))
-    for i in range(len(tau_vals)):
-        for j in range(len(lam_vals)):
-            llh_vals[i, j] = llh_from_pars(sampled_households, test_times, tau_vals[i], lam_vals[j])
-            print("tau=", tau_vals[i], ", lam=", lam_vals[j], ", llh[tau, lam]=", llh_vals[i, j])
-    with open('outputs/inference-from-testing/synth-data-gridded-par-ests.pkl', 'wb') as f:
-        dump((tau_vals, lam_vals, llh_vals), f)
+lam_inc = lam_vals[1] - lam_vals[0]
+lam_max = lam_vals[-1] + lam_inc
+tau_inc = tau_vals[1] - tau_vals[0]
+tau_max = tau_vals[-1] + tau_inc
 
+# Plot heatmap of log-likelihoods
+im = ax.imshow(llh_vals, origin='lower',
+               extent=(lam_vals[0] - 0.5 * lam_inc, lam_max - 0.5 * lam_inc,
+                       tau_vals[0] - 0.5 * tau_inc, tau_max - 0.5 * tau_inc),
+               aspect=(lam_max - lam_vals[0]) / (tau_max - tau_vals[0]))
 
-    fig, ax = plt.subplots(1, 1)
-    lam_inc = lam_vals[1] - lam_vals[0]
-    lam_max = lam_vals[-1] + lam_inc
-    tau_inc = tau_vals[1] - tau_vals[0]
-    tau_max = tau_vals[-1] + tau_inc
+# Add labels and marker for true parameter values
+ax.set_xlabel("lambda")
+ax.set_ylabel("tau")
+ax.plot([3.0], [0.09], marker=".", ms=20, label="True value", color='red')
+ax.legend()
 
-    ax.imshow(llh_vals, origin='lower',
-              extent=(lam_vals[0] - 0.5 * lam_inc, lam_max - 0.5 * lam_inc,
-                      tau_vals[0] - 0.5 * tau_inc, tau_max - 0.5 * tau_inc),
-              aspect=(lam_max - lam_vals[0]) / (tau_max - tau_vals[0]))
+# Save the figure
+plt.savefig('outputs/2D llh')
+plt.close(fig)
 
-    ax.set_xlabel("tau")
-    ax.set_ylabel("lambda")
-    ax.plot([true_lam], [model_input.beta_int], marker=".", ms=20)
-
-    plt.savefig('outputs/2D llh')
-    plt.close(fig)

@@ -63,3 +63,53 @@ def one_step_population_likelihood(test_data,
                  init_prev,
                  R_comp) for data_i in test_data])))
 
+# Irene's version of what one_step_population_likelihood could look like.
+def one_step_population_likelihood(test_data,
+                                   test_times,
+                                   tau,
+                                   lam,
+                                   base_rhs,
+                                   growth_rate,
+                                   init_prev=1e-2,
+                                   R_comp=3):
+    '''This is a wrapper for one_step_household_llh function, which allows for the calculation of the joint likelihood
+    of an entire population's worth of independent one-step testing samples in a single function call.'''
+    total_llh = sum(
+        one_step_household_llh(hh_data,
+                               test_times,
+                               tau,
+                               lam,
+                               base_rhs,
+                               growth_rate,
+                               init_prev,
+                               R_comp)
+        for hh_data in test_data
+    )
+    return total_llh
+
+#Other stuff we might need later
+
+def run_one_step_inference(test_data,
+                           test_times,
+                           base_rhs,
+                           growth_rate,
+                           init_prev=1e-2,
+                           R_comp=3,
+                           tau_init=0.09,
+                           lam_init=3.0,
+                           bounds=((0.0, 0.15), (2.0, 5.0))):
+
+    def neg_log_likelihood(params):
+        tau, lam = params
+        return one_step_population_likelihood(test_data,
+                                               test_times,
+                                               tau,
+                                               lam,
+                                               base_rhs,
+                                               growth_rate,
+                                               init_prev,
+                                               R_comp)
+
+    result = minimize(neg_log_likelihood, [tau_init, lam_init], bounds=bounds)
+    tau_hat, lam_hat = result.x
+    return tau_hat, lam_hat

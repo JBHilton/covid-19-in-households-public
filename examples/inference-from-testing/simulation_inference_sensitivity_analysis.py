@@ -222,6 +222,98 @@ def run_inference(multi_hh_data):
 run_inference(mhd)
 
 ###############################
+#Plots
+###############################
+
+#1D Plot
+
+# Define parameter ranges
+tau_vals = np.linspace(0.05, 0.15, 100)
+lam_vals = np.linspace(2.5, 3.5, 100)
+
+# Assume sampled_households is multi_hh_data from earlier
+sampled_households = multi_hh_data
+true_lam = 3.0  # used in run_simulation
+true_tau = tau_0  # which is 0.09
+
+# Compute log-likelihood with fixed lambda
+llh_fixed_lam = np.zeros(len(tau_vals))
+for i in tqdm(range(len(tau_vals)), desc="Computing llh vs tau"):
+    llh_fixed_lam[i] = llh_from_pars(sampled_households, test_times, tau_vals[i], true_lam)
+
+# Compute log-likelihood with fixed tau
+llh_fixed_tau = np.zeros(len(lam_vals))
+for i in tqdm(range(len(lam_vals)), desc="Computing llh vs lambda"):
+    llh_fixed_tau[i] = llh_from_pars(sampled_households, test_times, true_tau, lam_vals[i])
+
+# Run inference to get estimated parameters
+tau_hat, lam_hat = run_inference(multi_hh_data)
+
+# Plot
+fig, (ax1, ax2) = plt.subplots(1, 2, sharey=True)
+
+ax1.plot(tau_vals, llh_fixed_lam, label='Log likelihood vs tau')
+ax1.set_xlabel("tau")
+ax1.set_ylabel("log likelihood")
+ax1.axvline(true_tau, color='k', linestyle='--', label='true value')
+ax1.axvline(tau_hat, color='r', linestyle='--', label='estimated value')
+ax1.legend(loc='lower right')
+
+ax2.plot(lam_vals, llh_fixed_tau, label='Log likelihood vs lambda')
+ax2.set_xlabel("lambda")
+ax2.set_ylabel("log likelihood")
+ax2.axvline(true_lam, color='k', linestyle='--', label='true value')
+ax2.axvline(lam_hat, color='r', linestyle='--', label='estimated value')
+ax2.legend(loc='lower right')
+
+plt.tight_layout()
+plt.savefig('outputs/1D llh')
+plt.close(fig)
+
+#2D Plot (heat map)
+
+# Define the tau and lambda ranges
+tau_vals = np.arange(0.060, 0.105, 0.01)
+lam_vals = np.arange(2., 4.0, 0.25)
+
+# Initialize a matrix to store log-likelihoods
+llh_vals = np.zeros((len(tau_vals), len(lam_vals)))
+
+# Compute the log-likelihoods
+for i in range(len(tau_vals)):
+    for j in range(len(lam_vals)):
+        llh_vals[i, j] = llh_from_pars(multi_hh_data, test_times, tau_vals[i], lam_vals[j])
+        print("tau =", tau_vals[i], ", lam =", lam_vals[j], ", llh[tau, lam] =", llh_vals[i, j])
+
+# Save the grid of results to a pickle file
+with open('outputs/inference-from-testing/synth-data-gridded-par-ests.pkl', 'wb') as f:
+    dump((tau_vals, lam_vals, llh_vals), f)
+
+# Create the plot
+fig, ax = plt.subplots(1, 1)
+
+lam_inc = lam_vals[1] - lam_vals[0]
+lam_max = lam_vals[-1] + lam_inc
+tau_inc = tau_vals[1] - tau_vals[0]
+tau_max = tau_vals[-1] + tau_inc
+
+# Plot heatmap of log-likelihoods
+im = ax.imshow(llh_vals, origin='lower',
+               extent=(lam_vals[0] - 0.5 * lam_inc, lam_max - 0.5 * lam_inc,
+                       tau_vals[0] - 0.5 * tau_inc, tau_max - 0.5 * tau_inc),
+               aspect=(lam_max - lam_vals[0]) / (tau_max - tau_vals[0]))
+
+# Add labels and marker for true parameter values
+ax.set_xlabel("lambda")
+ax.set_ylabel("tau")
+ax.plot([3.0], [0.09], marker=".", ms=20, label="True value", color='red')
+ax.legend()
+
+# Save the figure
+plt.savefig('outputs/2D llh')
+plt.close(fig)
+
+###############################
 #Sensitivity analysis
 ###############################
 
