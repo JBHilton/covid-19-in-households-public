@@ -25,7 +25,7 @@ os.getcwd()
 
 # Import functions from the project code
 from copy import deepcopy
-from numpy import arange, array, atleast_2d, log, where
+from numpy import arange, array, atleast_2d, log, sum, where
 from os import mkdir
 from os.path import isdir, isfile
 from pickle import load, dump
@@ -62,8 +62,10 @@ n_hh = 100  # Number of households for synthetic data
 
 # Initialize model input based on specifications
 model_input_to_fit = SEIRInput(SPEC, composition_list, comp_dist)
+'''Quick fix to make sure initial states are in form S>0, I>0 rather than S>0, E>0'''
+model_input_to_fit.new_case_compartment = 2
 #true_density_expo = .5 # Todo: bring this in from model input rather than defining directly
-test_times = np.array([7, 14, 21])
+test_times = np.array([7, 14])
 
 
 # Simulation function to generate data
@@ -162,12 +164,15 @@ def one_step_household_llh(hh_data,
                                                R_comp)
     Ht = 0 * H0 # Set up initial condition vector
     possible_states = where(abs(sum(rhs.states_inf_only, 1) - hh_data[0]) < 1e-1)[0]
+    norm_factor = sum(H0[possible_states])
+    if norm_factor == 0:
+        raise ValueError("Initial condition normalization failed: sum zero")
     # Set Ht equal to eigenvector initial condition, conditioned on test results
     Ht[possible_states, ] = H0[possible_states, ] / sum(H0[possible_states, ])
     llh = 0
 
     tspan = (test_times[0], test_times[1])
-    solution = solve_ivp(rhs, tspan, Ht, first_step=0.001, atol=1e-16)
+    solution = solve_ivp(rhs, tspan, Ht, first_step=0.001, atol=1e-6)
     T = solution.t
     H = solution.y
     I = hh_data[1]
@@ -215,3 +220,22 @@ def run_inference(multi_hh_data, base_rhs):
 #run_inference(multi_hh_data)
 run_inference(multi_hh_data, base_rhs)
 
+#debuging
+# Rerun your simulation
+multi_hh_data, base_rhs = run_simulation(lambda_val=3.0, tau_val=0.09)
+
+# Recreate H0
+H0 = make_initial_condition_by_eigenvector(
+    growth_rate,
+    base_rhs.model_input,
+    base_rhs.household_population,
+    base_rhs,
+    1e-2,  # corresponds to init_prev
+    0.0,   # corresponds to seed_prev
+    False, # corresponds to stochastic
+    3      # corresponds to R_comp
+)
+
+
+# Check for NaNs
+assert not np.isnan(H0).any(), "H0 contains NaNs"
