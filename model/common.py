@@ -251,7 +251,7 @@ class UnloopedRateEquations:
                  import_model,
                  sources="ALL",
                  epsilon=1.0):
-
+        self.household_population = household_population
         self.compartmental_structure = \
             household_population.compartmental_structure
         self.no_compartments = subsystem_key[self.compartmental_structure][1]
@@ -368,6 +368,19 @@ class UnloopedRateEquations:
                                         sparse((self.import_rates[arange(len(self.inf_event_row)), self.inf_event_class],
                                         (self.inf_event_row,
                                         self.inf_event_row)), shape=self.matrix_shape)
+
+    # Convenience function to rescale external infection event matrices
+    def update_ext_rate(self, ext_rate):
+        self.Q_ext *= ext_rate
+        self.Q_import *= ext_rate
+        for ic in range(self.no_inf_compartments):
+            self.ext_matrix_list[ic] *= ext_rate
+
+    # Convenience function to rescale internal infection event matrices
+    def update_int_rate(self, int_rate):
+        self.Q_int_inf *= int_rate
+        self.Q_int = self.Q_int_fixed + self.Q_int_inf
+
 
 
 class LogRateEquations:
