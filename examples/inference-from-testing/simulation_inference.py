@@ -127,23 +127,19 @@ def run_simulation(lambda_val, tau_val):
             T = solution.t
             H = solution.y
             state = choice(range(len(H[:, -1])), 1, p=H[:, -1] / sum(H[:, -1]))
-            #test_data[i] = rhs.states_inf_only[state]
-            test_data[i] = float(rhs.states_inf_only[state[0], 0])
-
+            test_data[i] = rhs.states_inf_only[state]
             Ht *= 0
             Ht[state] = 1
-        return test_data, float(rhs.states_inf_only[state[0], 0])
+        return (test_data)
 
     ## Now do multiple households
 
     # Generate test data:
 
-    multi_hh_data_with_initials = [generate_single_hh_test_data(test_times) for i in range(n_hh)]
-    multi_hh_data = [d for d, _ in multi_hh_data_with_initials]
-    initial_infecteds = [i for _, i in multi_hh_data_with_initials]
-    return multi_hh_data, initial_infecteds, base_rhs
+    multi_hh_data = [generate_single_hh_test_data(test_times) for i in range(n_hh)]
+    return multi_hh_data, base_rhs
 
-def one_step_household_llh(hh_data_with_initial,
+def one_step_household_llh(hh_data,
                   test_times,
                   tau,
                   lam,
@@ -185,52 +181,36 @@ def one_step_household_llh(hh_data_with_initial,
     return(llh)
 
 def one_step_population_likelihood(test_data,
-                                   test_times,
-                                   tau,
-                                   lam,
-                                   base_rhs,
-                                   growth_rate,
-                                   init_prev,
-                                   R_comp):
+                  test_times,
+                  tau,
+                  lam,
+                  base_rhs,
+                 growth_rate,
+                 init_prev,
+                 R_comp):
     '''This is a wrapper for one_step_household_llh function, which allows for the calculation of the joint likelihood
     of an entire population's worth of independent one-step testing samples in a single function call.'''
-    return sum([
-        one_step_household_llh((hh_results, infected_at_start),
-                               test_times,
-                               tau,
-                               lam,
-                               base_rhs,
-                               growth_rate,
-                               init_prev,
-                               R_comp)
-        for hh_results, infected_at_start in test_data
-    ])
+    return (sum(array([one_step_household_llh(data_i,
+                  test_times,
+                  tau,
+                  lam,
+                  base_rhs,
+                 growth_rate,
+                 init_prev,
+                 R_comp) for data_i in test_data])))
 
 # Argument to type in console to run run_inference
 #multi_hh_data = run_simulation(3.0, .09)
-#multi_hh_data, base_rhs = run_simulation(3.0, .09)
-multi_hh_data, initial_infecteds, base_rhs = run_simulation(3.0, .09)
+multi_hh_data, base_rhs = run_simulation(3.0, .09)
 
 
 # Run inference to estimate tau and lambda
-def run_inference(multi_hh_data, initial_infecteds, base_rhs):
-    combined_data = list(zip(multi_hh_data, initial_infecteds))
+def run_inference(multi_hh_data, base_rhs):
 
     def f(params):
         tau = params[0]
         lam = params[1]
-        fresh_rhs = deepcopy(base_rhs)
-
-        return -one_step_population_likelihood(
-            combined_data,
-            test_times,
-            tau,
-            lam,
-            fresh_rhs,
-            growth_rate,
-            1e-2,  # init_prev
-            3      # R_comp
-        )
+        return -one_step_population_likelihood(multi_hh_data, test_times, tau, lam, base_rhs, growth_rate, init_prev=1e-2, R_comp=3)
 
     mle = sp.optimize.minimize(f, [tau_0, lambda_0], bounds=((0.0, 0.15), (2., 5.)))
     tau_est, lambda_est = mle.x[0], mle.x[1]
@@ -238,8 +218,7 @@ def run_inference(multi_hh_data, initial_infecteds, base_rhs):
 
 # Run run_inference
 #run_inference(multi_hh_data)
-#run_inference(multi_hh_data, base_rhs)
-run_inference(multi_hh_data, initial_infecteds, base_rhs)
+run_inference(multi_hh_data, base_rhs)
 
 #debuging
 # Rerun your simulation
