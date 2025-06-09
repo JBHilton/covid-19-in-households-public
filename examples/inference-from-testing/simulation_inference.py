@@ -57,8 +57,10 @@ growth_rate = log(2) / DOUBLING_TIME
 # Simulation constants
 n_sims = 10
 lambda_0 = 3.0
-tau_0 = 0.09
+tau_0 = 0.25
 n_hh = 100  # Number of households for synthetic data
+
+pop_prev = 1e-2 # Initial prevalence in simulation
 
 # Initialize model input based on specifications
 model_input_to_fit = SEIRInput(SPEC, composition_list, comp_dist)
@@ -66,6 +68,16 @@ model_input_to_fit = SEIRInput(SPEC, composition_list, comp_dist)
 model_input_to_fit.new_case_compartment = 2
 #true_density_expo = .5 # Todo: bring this in from model input rather than defining directly
 test_times = np.array([7, 14])
+
+def initialise_at_first_test_date(rhs,
+                                  H0):
+    base_sol = solve_ivp(rhs,
+                         (0, test_times[0]),
+                         H0,
+                         first_step=0.001,
+                         atol=1e-16)
+    H_t0 = base_sol.y[:, -1]
+    return H_t0
 
 
 # Simulation function to generate data
@@ -81,8 +93,6 @@ def run_simulation(lambda_val, tau_val):
     household_population = HouseholdPopulation(
         composition_list, comp_dist, model_input)
 
-    pop_prev = 1e-2
-
     no_imports = NoImportModel(4, 1)
 
     base_rhs = UnloopedSEIRRateEquations(model_input, household_population, no_imports)
@@ -90,7 +100,7 @@ def run_simulation(lambda_val, tau_val):
                                                     model_input,
                                                     household_population,
                                                     base_rhs,
-                                                    1e-1,
+                                                    pop_prev,
                                                     0.0,
                                                     False,
                                                     3)
@@ -102,8 +112,8 @@ def run_simulation(lambda_val, tau_val):
                                      x0)
 
     rhs = UnloopedSEIRRateEquations(model_input, household_population, fixed_imports, sources="IMPORT")
-    base_sol = solve_ivp(rhs, (0, test_times[0]), base_H0, first_step=0.001, atol=1e-16)
-    H_t0 = base_sol.y[:, -1]
+    H_t0 = initialise_at_first_test_date(rhs,
+                                  base_H0)
 
     # H0 = np.zeros((household_population.total_size), )
     # all_sus = np.where(np.sum(rhs.states_exp_only + rhs.states_inf_only + rhs.states_rec_only, 1) < 1e-1)[0]
@@ -154,12 +164,11 @@ def one_step_household_llh(hh_data,
     '''This function calculates the log likelihood of parameters tau and lam given some data with test results at two
     time points for a single household. This assumes data comes as number of positive tests at start and end time point,
     and that each positive test corresponds to exactly one individual in the I compartment of the model.'''
-    print(hh_data)
     rhs = deepcopy(base_rhs)
-    rhs.int_rate *= tau
-    rhs.ext_rate *= lam
+    rhs.update_int_rate(tau)
+    rhs.update_int_rate(lam)
 
-    H0 = make_initial_condition_by_eigenvector(growth_rate,
+    base_H0 = make_initial_condition_by_eigenvector(growth_rate,
                                                rhs.model_input,
                                                rhs.household_population,
                                                rhs,
@@ -167,14 +176,15 @@ def one_step_household_llh(hh_data,
                                                0.0,
                                                False,
                                                R_comp)
-    Ht = 0 * H0 # Set up initial condition vector
+    H_t0 = initialise_at_first_test_date(rhs,
+                                         base_H0)
+    Ht = 0 * H_t0 # Set up initial condition vector
     possible_states = where(abs(sum(rhs.states_inf_only, 1) - hh_data[0]) < 1e-1)[0]
-    print(possible_states)
-    norm_factor = sum(H0[possible_states])
+    norm_factor = sum(H_t0[possible_states])
     if norm_factor == 0:
         raise ValueError("Initial condition normalization failed: sum zero")
     # Set Ht equal to eigenvector initial condition, conditioned on test results
-    Ht[possible_states, ] = H0[possible_states, ] / sum(H0[possible_states, ])
+    Ht[possible_states, ] = H_t0[possible_states, ] / sum(H_t0[possible_states, ])
     llh = 0
 
     tspan = (test_times[0], test_times[1])
@@ -218,7 +228,7 @@ def run_inference(multi_hh_data, base_rhs):
     def f(params):
         tau = params[0]
         lam = params[1]
-        return -one_step_population_likelihood(multi_hh_data, test_times, tau, lam, base_rhs, growth_rate, init_prev=1e-2, R_comp=3)
+        return -one_step_population_likelihood(multi_hh_data, test_times, tau, lam, base_rhs, growth_rate, init_prev=pop_prev, R_comp=3)
 
     mle = sp.optimize.minimize(f, [tau_0, lambda_0], bounds=((0.0, 0.15), (2., 5.)))
     tau_est, lambda_est = mle.x[0], mle.x[1]
@@ -226,7 +236,22 @@ def run_inference(multi_hh_data, base_rhs):
 
 # Run run_inference
 #run_inference(multi_hh_data)
-run_inference(multi_hh_data, base_rhs)
+tau_est, lambda_est = run_inference(multi_hh_data, base_rhs)
+
+llh_by_tau = [one_step_population_likelihood(multi_hh_data,
+                                             test_times,
+                                             tau, lambda_0,
+                                             base_rhs,
+                                             growth_rate,
+                                             init_prev=pop_prev,
+                                             R_comp=3) for tau in arange(.0, .2, .02)]
+llh_by_lambda = [one_step_population_likelihood(multi_hh_data,
+                                             test_times,
+                                             tau_0, lam,
+                                             base_rhs,
+                                             growth_rate,
+                                             init_prev=pop_prev,
+                                             R_comp=3) for lam in arange(1., 4., .25)]
 
 #debuging
 # Rerun your simulation
