@@ -102,27 +102,29 @@ def run_simulation(lambda_val, tau_val):
                                      x0)
 
     rhs = UnloopedSEIRRateEquations(model_input, household_population, fixed_imports, sources="IMPORT")
+    base_sol = solve_ivp(rhs, (0, test_times[0]), base_H0, first_step=0.001, atol=1e-16)
+    H_t0 = base_sol.y[:, -1]
 
-    H0 = np.zeros((household_population.total_size), )
-    all_sus = np.where(np.sum(rhs.states_exp_only + rhs.states_inf_only + rhs.states_rec_only, 1) < 1e-1)[0]
-    one_inf = np.where((np.abs(np.sum(rhs.states_inf_only, 1) - 1) < 1e-1) & (
-                np.sum(rhs.states_exp_only + rhs.states_rec_only, 1) < 1e-1))[0]
-    H0[all_sus] = comp_dist
-
-    ## Now set up evaluation time points and solve system:
-
-    # New time at which we evaluate the infection
-    trange = np.arange(0, 7 * 5, 7)  # Evaluate for 12 weeks
-
-    H0 = make_initial_condition_by_eigenvector(growth_rate, model_input, household_population, rhs, 1e-1, 0.0, False, 3)
+    # H0 = np.zeros((household_population.total_size), )
+    # all_sus = np.where(np.sum(rhs.states_exp_only + rhs.states_inf_only + rhs.states_rec_only, 1) < 1e-1)[0]
+    # one_inf = np.where((np.abs(np.sum(rhs.states_inf_only, 1) - 1) < 1e-1) & (
+    #             np.sum(rhs.states_exp_only + rhs.states_rec_only, 1) < 1e-1))[0]
+    # H0[all_sus] = comp_dist
+    #
+    # ## Now set up evaluation time points and solve system:
+    #
+    # # New time at which we evaluate the infection
+    # trange = np.arange(0, 7 * 5, 7)  # Evaluate for 12 weeks
+    #
+    # H0 = make_initial_condition_by_eigenvector(growth_rate, model_input, household_population, rhs, 1e-1, 0.0, False, 3)
 
 
 
     def generate_single_hh_test_data(test_times):
-        Ht = deepcopy(H0)
+        Ht = deepcopy(H_t0)
         test_data = np.zeros((len(test_times),))
         for i in range(len(test_times) - 1):
-            tspan = (test_times[i], test_times[i + 1])
+            tspan = (test_times[i], test_times[i+1])
             solution = solve_ivp(rhs, tspan, Ht, first_step=0.001, atol=1e-16)
             T = solution.t
             H = solution.y
@@ -139,6 +141,8 @@ def run_simulation(lambda_val, tau_val):
     multi_hh_data = [generate_single_hh_test_data(test_times) for i in range(n_hh)]
     return multi_hh_data, base_rhs
 
+
+
 def one_step_household_llh(hh_data,
                   test_times,
                   tau,
@@ -150,6 +154,7 @@ def one_step_household_llh(hh_data,
     '''This function calculates the log likelihood of parameters tau and lam given some data with test results at two
     time points for a single household. This assumes data comes as number of positive tests at start and end time point,
     and that each positive test corresponds to exactly one individual in the I compartment of the model.'''
+    print(hh_data)
     rhs = deepcopy(base_rhs)
     rhs.int_rate *= tau
     rhs.ext_rate *= lam
@@ -164,6 +169,7 @@ def one_step_household_llh(hh_data,
                                                R_comp)
     Ht = 0 * H0 # Set up initial condition vector
     possible_states = where(abs(sum(rhs.states_inf_only, 1) - hh_data[0]) < 1e-1)[0]
+    print(possible_states)
     norm_factor = sum(H0[possible_states])
     if norm_factor == 0:
         raise ValueError("Initial condition normalization failed: sum zero")
@@ -198,6 +204,8 @@ def one_step_population_likelihood(test_data,
                  growth_rate,
                  init_prev,
                  R_comp) for data_i in test_data])))
+
+
 
 # Argument to type in console to run run_inference
 #multi_hh_data = run_simulation(3.0, .09)
