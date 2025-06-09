@@ -1301,7 +1301,7 @@ def get_multiplier_eigenvalue(r,
     elif multiplier.shape==(2,2):
         evalue = (speig(multiplier.T.toarray(), k=1)[0]).real
     else:
-        evalue = (speig(multiplier.T,k=1)[0]).real
+        evalue = (speig(multiplier.T, k=1)[0]).real
     return evalue
 
 def estimate_growth_rate(household_population,
