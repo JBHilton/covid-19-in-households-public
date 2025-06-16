@@ -1,6 +1,4 @@
 # Import required libraries
-import numpy as np
-from numpy.random import choice
 import matplotlib.pyplot as plt
 from matplotlib.pyplot import subplots, savefig
 from matplotlib.cm import get_cmap
@@ -9,12 +7,15 @@ import scipy as sp
 from scipy.integrate import solve_ivp
 import time
 from tqdm import tqdm
-from scipy.optimize import minimize
-import scipy as sp
 from scipy.integrate import solve_ivp
 from numpy import linalg as LA
 import pickle
 from numpy.linalg import eig
+
+import numpy as np
+from numpy.random import choice
+from scipy.optimize import minimize
+import scipy as sp
 
 # Adjust for Windows file path if necessary
 import os
@@ -272,3 +273,39 @@ H0 = make_initial_condition_by_eigenvector(
 
 # Check for NaNs
 assert not np.isnan(H0).any(), "H0 contains NaNs"
+
+#MCMC -sample from posterior
+
+taus = np.linspace(0.01, 0.15, 30)
+lambdas = np.linspace(2.0, 5.0, 30)
+posterior = np.zeros((len(taus), len(lambdas)))
+
+# Likelihood surface calculation
+
+for i, tau in enumerate(tqdm(taus, desc="Outer loop")):
+    for j, lam in enumerate(tqdm(lambdas, desc="Inner loop", leave=False)):
+        llh = one_step_population_likelihood(multi_hh_data, test_times, tau, lam,
+                                             base_rhs, growth_rate, pop_prev, R_comp=3)
+        posterior[i, j] = np.exp(llh)
+
+# Normalize posterior
+posterior /= np.sum(posterior)
+
+# Estimate marginals
+tau_marginal = np.sum(posterior, axis=1)
+lambda_marginal = np.sum(posterior, axis=0)
+
+# Plot the heatmap of the posterior surface
+
+# Create meshgrid
+T, L = np.meshgrid(lambdas, taus)  # X = lambda, Y = tau
+
+plt.figure(figsize=(8, 6))
+plt.contourf(L, T, posterior, levels=50, cmap='viridis')
+plt.xlabel('Lambda (External Transmission Rate)')
+plt.ylabel('Tau (Internal Transmission Rate)')
+plt.title('Posterior Surface (Likelihood exp(llh))')
+plt.colorbar(label='Posterior Density')
+plt.tight_layout()
+plt.show()
+plt.savefig('outputs/posterior llh')
