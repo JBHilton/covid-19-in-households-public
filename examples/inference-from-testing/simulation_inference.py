@@ -68,7 +68,7 @@ model_input_to_fit = SEIRInput(SPEC, composition_list, comp_dist)
 '''Quick fix to make sure initial states are in form S>0, I>0 rather than S>0, E>0'''
 model_input_to_fit.new_case_compartment = 2
 #true_density_expo = .5 # Todo: bring this in from model input rather than defining directly
-test_times = np.array([7, 14])
+test_times = np.array([14, 28])
 
 def initialise_at_first_test_date(rhs,
                                   H0):
@@ -309,3 +309,27 @@ plt.colorbar(label='Posterior Density')
 plt.tight_layout()
 plt.show()
 plt.savefig('outputs/posterior llh')
+
+# Number of repeated simulations/inferences
+n_repeats = 5
+
+# Store results
+results = []
+
+for i in range(n_repeats):
+    print(f"Running simulation and inference {i + 1} / {n_repeats}")
+
+    # Run simulation to generate synthetic data
+    multi_hh_data, base_rhs = run_simulation(3.0, 0.09)
+
+    # Run inference to estimate parameters
+    tau_est, lambda_est = run_inference(multi_hh_data, base_rhs)
+
+    # Store the estimates
+    results.append((tau_est, lambda_est))
+
+results_array = np.array(results)
+
+# Print results
+for i, (tau_est, lambda_est) in enumerate(results):
+    print(f"Run {i + 1}: tau = {tau_est:.4f}, lambda = {lambda_est:.4f}")
