@@ -340,9 +340,9 @@ class UnloopedRateEquations:
             raise ValueError('State vector contains NaNs at t={0}'.format(t))
 
         jac = (self.Q_int_fixed +
-               self.int_rate * self.Q_int_inf +
-               self.ext_rate * self.Q_ext +
-               self.ext_rate * self.Q_import).T
+               self.Q_int_inf +
+               self.Q_ext +
+               self.Q_import).T
         return jac
 
     def external_matrices(self, t, H):
@@ -371,6 +371,7 @@ class UnloopedRateEquations:
 
     # Convenience function to rescale external infection event matrices
     def update_ext_rate(self, ext_rate):
+        self.ext_rate = ext_rate
         self.Q_ext *= ext_rate
         self.Q_import *= ext_rate
         for ic in range(self.no_inf_compartments):
@@ -378,6 +379,7 @@ class UnloopedRateEquations:
 
     # Convenience function to rescale internal infection event matrices
     def update_int_rate(self, int_rate):
+        self.int_rate = int_rate
         self.Q_int_inf *= int_rate
         self.Q_int = self.Q_int_fixed + self.Q_int_inf
 

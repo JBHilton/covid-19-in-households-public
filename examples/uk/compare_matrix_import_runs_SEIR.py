@@ -54,9 +54,9 @@ exp_imports = ExponentialImportModel(4,
                                      growth_rate,
                                      array([1e-5, 1e-5]))
 
-rhs = SEIRRateEquations(model_input, household_population, fixed_imports)
-rhs_M = MatrixImportSEIRRateEquations(model_input, household_population, fixed_imports)
-rhs_U = UnloopedSEIRRateEquations(model_input, household_population, fixed_imports, sources="ALL")
+rhs = SEIRRateEquations(model_input, household_population, exp_imports)
+rhs_M = MatrixImportSEIRRateEquations(model_input, household_population, exp_imports)
+rhs_U = UnloopedSEIRRateEquations(model_input, household_population, exp_imports, sources="ALL")
 
 H0 = make_initial_condition_by_eigenvector(growth_rate, model_input, household_population, rhs_M, 1e-5, 0.0,False,3)
 S0 = H0.T.dot(household_population.states[:, ::4])
@@ -140,23 +140,21 @@ household_population_half_inf = HouseholdPopulation(
 rhs_half_inf_direct = UnloopedSEIRRateEquations(model_input_half_inf,
                                                 household_population_half_inf,
                                                 fixed_imports,
-                                                sources="ALL")
+                                                sources="BETWEEN")
 
 # And set up by overwriting Q_int in the rhs object for the base model:
-rhs_half_inf_overwrite = deepcopy(rhs_U)
+rhs_base = UnloopedSEIRRateEquations(model_input, household_population, fixed_imports, sources="BETWEEN")
+rhs_half_inf_overwrite = deepcopy(rhs_base)
 rhs_half_inf_overwrite.Q_int_inf *= 0.5
 rhs_half_inf_overwrite.Q_int = rhs_half_inf_overwrite.Q_int_inf +\
     rhs_half_inf_overwrite.Q_int_fixed
 
 # Check if there is any difference between the two arrays:
-Q_diff = rhs_half_inf_direct.Q_int - rhs_half_inf_overwrite.Q_int
-print(abs(Q_diff).max(None))
+Q_int_diffs = {"direct - overwrite": abs(rhs_half_inf_direct.Q_int - rhs_half_inf_overwrite.Q_int).max(None)}
 
 # And double check to make sure the subtraction operation isn't trivially zero for some reason:
-Q_diff2 = rhs_half_inf_direct.Q_int - rhs_U.Q_int
-print(abs(Q_diff2).max(None))
-Q_diff3 = rhs_half_inf_overwrite.Q_int - rhs_U.Q_int
-print(abs(Q_diff2).max(None))
+Q_int_diffs["direct - base"] = abs(rhs_half_inf_direct.Q_int - rhs_U.Q_int).max(None)
+Q_int_diffs["overwrite - base"] = abs(rhs_half_inf_overwrite.Q_int - rhs_U.Q_int).max(None)
 
 # Alternative check: does halving and then multiplying by 2 give the same result as the original model?
 rhs_reset = deepcopy(rhs_half_inf_direct)
@@ -164,22 +162,58 @@ rhs_reset.Q_int_inf *= 2.
 rhs_reset.Q_int = rhs_reset.Q_int_inf +\
     rhs_reset.Q_int_fixed
 
-Q_diff4 = rhs_reset.Q_int - rhs_U.Q_int
-print(abs(Q_diff4).max(None))
+Q_int_diffs["reset-base"] = abs(rhs_reset.Q_int - rhs_U.Q_int).max(None)
 
 # Now check updating system works by running model with directly scaled matrices and updated int_rate attribute.
-rhs_int_rate_update = deepcopy(rhs_U)
+rhs_int_rate_update = deepcopy(rhs_base)
 rhs_int_rate_update.int_rate *= 0.5
 
 # Do some timing just in case there's a performance difference
-start1 = time.time()
-solution1 = solve_ivp(rhs_half_inf_overwrite, tspan, H0, first_step=0.001, atol=1e-16, t_eval = arange(0., 365., 1.))
-print("rhs_half_inf_overwrite", time.time()- start1)
-start2 = time.time()
-solution2 = solve_ivp(rhs_int_rate_update, tspan, H0, first_step=0.001, atol=1e-16, t_eval = arange(0., 365., 1.))
-print("rhs_int_rate_update", time.time() - start2)
+start_time = time.time()
+sol_direct = solve_ivp(rhs_half_inf_direct, tspan, H0, first_step=0.001, atol=1e-16, t_eval = arange(0., 365., 1.))
+print("rhs_half_inf_direct execution time:", time.time()- start_time)
+start_time = time.time()
+sol_overwrite = solve_ivp(rhs_half_inf_overwrite, tspan, H0, first_step=0.001, atol=1e-16, t_eval = arange(0., 365., 1.))
+print("rhs_half_inf_overwrite execution time:", time.time()- start_time)
+start_time = time.time()
+sol_update = solve_ivp(rhs_int_rate_update, tspan, H0, first_step=0.001, atol=1e-16, t_eval = arange(0., 365., 1.))
+print("rhs_int_rate_update execution time:", time.time() - start_time)
 
-# Should find that they give identical results:
-H1 = solution1.y
-H2 = solution2.y
-print("Max absolute difference between solutions for H>1e-9 is", max(abs((H1-H2))[H1>1e-9]))
+# Should find that direct and overwrite give identical results, while update is incorrect:
+sol_diffs = {"direct - update" : max(abs((sol_direct.y-sol_update.y))[sol_update.y>1e-9]),
+             "direct - overwrite" : max(abs((sol_direct.y-sol_overwrite.y))[sol_overwrite.y>1e-9]),
+             "overwrite - update" : max(abs((sol_overwrite.y-sol_update.y))[sol_overwrite.y>1e-9])}
+
+# Now try another approach: update method
+rhs_method = deepcopy(rhs_base)
+rhs_method.update_int_rate(0.5)
+
+# Should find we get the correct Q_int again
+Q_int_diffs["direct-method"] = abs(rhs_half_inf_direct.Q_int - rhs_method.Q_int).max(None)
+Q_int_diffs["method-base"] = abs(rhs_method.Q_int - rhs_base.Q_int).max(None)
+
+# Compare solver performance and results
+start_time = time.time()
+sol_method = solve_ivp(rhs_method, tspan, H0, first_step=0.001, atol=1e-16, t_eval = arange(0., 365., 1.))
+print("rhs_int_rate_update execution time:", time.time() - start_time)
+sol_diffs["direct - method"] = max(abs((sol_direct.y-sol_method.y))[sol_method.y>1e-9])
+sol_diffs["overwrite - method"] = max(abs((sol_overwrite.y-sol_method.y))[sol_method.y>1e-9])
+
+# How would this look inside an MCMC step?
+#
+# # Before running MCMC:
+# # Set up model input with tau=lambda=1 by rescaling transmission matrices
+# model_input_MCMC = deepcopy(model_input)
+# model_input_MCMC.k_home *= 1 / model_input_MCMC.beta_int
+# model_input_MCMC.k_ext *= 1 / beta_ext
+#
+# rhs_MCMC = UnloopedSEIRRateEquations(model_input_MCMC,
+#                                     household_population,
+#                                     fixed_imports,
+#                                     sources="ALL")
+#
+# # On each MCMC step
+# def update_function(tau, lmbd, data):
+#     rhs_MCMC.int_rate = tau
+#     rhs_MCMC.ext_rate = lmbd
+#     return evaluate_likelihood(rhs_MCMC, data)
