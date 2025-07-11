@@ -127,6 +127,12 @@ time_series_U = {
 print("Max relative error in H_M for H>1e-9 is", max(abs((H-H_M))[H>1e-9]/H[H>1e-9]))
 print("Max relative error in H_U for H>1e-9 is", max(abs((H-H_U))[H>1e-9]/H[H>1e-9]))
 
+# Check growth rate estimate works in alternative models:
+r_base = estimate_growth_rate(household_population, rhs, [0.001, 5], 1e-9)
+r_U = estimate_growth_rate(household_population, rhs_U, [0.001, 5], 1e-9)
+print("Growth rate from RateEquations =", r_base)
+print("Growth rate from UnloopedRateEquations =", r_U)
+
 # Now check whether directly setting up a model with a given parameter is the same as inputting that parameter as we
 # would in an MCMC routine:
 
@@ -198,6 +204,16 @@ sol_method = solve_ivp(rhs_method, tspan, H0, first_step=0.001, atol=1e-16, t_ev
 print("rhs_int_rate_update execution time:", time.time() - start_time)
 sol_diffs["direct - method"] = max(abs((sol_direct.y-sol_method.y))[sol_method.y>1e-9])
 sol_diffs["overwrite - method"] = max(abs((sol_overwrite.y-sol_method.y))[sol_method.y>1e-9])
+
+r_direct = estimate_growth_rate(household_population, rhs_half_inf_direct, [0.001, 5], 1e-9)
+r_method = estimate_growth_rate(household_population, rhs_method, [0.001, 5], 1e-9)
+print("Growth rate from direct rescaling =", r_direct)
+print("Growth rate from method rescaling =", r_method)
+
+rhs_no_int_inf = deepcopy(rhs_base)
+rhs_no_int_inf.update_int_rate(0.)
+print("Growth rate from model without internal infection =",
+      estimate_growth_rate(household_population, rhs_no_int_inf, [0.001, 5], 1e-9))
 
 # How would this look inside an MCMC step?
 #
