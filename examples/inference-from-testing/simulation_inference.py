@@ -160,7 +160,7 @@ def run_simulation(lambda_val, tau_val):
     multi_hh_data = [generate_single_hh_test_data(test_times) for i in range(n_hh)]
     return multi_hh_data, base_rhs
 
-
+#######################
 
 def one_step_household_llh(hh_data,
                   test_times,
@@ -236,7 +236,7 @@ def run_inference(multi_hh_data, base_rhs):
     return tau_est, lambda_est
 
 #### Repeat fits written by JH
-n_attempts = 100
+n_attempts = 2
 tau_list = np.zeros(n_attempts)
 lambda_list = np.zeros(n_attempts)
 start_time = time.time()
@@ -369,3 +369,34 @@ results_array = np.array(results)
 # Print results
 for i, (tau_est, lambda_est) in enumerate(results):
     print(f"Run {i + 1}: tau = {tau_est:.4f}, lambda = {lambda_est:.4f}")
+
+###### Likelihood calculation by IGM
+
+# MAPPING
+
+def create_result_mappings(max_hh_size):
+    result_to_index = {}
+    index_to_result = []  # List: index → (N_HH, y)
+
+    for N in range(1, max_hh_size + 1):     # Household sizes
+        for y in range(0, N + 1):           # Number of positives in that household
+            k = len(index_to_result)
+            result_to_index[(N, y)] = k
+            index_to_result.append((N, y))
+
+    return result_to_index, index_to_result
+
+# Example usage
+N_M = composition_list.max()  # E.g., 3
+result_to_index, index_to_result = create_result_mappings(N_M)
+
+# Test print
+print("Mapping (N_HH, y) → index:")
+for k, v in result_to_index.items():
+    print(f"{k} → {v}")
+
+# Direct mapping:
+k = result_to_index[(3, 2)]         # → index
+N_HH, y = index_to_result[k]        # → (3, 2)
+
+
