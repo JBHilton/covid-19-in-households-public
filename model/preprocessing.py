@@ -648,35 +648,41 @@ class ModelInput(ABC):
         self.new_case_compartment = \
             subsystem_key[self.compartmental_structure][3]
 
-        self.fine_bds = spec['fine_bds']
-        self.coarse_bds = spec['coarse_bds']
-        self.no_age_classes = len(self.coarse_bds)
+        # If dictionary keys exist for age-structured model, set up age structured mixing, otherwise read mixing
+        # matrices in directly from dictionary
+        if {'fine_bds', 'coarse_bds', 'pop_pyramid_file_name'} <= spec.keys():
+            self.fine_bds = spec['fine_bds']
+            self.coarse_bds = spec['coarse_bds']
+            self.no_age_classes = len(self.coarse_bds)
 
-        self.pop_pyramid = read_csv(
-            spec['pop_pyramid_file_name'], index_col=0)
-        self.pop_pyramid = \
-        (self.pop_pyramid['F'] + self.pop_pyramid['M']).to_numpy()
+            self.pop_pyramid = read_csv(
+                spec['pop_pyramid_file_name'], index_col=0)
+            self.pop_pyramid = \
+            (self.pop_pyramid['F'] + self.pop_pyramid['M']).to_numpy()
 
-        if self.no_age_classes==1:
-            # Use a 1x1 unit matrix for
-            # non-age-structured models
-            self.k_home = array([[1]])
-            self.k_ext = array([[1]])
+            if self.no_age_classes==1:
+                # Use a 1x1 unit matrix for
+                # non-age-structured models
+                self.k_home = array([[1]])
+                self.k_ext = array([[1]])
+            else:
+                self.k_home = read_excel(
+                    spec['k_home']['file_name'],
+                    sheet_name=spec['k_home']['sheet_name'],
+                    header=header).to_numpy()
+                self.k_all = read_excel(
+                    spec['k_all']['file_name'],
+                    sheet_name=spec['k_all']['sheet_name'],
+                    header=header).to_numpy()
+
+                self.k_home = aggregate_contact_matrix(
+                    self.k_home, self.fine_bds, self.coarse_bds, self.pop_pyramid)
+                self.k_all = aggregate_contact_matrix(
+                    self.k_all, self.fine_bds, self.coarse_bds, self.pop_pyramid)
+                self.k_ext = self.k_all - self.k_home
         else:
-            self.k_home = read_excel(
-                spec['k_home']['file_name'],
-                sheet_name=spec['k_home']['sheet_name'],
-                header=header).to_numpy()
-            self.k_all = read_excel(
-                spec['k_all']['file_name'],
-                sheet_name=spec['k_all']['sheet_name'],
-                header=header).to_numpy()
-
-            self.k_home = aggregate_contact_matrix(
-                self.k_home, self.fine_bds, self.coarse_bds, self.pop_pyramid)
-            self.k_all = aggregate_contact_matrix(
-                self.k_all, self.fine_bds, self.coarse_bds, self.pop_pyramid)
-            self.k_ext = self.k_all - self.k_home
+            self.k_home = spec['k_home']
+            self.k_ext = spec['k_ext']
 
         self.composition_list = composition_list
         self.composition_distribution = composition_distribution
