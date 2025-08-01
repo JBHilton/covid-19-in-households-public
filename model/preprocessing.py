@@ -683,6 +683,7 @@ class ModelInput(ABC):
         else:
             self.k_home = spec['k_home']
             self.k_ext = spec['k_ext']
+            self.no_age_classes = self.k_home.shape[0]
 
         self.composition_list = composition_list
         self.composition_distribution = composition_distribution
