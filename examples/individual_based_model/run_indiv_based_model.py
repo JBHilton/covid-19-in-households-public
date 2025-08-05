@@ -25,7 +25,8 @@ def build_indiv_system(hh_size):
 
     SPEC = {
         'compartmental_structure': 'SEIR', # This is which subsystem key to use
-        'SITP': TRANCHE2_SITP,                     # Secondary inf probability
+        'beta_int': .1,                     # Internal infection rate
+        'density_expo' : 1.,
         'recovery_rate': 1 / (PRODROME_PERIOD +
                               SYMPTOM_PERIOD),           # Recovery rate
         'incubation_rate': 1 / LATENT_PERIOD,         # E->I incubation rate
@@ -54,7 +55,7 @@ def build_indiv_system(hh_size):
     rhs = UnloopedSEIRRateEquations(model_input,
                                     household_population,
                                     fixed_imports,
-                                    sources="IMPORTS")
+                                    sources="IMPORT")
     return(SPEC, model_input, household_population, rhs)
 
 # Build systems for a range of household sizes:
