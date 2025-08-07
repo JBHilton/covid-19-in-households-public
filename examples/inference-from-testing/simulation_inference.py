@@ -372,10 +372,13 @@ for i, (tau_est, lambda_est) in enumerate(results):
 
 ###### Likelihood calculation by IGM
 
-# MAPPING
+#Make sure to run this first:
 
+multi_hh_data, base_rhs = run_simulation(lambda_0, tau_0)
+
+# Step 1: Create mappings
 def create_result_mappings(max_hh_size):
-    result_to_index = {}
+    result_to_index = {}  # List: (N_HH, y) → index
     index_to_result = []  # List: index → (N_HH, y)
 
     for N in range(1, max_hh_size + 1):     # Household sizes
@@ -386,17 +389,59 @@ def create_result_mappings(max_hh_size):
 
     return result_to_index, index_to_result
 
-# Example usage
-N_M = composition_list.max()  # E.g., 3
-result_to_index, index_to_result = create_result_mappings(N_M)
+max_hh_size = composition_list.max()  # e.g., 3
+result_to_index, index_to_result = create_result_mappings(max_hh_size)
 
-# Test print
+# Check step 1:
 print("Mapping (N_HH, y) → index:")
 for k, v in result_to_index.items():
     print(f"{k} → {v}")
 
-# Direct mapping:
-k = result_to_index[(3, 2)]         # → index
-N_HH, y = index_to_result[k]        # → (3, 2)
+# Step 2: Build HouseholdPopulation + SEIRRateEquations for each N_HH
+hh_models = {}  # key = N_HH, value = (household_population, rate_equation)
+for N in range(1, max_hh_size + 1):
+    comp_list = np.array([[N]])
+    comp_dist = np.array([1.0])  # dummy value; only one composition
+    model_input = SEIRInput(SPEC, comp_list, comp_dist)
+    hh_pop = HouseholdPopulation(comp_list, comp_dist, model_input)
+    no_imports = NoImportModel(4, 1)
+    rhs = UnloopedSEIRRateEquations(model_input, hh_pop, no_imports)
+    hh_models[N] = (hh_pop, rhs)
 
+# Step 3: Build Chi list
+from scipy.sparse import csr_matrix
+Chi = []
+for (N_HH, y) in index_to_result:
+    hh_pop, rhs = hh_models[N_HH]
+    states_inf_only = rhs.states_inf_only
+    # Step 3a: Find valid states for given y
+    possible_states = np.where(abs(states_inf_only - y) < 1e-1)[0]
 
+    # Step 3b: Build sparse Chi matrix
+    size = len(states_inf_only)
+    data = np.ones(len(possible_states))
+    rowcol = possible_states
+    Chi_k = csr_matrix((data, (rowcol, rowcol)), shape=(size, size))
+    Chi.append(Chi_k)
+
+# Step 3c: Print a Chi
+
+k = 5  # or any k we want
+Chi_k = Chi[k]
+print(Chi_k.toarray())
+
+#Step 4: Extract Chi for the inference
+for hh_data in multi_hh_data:  # hh_data is array like [y1, y2]?
+    N_HH = int(composition_list[0, 0])  # Assuming uniform household size for now
+
+    obs1 = (N_HH, int(hh_data[0]))
+    obs2 = (N_HH, int(hh_data[1]))
+
+    k1 = result_to_index[obs1]
+    k2 = result_to_index[obs2]
+
+    Chi_1 = Chi[k1]
+    Chi_2 = Chi[k2]
+
+    print(Chi_1.toarray())
+    print(Chi_2.toarray())
