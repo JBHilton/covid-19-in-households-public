@@ -732,13 +732,20 @@ class SIRInput(ModelInput):
 
         self.prog_rates = array([self.gamma])
 
-        def sitp_rmse(x):
-            return calculate_sitp_rmse(x, self, spec['SITP'])
+        if {'beta_int'} <= spec.keys():
+            self.beta_int = spec['beta_int']
+            if {'density_expo'} <= spec.keys():
+                self.density_expo = spec['density_expo']
+            else:
+                self.density_expo = 1
+        else:
+            def sitp_rmse(x):
+                return calculate_sitp_rmse(x, self, spec['SITP'])
 
-        pars = minimize(sitp_rmse, array([1e-1,1]), bounds=((0,None),(0,1))).x
-        self.beta_int = pars[0]
-        self.density_expo = pars[1]
-        print('Estimated beta_int=',pars[0],', estimated density=',pars[1])
+            pars = minimize(sitp_rmse, array([1e-1,1]), bounds=((0,None),(0,1))).x
+            self.beta_int = pars[0]
+            self.density_expo = pars[1]
+            print('Estimated beta_int=',pars[0],', estimated density=',pars[1])
 
         self.k_home = self.beta_int * self.k_home
 
@@ -769,14 +776,19 @@ class SEIRInput(ModelInput):
 
         self.prog_rates = array([self.gamma])
 
-        def sitp_rmse(x):
-            return calculate_sitp_rmse(x, self, spec['SITP'])
+        if {'beta_int', 'density_expo'} <= spec.keys():
+            self.beta_int = spec['beta_int']
+            if {'density_expo'} <= spec.keys():
+                self.density_expo = spec['density_expo']
+            else:
+                self.density_expo = 1
+        else:
+            def sitp_rmse(x):
+                return calculate_sitp_rmse(x, self, spec['SITP'])
 
-        pars = minimize(sitp_rmse, array([1e-1,1]), bounds=((0,None),(0,1))).x
-        self.pars = pars
-        self.beta_int = pars[0]
-        self.density_expo = pars[1]
-        if print_ests:
+            pars = minimize(sitp_rmse, array([1e-1,1]), bounds=((0,None),(0,1))).x
+            self.beta_int = pars[0]
+            self.density_expo = pars[1]
             print('Estimated beta_int=',pars[0],', estimated density=',pars[1])
 
         self.k_home = self.beta_int * self.k_home
@@ -814,14 +826,19 @@ class SEpIpRpEsIsRsInput(ModelInput):
 
         self.prog_rates = array([self.gamma])
 
-        def sitp_rmse(x):
-            return calculate_sitp_rmse_w_primaries(x, self, spec['SITP'])
+        if {'beta_int', 'density_expo'} <= spec.keys():
+            self.beta_int = spec['beta_int']
+            if {'density_expo'} <= spec.keys():
+                self.density_expo = spec['density_expo']
+            else:
+                self.density_expo = 1
+        else:
+            def sitp_rmse(x):
+                return calculate_sitp_rmse(x, self, spec['SITP'])
 
-        pars = minimize(sitp_rmse, array([1e-1,1]), bounds=((0,None),(0,1))).x
-        self.pars = pars
-        self.beta_int = pars[0]
-        self.density_expo = pars[1]
-        if print_ests:
+            pars = minimize(sitp_rmse, array([1e-1,1]), bounds=((0,None),(0,1))).x
+            self.beta_int = pars[0]
+            self.density_expo = pars[1]
             print('Estimated beta_int=',pars[0],', estimated density=',pars[1])
 
         self.k_home = self.beta_int * self.k_home
@@ -868,19 +885,22 @@ class SEPIRInput(ModelInput):
 
         self.prog_rates = array([self.alpha_2, self.gamma])
 
-        def sitp_rmse(x):
-            return calculate_sitp_rmse(x, self, spec['SITP'])
+        if {'beta_int', 'density_expo'} <= spec.keys():
+            self.beta_int = spec['beta_int']
+            if {'density_expo'} <= spec.keys():
+                self.density_expo = spec['density_expo']
+            else:
+                self.density_expo = 1
+        else:
+            def sitp_rmse(x):
+                return calculate_sitp_rmse(x, self, spec['SITP'])
 
-        pars = minimize(sitp_rmse, array([1e-1,1]), bounds=((0,None),(0,1))).x
-        self.sitp = calculate_sitp(pars, self, spec['SITP'])
-        print(self.sitp)
-        self.pars = pars
-        beta_int = pars[0]
-        self.beta_int = beta_int
-        self.density_expo = pars[1]
-        print('Estimated beta_int=',pars[0],', estimated density=',pars[1])
+            pars = minimize(sitp_rmse, array([1e-1,1]), bounds=((0,None),(0,1))).x
+            self.beta_int = pars[0]
+            self.density_expo = pars[1]
+            print('Estimated beta_int=',pars[0],', estimated density=',pars[1])
 
-        self.k_home = beta_int * self.k_home
+        self.k_home = self.beta_int * self.k_home
 
         ext_eig = max(eig(
             diag(self.sus).dot((1/spec['symp_onset_rate']) *
@@ -927,12 +947,20 @@ class SEPIRQInput(ModelInput):
 
         self.prog_rates = array([self.alpha_2, self.gamma, self.discharge_rate])
 
-        def sitp_rmse(x):
-            return calculate_sitp_rmse(x, self, spec['SITP'])
+        if {'beta_int', 'density_expo'} <= spec.keys():
+            self.beta_int = spec['beta_int']
+            if {'density_expo'} <= spec.keys():
+                self.density_expo = spec['density_expo']
+            else:
+                self.density_expo = 1
+        else:
+            def sitp_rmse(x):
+                return calculate_sitp_rmse(x, self, spec['SITP'])
 
-        pars = minimize(sitp_rmse, array([1e-1,1]), bounds=((0,None),(0,1))).x
-        self.beta_int = pars[0]
-        self.density_expo = pars[1]
+            pars = minimize(sitp_rmse, array([1e-1,1]), bounds=((0,None),(0,1))).x
+            self.beta_int = pars[0]
+            self.density_expo = pars[1]
+            print('Estimated beta_int=',pars[0],', estimated density=',pars[1])
 
         self.k_home = self.beta_int * self.k_home
 
