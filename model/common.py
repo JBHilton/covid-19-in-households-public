@@ -300,7 +300,10 @@ class UnloopedRateEquations:
         self.inf_event_sus = self.states_sus_only[self.inf_event_row, :]
         self.Q_ext = sparse((array(self.Q_int[self.inf_event_row, self.inf_event_col]).flatten(),
                                         (self.inf_event_row,
-                                        self.inf_event_col)), shape=self.matrix_shape)
+                                        self.inf_event_col)), shape=self.matrix_shape) - \
+                     sparse((array(self.Q_int[self.inf_event_row, self.inf_event_row]).flatten(),
+                             (self.inf_event_row,
+                              self.inf_event_col)), shape=self.matrix_shape)
         self.Q_import = 0 * self.Q_int
 
         # These attributes divide the internal dynamics matrix into an infection events component and everything else for
