@@ -298,10 +298,10 @@ class UnloopedRateEquations:
         self.between_hh_rate  = self.states_sus_only.dot(diag(self.import_model.cases(0)))
         self.import_rates = self.states_sus_only.dot(diag(self.import_model.cases(0)))
         self.inf_event_sus = self.states_sus_only[self.inf_event_row, :]
-        self.Q_ext = sparse((array(self.Q_int[self.inf_event_row, self.inf_event_col]).flatten(),
+        self.Q_ext = sparse((array(self.inf_event_sus).flatten(),
                                         (self.inf_event_row,
                                         self.inf_event_col)), shape=self.matrix_shape) - \
-                     sparse((array(self.Q_int[self.inf_event_row, self.inf_event_row]).flatten(),
+                     sparse((array(self.inf_event_sus).flatten(),
                              (self.inf_event_row,
                               self.inf_event_col)), shape=self.matrix_shape)
         self.Q_import = 0 * self.Q_int
