@@ -27,6 +27,7 @@ os.getcwd()
 
 # Import required libraries
 import numpy as np
+from scipy.sparse.linalg import expm
 from numpy.random import choice
 from scipy.optimize import minimize
 import scipy as sp
@@ -445,3 +446,86 @@ for hh_data in multi_hh_data:  # hh_data is array like [y1, y2]?
 
     print(Chi_1.toarray())
     print(Chi_2.toarray())
+
+# Step 5: Compute the likelihood
+
+# Step 5a: Set the ground work
+
+# Prep/work
+N_HH = int(composition_list[0, 0])  # household size
+y1 = int(multi_hh_data[0][0])
+y2 = int(multi_hh_data[0][1])
+
+# Map to Chi matrices
+k1 = result_to_index[(N_HH, y1)]
+k2 = result_to_index[(N_HH, y2)]
+Chi_1 = Chi[k1]
+Chi_2 = Chi[k2]
+
+# Initial distribution for this household type
+P0 = hh_models[N_HH][0].initial_distribution
+
+# Rate equation object for this household type
+rhs = hh_models[N_HH][1]
+Q1 = rhs.Q_int
+Q2 = rhs.Q_ext
+Q0 = rhs.Q_int_fixed  ### Q_int_fixed or Q_int_inf?
+
+# Times
+t0 = 0.0
+t1 = test_times[0]
+t2 = test_times[1]
+
+def likelihood_tau_lambda(tau, lam, t0, t1, t2, P0, Q1, Q2, Q0, Chi_1, Chi_2):
+
+
+    # Ingridients
+    Q_theta = tau * Q1 + lam * Q2 + Q0
+    A = expm((t1 - t0) * Q_theta)
+    B = expm((t2 - t1) * Q_theta)
+    u = Chi_1 @ (A @ P0)
+    v = Chi_2 @ (B @ u)
+
+    # Likelihood
+    return np.sum(v) / np.sum(u)
+
+# Compute likelihood
+like_val = likelihood_tau_lambda(tau_0, lambda_0, t0, t1, t2, P0, Q1, Q2, Q0, Chi_1, Chi_2)
+print(f"Likelihood for household 0: {like_val}")
+
+# Step 6: Compute the gradient of the likelihood
+
+def gradients(tau, lam, t0, t1, t2, P0, Q1, Q2, Q0, Chi_1, Chi_2):
+    # Ingridiens
+    Q_theta = tau * Q1 + lam * Q2 + Q0
+    A = expm((t1 - t0) * Q_theta)
+    B = expm((t2 - t1) * Q_theta)
+    u = Chi_1 @ (A @ P0)
+    v = Chi_2 @ (B @ u)
+
+    # Norms
+    u_norm = np.sum(u)
+    v_norm = np.sum(v)
+
+    # du/dtau, du/dlambda
+    du_dtau = Chi_1 @ (Q1 @ (A @ P0))
+    du_dlam = Chi_1 @ (Q2 @ (A @ P0))
+
+    du_dtau_norm = one_vec @ du_dtau
+    du_dlam_norm = one_vec @ du_dlam
+
+    # dv/dtau, dv/dlambda
+    dv_dtau = Chi_2 @ (Q1 @ (B @ (Chi_1 @ (A @ P0))) + B @ (Chi_1 @ (Q1 @ (A @ P0))))
+    dv_dlam = Chi_2 @ (Q2 @ (B @ (Chi_1 @ (A @ P0))) + B @ (Chi_1 @ (Q2 @ (A @ P0))))
+
+    dv_dtau_norm = one_vec @ dv_dtau
+    dv_dlam_norm = one_vec @ dv_dlam
+
+    # Likelihood
+    L = v_norm / u_norm
+
+    # Gradients (quotient rule)
+    dL_dtau = (dv_dtau_norm * u_norm - v_norm * du_dtau_norm) / (u_norm ** 2)
+    dL_dlam = (dv_dlam_norm * u_norm - v_norm * du_dlam_norm) / (u_norm ** 2)
+
+    return L, dL_dtau, dL_dlam
