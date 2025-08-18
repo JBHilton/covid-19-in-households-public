@@ -294,12 +294,14 @@ class UnloopedRateEquations:
             [(self.ext_matrix_list[ic].dot((self.inf_by_state_list[ic]/model_input.ave_hh_by_class).T)).T
             for ic in range(self.no_inf_compartments)],
             axis=0)
-        
-        self.Q_ext = 0 * self.Q_int
-        self.Q_import = 0 * self.Q_int
+
         self.between_hh_rate  = self.states_sus_only.dot(diag(self.import_model.cases(0)))
         self.import_rates = self.states_sus_only.dot(diag(self.import_model.cases(0)))
         self.inf_event_sus = self.states_sus_only[self.inf_event_row, :]
+        self.Q_ext = sparse((array(self.Q_int[self.inf_event_row, self.inf_event_col]).flatten(),
+                                        (self.inf_event_row,
+                                        self.inf_event_col)), shape=self.matrix_shape)
+        self.Q_import = 0 * self.Q_int
 
         # These attributes divide the internal dynamics matrix into an infection events component and everything else for
         # convenience when implementing MCMC. Infection events happen at a rate which is linear in the per-contact infection
