@@ -298,12 +298,16 @@ class UnloopedRateEquations:
         self.between_hh_rate  = self.states_sus_only.dot(diag(self.import_model.cases(0)))
         self.import_rates = self.states_sus_only.dot(diag(self.import_model.cases(0)))
         self.inf_event_sus = self.states_sus_only[self.inf_event_row, :]
-        self.Q_ext = sparse((array(self.inf_event_sus).flatten(),
+        self.inf_event_inflow = sum(
+            [self.inf_event_sus.dot(self.ext_matrix_list[ic])
+            for ic in range(self.no_inf_compartments)],
+            axis=0).sum(axis=1)
+        self.Q_ext = sparse((array(self.inf_event_inflow).flatten(),
                                         (self.inf_event_row,
                                         self.inf_event_col)), shape=self.matrix_shape) - \
-                     sparse((array(self.inf_event_sus).flatten(),
+                     sparse((array(self.inf_event_inflow).flatten(),
                              (self.inf_event_row,
-                              self.inf_event_col)), shape=self.matrix_shape)
+                              self.inf_event_row)), shape=self.matrix_shape)
         self.Q_import = 0 * self.Q_int
 
         # These attributes divide the internal dynamics matrix into an infection events component and everything else for
@@ -334,6 +338,8 @@ class UnloopedRateEquations:
     def jacobian(self, t, H):
         '''hh_ODE_rates calculates the rates of the ODE system describing the
         household ODE model'''
+
+        self.Q_ext *= 0
 
         update_ext_matrices(self, t, H)
 

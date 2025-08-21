@@ -26,7 +26,7 @@ def build_indiv_system(hh_size):
 
     SPEC = {
         'compartmental_structure': 'SEIR', # This is which subsystem key to use
-        'beta_int': .1,                     # Internal infection rate
+        'beta_int': 0.,                     # Internal infection rate
         'density_expo' : 1.,
         'recovery_rate': 1 / (PRODROME_PERIOD +
                               SYMPTOM_PERIOD),           # Recovery rate
@@ -60,11 +60,12 @@ def build_indiv_system(hh_size):
     return(SPEC, model_input, household_population, rhs)
 
 # Build systems for a range of household sizes:
-hh_size_list = range(2, 6)
+hh_size_list = [4]
 SPEC_LIST = []
 model_input_list = []
 household_population_list = []
 rhs_list = []
+H0_list = []
 sol_list = []
 time_series_list = []
 build_time_list = []
@@ -87,14 +88,15 @@ for hh_size in hh_size_list:
     H0 = zeros((household_population.total_size), )
     all_sus = where(sum(rhs.states_exp_only + rhs.states_inf_only + rhs.states_rec_only, 1) < 1e-1)[0]
     H0[all_sus] = 1. / len(all_sus)
-    tspan = (0.0, 365)
+    H0_list.append(H0)
+    tspan = (0.0, 10)
     sol_start = time()
     solution = solve_ivp(rhs,
                          tspan,
                          H0,
                          first_step=0.001,
                          atol=1e-16,
-                         t_eval=arange(0., 365., 1.))
+                         t_eval=arange(0., 10., 1.))
     solve_time = time()- sol_start
     solve_time_list.append(solve_time)
     print("Solver took", solve_time, "seconds.")
@@ -125,7 +127,7 @@ ext_mix_rate = max(eig(ones((4,4)))[0])
 
 SPEC = {
     'compartmental_structure': 'SEIR', # This is which subsystem key to use
-    'beta_int': .1,                     # Internal infection rate
+    'beta_int': 0.,                     # Internal infection rate
     'density_expo' : 1.,
     'recovery_rate': 1 / (PRODROME_PERIOD +
                           SYMPTOM_PERIOD),           # Recovery rate
@@ -133,7 +135,7 @@ SPEC = {
     'sus': array([1]),          # Relative susceptibility by
                                   # age/vulnerability class
     'fit_method' : 'EL',
-    'k_home': int_mix_rate * ones((1, 1), dtype=float),
+    'k_home': ones((1, 1), dtype=float),
     'k_ext': ones((1, 1), dtype=float)
 }
 
@@ -159,13 +161,13 @@ rhs = UnloopedSEIRRateEquations(model_input,
 H0 = zeros((household_population.total_size), )
 all_sus = where(sum(rhs.states_exp_only + rhs.states_inf_only + rhs.states_rec_only, 1) < 1e-1)[0]
 H0[all_sus] = 1. / len(all_sus)
-tspan = (0.0, 365)
+tspan = (0.0, 10)
 solution = solve_ivp(rhs,
                      tspan,
                      H0,
                      first_step=0.001,
                      atol=1e-16,
-                     t_eval=arange(0., 365., 1.))
+                     t_eval=arange(0., 10., 1.))
 
 t = solution.t
 H = solution.y
@@ -180,3 +182,5 @@ time_series = {
 'I':I,
 'R':R
 }
+
+print(abs(time_series_list[0]['R'].sum(1) - R.T) / R.T)
