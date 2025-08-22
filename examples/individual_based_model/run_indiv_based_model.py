@@ -8,6 +8,7 @@ from os import mkdir
 from os.path import isdir, isfile
 from pandas import read_csv
 from scipy.integrate import solve_ivp
+from scipy.sparse import csc_matrix as sparse
 from time import time
 from model.specs import LATENT_PERIOD, PRODROME_PERIOD, TRANCHE2_SITP, SYMPTOM_PERIOD
 from model.preprocessing import ( estimate_beta_ext, estimate_growth_rate,
@@ -89,14 +90,14 @@ for hh_size in hh_size_list:
     all_sus = where(sum(rhs.states_exp_only + rhs.states_inf_only + rhs.states_rec_only, 1) < 1e-1)[0]
     H0[all_sus] = 1. / len(all_sus)
     H0_list.append(H0)
-    tspan = (0.0, 10)
+    tspan = (0.0, 361.)
     sol_start = time()
     solution = solve_ivp(rhs,
                          tspan,
                          H0,
                          first_step=0.001,
                          atol=1e-16,
-                         t_eval=arange(0., 10., 1.))
+                         t_eval=arange(0., 361., 30.))
     solve_time = time()- sol_start
     solve_time_list.append(solve_time)
     print("Solver took", solve_time, "seconds.")
@@ -158,16 +159,16 @@ rhs = UnloopedSEIRRateEquations(model_input,
                                 household_population,
                                 fixed_imports,
                                 sources="IMPORT")
-H0 = zeros((household_population.total_size), )
+H0 = zeros(household_population.total_size, )
 all_sus = where(sum(rhs.states_exp_only + rhs.states_inf_only + rhs.states_rec_only, 1) < 1e-1)[0]
 H0[all_sus] = 1. / len(all_sus)
-tspan = (0.0, 10)
+tspan = (0.0, 361)
 solution = solve_ivp(rhs,
                      tspan,
                      H0,
                      first_step=0.001,
                      atol=1e-16,
-                     t_eval=arange(0., 10., 1.))
+                     t_eval=arange(0., 361., 30.))
 
 t = solution.t
 H = solution.y
@@ -182,5 +183,50 @@ time_series = {
 'I':I,
 'R':R
 }
+print("Relative error in S:",
+      abs(time_series_list[0]['S'][1:].sum(1) - S[1:].T) / time_series_list[0]['S'][1:].sum(1))
+print("Relative error in E:",
+      abs(time_series_list[0]['E'][1:].sum(1) - E[1:].T) / time_series_list[0]['E'][1:].sum(1))
+print("Relative error in I:",
+      abs(time_series_list[0]['I'][1:].sum(1) - I[1:].T) / time_series_list[0]['I'][1:].sum(1))
+print("Relative error in R:",
+      abs(time_series_list[0]['R'][1:].sum(1) - R[1:].T) / time_series_list[0]['R'][1:].sum(1))
 
-print(abs(time_series_list[0]['R'].sum(1) - R.T) / R.T)
+# Matrix to map from larger state space to smaller
+aggregator = sparse((household_population.total_size,
+                     household_population_list[0].total_size))
+from_states = range(household_population.total_size)
+for state in from_states:
+    to_states = where((sum(rhs_list[0].states_sus_only, 1) == rhs.states_sus_only[state, :])&\
+                             (sum(rhs_list[0].states_exp_only, 1) == rhs.states_exp_only[state, :])&\
+                             (sum(rhs_list[0].states_inf_only, 1) == rhs.states_inf_only[state, :])&\
+                             (sum(rhs_list[0].states_rec_only, 1) == rhs.states_rec_only[state, :]))[0]
+    aggregator += sparse((ones((len(to_states))),
+                         (state * ones((len(to_states)), dtype = int),
+                          to_states)),
+                         shape = aggregator.shape)
+
+H_split = sol_list[0].y
+H_split_agg = aggregator.dot(H_split)
+
+# Compare distribution time series:
+print("Difference in time series is",
+      (H_split_agg - H).T)
+
+# Look at rates at initial conditions:
+print("Difference in rates is",
+      aggregator.dot(rhs_list[0](0, H0_list[0])) - rhs(0, H0))
+
+# Try some different initial conditions:
+H_inf_long = 0 * H0_list[0]
+all_sus = where(sum(rhs_list[0].states_sus_only + rhs_list[0].states_exp_only + rhs_list[0].states_rec_only, 1) < 1e-1)[0]
+H_inf_long[all_sus] = 1. / len(all_sus)
+
+H_inf_short = 0 * H0
+all_sus = where(sum(rhs.states_sus_only + rhs.states_exp_only + rhs.states_rec_only, 1) < 1e-1)[0]
+H_inf_short[all_sus] = 1. / len(all_sus)
+
+print("Difference in all-inf starting point is",
+      aggregator.dot(H_inf_long) - H_inf_short)
+print("Difference in rates is",
+      aggregator.dot(rhs_list[0](0, H_inf_long)) - rhs(0, H_inf_short))
