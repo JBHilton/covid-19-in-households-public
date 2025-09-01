@@ -52,8 +52,8 @@ class FixedImportModel(ImportModel):
         by external cases in infectious compartment i.'''
         super().__init__(no_inf_compartments, no_age_classes)
         self.x0 = x0
-        base_inf_rates = rhs.states_sus_only.dot(
-            rhs.household_population.model_input.k_ext).dot(diag(x0))
+        base_inf_rates = rhs.states_sus_only * (
+            rhs.household_population.model_input.k_ext).dot(x0)
         total_size = len(rhs.household_population.which_composition)
         matrix_shape = (total_size, total_size)
         inf_event_row = rhs.household_population.inf_event_row
@@ -121,8 +121,8 @@ class ExponentialImportModel(ImportModel):
         super().__init__(no_inf_compartments, no_age_classes)
         self.growth_rate = growth_rate
         self.x0 = x0
-        base_inf_rates = rhs.states_sus_only.dot(
-                    rhs.household_population.model_input.k_ext).dot(diag(x0))
+        base_inf_rates = rhs.states_sus_only * (
+                    rhs.household_population.model_input.k_ext).dot(x0)
         total_size = len(rhs.household_population.which_composition)
         matrix_shape = (total_size, total_size)
         inf_event_row = rhs.household_population.inf_event_row
