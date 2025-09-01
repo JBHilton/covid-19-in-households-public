@@ -2,7 +2,7 @@
 Each individual is assumed to be of their own unique risk class, giving us more of an ability to track individual-level
 as opposed to aggregate health outcomes.
 '''
-from numpy import arange, array, log, ones, sum, where, zeros
+from numpy import arange, array, diag, exp, log, ones, sum, where, zeros
 from numpy.linalg import eig
 from os import mkdir
 from os.path import isdir, isfile
@@ -17,6 +17,8 @@ from model.common import UnloopedSEIRRateEquations
 from model.imports import FixedImportModel, NoImportModel
 
 beta_ext = 0.1
+x0 = [.1]
+t_eval = arange(0, 361., 30.)
 
 # Function for constructing individual-based model of a single household with homogeneous mixing:
 def build_indiv_system(hh_size):
@@ -36,7 +38,8 @@ def build_indiv_system(hh_size):
                                       # age/vulnerability class
         'fit_method' : 'EL',
         'k_home': ones((hh_size, hh_size), dtype=float),
-        'k_ext': ones((hh_size, hh_size), dtype=float)
+        'k_ext': hh_size * ones((hh_size, hh_size), dtype=float),
+        'skip_ext_scale' : True
     }
 
     model_input = SEIRInput(SPEC, composition_list, comp_dist)
@@ -52,7 +55,7 @@ def build_indiv_system(hh_size):
     fixed_imports = FixedImportModel(4,
                                      hh_size,
                                      base_rhs,
-                                     array([.1] * hh_size))
+                                     array(x0 * hh_size))
 
     rhs = UnloopedSEIRRateEquations(model_input,
                                     household_population,
@@ -61,7 +64,7 @@ def build_indiv_system(hh_size):
     return(SPEC, model_input, household_population, rhs)
 
 # Build systems for a range of household sizes:
-hh_size_list = [4]
+hh_size_list = [2, 3, 4, 5, 6, 7, 8]
 SPEC_LIST = []
 model_input_list = []
 household_population_list = []
@@ -97,7 +100,7 @@ for hh_size in hh_size_list:
                          H0,
                          first_step=0.001,
                          atol=1e-16,
-                         t_eval=arange(0., 361., 30.))
+                         t_eval=t_eval)
     solve_time = time()- sol_start
     solve_time_list.append(solve_time)
     print("Solver took", solve_time, "seconds.")
@@ -119,12 +122,13 @@ for hh_size in hh_size_list:
     time_series_list.append(time_series)
 
 # Next: compare outputs from an individual-based and non-individual-based model:
-composition_list = array([[4]])
+hh_size = hh_size_list[0]
+composition_list = array([[hh_size]])
 # Proportion of households which are in each composition
 comp_dist = array([1.])
 
-int_mix_rate = max(eig(ones((4,4)))[0])
-ext_mix_rate = max(eig(ones((4,4)))[0])
+int_mix_rate = max(eig(ones((hh_size, hh_size)))[0])
+ext_mix_rate = max(eig(ones((hh_size, hh_size)))[0])
 
 SPEC = {
     'compartmental_structure': 'SEIR', # This is which subsystem key to use
@@ -137,7 +141,8 @@ SPEC = {
                                   # age/vulnerability class
     'fit_method' : 'EL',
     'k_home': ones((1, 1), dtype=float),
-    'k_ext': ones((1, 1), dtype=float)
+    'k_ext': (1 / hh_size) * ones((1, 1), dtype=float),
+    'skip_ext_scale' : True
 }
 
 model_input = SEIRInput(SPEC, composition_list, comp_dist)
@@ -153,7 +158,7 @@ base_rhs = UnloopedSEIRRateEquations(model_input, household_population, no_impor
 fixed_imports = FixedImportModel(4,
                                  1,
                                  base_rhs,
-                                 array([.1]))
+                                 array(x0))
 
 rhs = UnloopedSEIRRateEquations(model_input,
                                 household_population,
@@ -168,7 +173,7 @@ solution = solve_ivp(rhs,
                      H0,
                      first_step=0.001,
                      atol=1e-16,
-                     t_eval=arange(0., 361., 30.))
+                     t_eval=t_eval)
 
 t = solution.t
 H = solution.y
@@ -191,42 +196,3 @@ print("Relative error in I:",
       abs(time_series_list[0]['I'][1:].sum(1) - I[1:].T) / time_series_list[0]['I'][1:].sum(1))
 print("Relative error in R:",
       abs(time_series_list[0]['R'][1:].sum(1) - R[1:].T) / time_series_list[0]['R'][1:].sum(1))
-
-# Matrix to map from larger state space to smaller
-aggregator = sparse((household_population.total_size,
-                     household_population_list[0].total_size))
-from_states = range(household_population.total_size)
-for state in from_states:
-    to_states = where((sum(rhs_list[0].states_sus_only, 1) == rhs.states_sus_only[state, :])&\
-                             (sum(rhs_list[0].states_exp_only, 1) == rhs.states_exp_only[state, :])&\
-                             (sum(rhs_list[0].states_inf_only, 1) == rhs.states_inf_only[state, :])&\
-                             (sum(rhs_list[0].states_rec_only, 1) == rhs.states_rec_only[state, :]))[0]
-    aggregator += sparse((ones((len(to_states))),
-                         (state * ones((len(to_states)), dtype = int),
-                          to_states)),
-                         shape = aggregator.shape)
-
-H_split = sol_list[0].y
-H_split_agg = aggregator.dot(H_split)
-
-# Compare distribution time series:
-print("Difference in time series is",
-      (H_split_agg - H).T)
-
-# Look at rates at initial conditions:
-print("Difference in rates is",
-      aggregator.dot(rhs_list[0](0, H0_list[0])) - rhs(0, H0))
-
-# Try some different initial conditions:
-H_inf_long = 0 * H0_list[0]
-all_sus = where(sum(rhs_list[0].states_sus_only + rhs_list[0].states_exp_only + rhs_list[0].states_rec_only, 1) < 1e-1)[0]
-H_inf_long[all_sus] = 1. / len(all_sus)
-
-H_inf_short = 0 * H0
-all_sus = where(sum(rhs.states_sus_only + rhs.states_exp_only + rhs.states_rec_only, 1) < 1e-1)[0]
-H_inf_short[all_sus] = 1. / len(all_sus)
-
-print("Difference in all-inf starting point is",
-      aggregator.dot(H_inf_long) - H_inf_short)
-print("Difference in rates is",
-      aggregator.dot(rhs_list[0](0, H_inf_long)) - rhs(0, H_inf_short))
