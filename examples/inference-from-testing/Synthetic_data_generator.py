@@ -159,19 +159,19 @@ def run_simulation(lambda_val, tau_val):
     # Generate test data:
 
     multi_hh_data = [generate_single_hh_test_data(test_times) for i in range(n_hh)]
-    return multi_hh_data, base_rhs
+    return multi_hh_data, rhs
 
 
 import os
 
 # Make sure to run this first:
-multi_hh_data, base_rhs = run_simulation(lambda_0, tau_0)
+multi_hh_data, rhs = run_simulation(lambda_0, tau_0)
 
 # Save results if flag is enabled
 if SAVE_INFERENCE_RESULTS:
     results = {
         "multi_hh_data": multi_hh_data,
-        "base_rhs": base_rhs
+        "rhs": rhs
     }
 
     # Save file in the same folder as this script
@@ -184,13 +184,13 @@ if SAVE_INFERENCE_RESULTS:
     print(f"✅ Simulation results saved to {save_path}")
 
 # Make sure to run this first:
-multi_hh_data, base_rhs = run_simulation(lambda_0, tau_0)
+multi_hh_data, rhs = run_simulation(lambda_0, tau_0)
 
 # Save results if flag is enabled
 if SAVE_INFERENCE_RESULTS:
     results = {
         "multi_hh_data": multi_hh_data,
-        "base_rhs": base_rhs
+        "rhs": rhs
     }
 
     # Force save in the exact folder you want
