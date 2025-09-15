@@ -723,7 +723,11 @@ class SIRInput(ModelInput):
         self.R_compartment = 2
 
         self.sus = spec['sus']
-        self.inf_scales = [ones((self.no_age_classes,))] # In the SIR model
+
+        if {'inf'} <= spec.keys():
+            self.inf_scales = spec['inf']
+        else:
+            self.inf_scales = [ones((self.no_age_classes,))] # In the SIR model
                                                          # there is only one
                                                          # infectious comp
         self.gamma = self.spec['recovery_rate']
@@ -749,15 +753,16 @@ class SIRInput(ModelInput):
 
         self.k_home = self.beta_int * self.k_home
 
-        ext_eig = max(eig(
-            diag(self.sus).dot((1/spec['recovery_rate']) *
-             (self.k_ext).dot(diag(self.inf_scales[0])))
+        if (not {'skip_ext_scale'} <= spec.keys()) or (not spec['skip_ext_scale']):
+            ext_eig = max(eig(
+                diag(self.sus).dot((1 / spec['recovery_rate']) *
+                                   (self.k_ext).dot(diag(self.inf_scales[0])))
             )[0])
-        if spec['fit_method'] == 'R*':
-            external_scale = spec['R*'] / (self.ave_hh_size*spec['SITP'])
-        else:
-            external_scale = 1
-        self.k_ext = external_scale * self.k_ext / ext_eig
+            if spec['fit_method'] == 'R*':
+                external_scale = spec['R*'] / (self.ave_hh_size * spec['SITP'])
+            else:
+                external_scale = 1
+            self.k_ext = external_scale * self.k_ext / ext_eig
 
 class SEIRInput(ModelInput):
     def __init__(self, spec, composition_list, composition_distribution, print_ests=True):
@@ -769,7 +774,10 @@ class SEIRInput(ModelInput):
         self.R_compartment = 3
 
         self.sus = spec['sus']
-        self.inf_scales = [ones((self.no_age_classes,))]
+        if {'inf'} <= spec.keys():
+            self.inf_scales = spec['inf']
+        else:
+            self.inf_scales = [ones((self.no_age_classes,))]
         self.gamma = self.spec['recovery_rate']
 
         self.ave_trans = 1 / self.gamma
@@ -793,70 +801,20 @@ class SEIRInput(ModelInput):
 
         self.k_home = self.beta_int * self.k_home
 
-        ext_eig = max(eig(
-            diag(self.sus).dot((1/spec['recovery_rate']) *
-             (self.k_ext).dot(diag(self.inf_scales[0])))
-            )[0])
-        if spec['fit_method'] == 'R*':
-            external_scale = spec['R*'] / (self.ave_hh_size*spec['SITP'])
-        else:
-            external_scale = 1
-        self.k_ext = external_scale * self.k_ext / ext_eig
-
-    @property
-    def alpha(self):
-        return self.spec['incubation_rate']
-
-class SEpIpRpEsIsRsInput(ModelInput):
-    def __init__(self, spec, composition_list, composition_distribution, print_ests=True):
-        super().__init__(spec, composition_list, composition_distribution)
-
-        self.no_primary_inf_compartments = 1
-
-        self.expandables = ['sus',
-                            'inf_scales']
-
-        self.R_compartment = 3
-
-        self.sus = spec['sus']
-        self.inf_scales = [ones((2 * self.no_age_classes,))]
-        self.gamma = self.spec['recovery_rate']
-
-        self.ave_trans = 1 / self.gamma
-
-        self.prog_rates = array([self.gamma])
-
-        if {'beta_int', 'density_expo'} <= spec.keys():
-            self.beta_int = spec['beta_int']
-            if {'density_expo'} <= spec.keys():
-                self.density_expo = spec['density_expo']
+        if (not {'skip_ext_scale'} <= spec.keys()) or (not spec['skip_ext_scale']):
+            ext_eig = max(eig(
+                diag(self.sus).dot((1/spec['recovery_rate']) *
+                 (self.k_ext).dot(diag(self.inf_scales[0])))
+                )[0])
+            if spec['fit_method'] == 'R*':
+                external_scale = spec['R*'] / (self.ave_hh_size*spec['SITP'])
             else:
-                self.density_expo = 1
-        else:
-            def sitp_rmse(x):
-                return calculate_sitp_rmse(x, self, spec['SITP'])
-
-            pars = minimize(sitp_rmse, array([1e-1,1]), bounds=((0,None),(0,1))).x
-            self.beta_int = pars[0]
-            self.density_expo = pars[1]
-            print('Estimated beta_int=',pars[0],', estimated density=',pars[1])
-
-        self.k_home = self.beta_int * self.k_home
-
-        ext_eig = max(eig(
-            diag(self.sus).dot((1/spec['recovery_rate']) *
-             (self.k_ext).dot(diag(self.inf_scales[0])))
-            )[0])
-        if spec['fit_method'] == 'R*':
-            external_scale = spec['R*'] / (self.ave_hh_size*spec['SITP'])
-        else:
-            external_scale = 1
-        self.k_ext = external_scale * self.k_ext / ext_eig
+                external_scale = 1
+            self.k_ext = external_scale * self.k_ext / ext_eig
 
     @property
     def alpha(self):
         return self.spec['incubation_rate']
-
 
 class SEPIRInput(ModelInput):
     def __init__(self, spec, composition_list, composition_distribution):
@@ -902,17 +860,18 @@ class SEPIRInput(ModelInput):
 
         self.k_home = self.beta_int * self.k_home
 
-        ext_eig = max(eig(
-            diag(self.sus).dot((1/spec['symp_onset_rate']) *
-             (self.k_ext).dot(self.inf_scales[0]) +
-             (1/spec['recovery_rate']) *
-              (self.k_ext).dot(diag(self.inf_scales[1])))
-            )[0])
-        if spec['fit_method'] == 'R*':
-            external_scale = spec['R*'] / (self.ave_hh_size*spec['SITP'])
-        else:
-            external_scale = 1
-        self.k_ext = external_scale * self.k_ext / ext_eig
+        if (not {'skip_ext_scale'} <= spec.keys()) or (not spec['skip_ext_scale']):
+            ext_eig = max(eig(
+                diag(self.sus).dot((1/spec['symp_onset_rate']) *
+                 (self.k_ext).dot(self.inf_scales[0]) +
+                 (1/spec['recovery_rate']) *
+                  (self.k_ext).dot(diag(self.inf_scales[1])))
+                )[0])
+            if spec['fit_method'] == 'R*':
+                external_scale = spec['R*'] / (self.ave_hh_size*spec['SITP'])
+            else:
+                external_scale = 1
+            self.k_ext = external_scale * self.k_ext / ext_eig
 
     @property
     def alpha_1(self):
@@ -964,17 +923,18 @@ class SEPIRQInput(ModelInput):
 
         self.k_home = self.beta_int * self.k_home
 
-        ext_eig = max(eig(
-            diag(self.sus).dot((1/spec['symp_onset_rate']) *
-             (self.k_ext).dot(self.inf_scales[0]) +
-             (1/spec['recovery_rate']) *
-              (self.k_ext).dot(diag(self.inf_scales[1])))
-            )[0])
-        if spec['fit_method'] == 'R*':
-            external_scale = spec['R*'] / (self.ave_hh_size*spec['SITP'])
-        else:
-            external_scale = 1
-        self.k_ext = external_scale * self.k_ext / ext_eig
+        if (not {'skip_ext_scale'} <= spec.keys()) or (not spec['skip_ext_scale']):
+            ext_eig = max(eig(
+                diag(self.sus).dot((1/spec['symp_onset_rate']) *
+                 (self.k_ext).dot(self.inf_scales[0]) +
+                 (1/spec['recovery_rate']) *
+                  (self.k_ext).dot(diag(self.inf_scales[1])))
+                )[0])
+            if spec['fit_method'] == 'R*':
+                external_scale = spec['R*'] / (self.ave_hh_size*spec['SITP'])
+            else:
+                external_scale = 1
+            self.k_ext = external_scale * self.k_ext / ext_eig
 
         # To define the iso_rates property, we add some zeros which act as dummy
         # entries so that the index of the isolation rates match the
@@ -1348,7 +1308,9 @@ def estimate_growth_rate(household_population,
 
     reverse_comp_dist = diag(household_population.composition_distribution). \
         dot(household_population.composition_list)
-    reverse_comp_dist = reverse_comp_dist.dot(diag(1/reverse_comp_dist.sum(0)))
+    denom = reverse_comp_dist.sum(0)
+    denom[denom == 0] = 1
+    reverse_comp_dist = reverse_comp_dist.dot(diag(1/denom))
 
     Q_int = rhs.Q_int
     FOI_by_state = zeros((Q_int.shape[0],household_population.no_risk_groups))
@@ -1400,7 +1362,10 @@ def estimate_beta_ext(household_population,rhs,r):
     reverse_comp_dist = \
         diag(household_population.composition_distribution). \
         dot(household_population.composition_list)
-    reverse_comp_dist = reverse_comp_dist.dot(diag(1/reverse_comp_dist.sum(0)))
+
+    denom = reverse_comp_dist.sum(0)
+    denom[denom == 0] = 1
+    reverse_comp_dist = reverse_comp_dist.dot(diag(1/denom))
 
     Q_int = rhs.Q_int
     FOI_by_state = zeros((Q_int.shape[0],household_population.no_risk_groups))

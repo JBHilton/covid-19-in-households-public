@@ -321,6 +321,26 @@ TWO_AGE_UK_SPEC = {
     'adult_bd' : 1
 }
 
+VACC_INF_RED = .5
+VACC_SUS_RED = .5
+
+# Specs for model with an unvaccinated (class 0) and vaccinated (class 1) risk class.
+# This is for a simple model with a single risk class (independent of vaccination).
+SEIR_VACC_SPEC = {
+    'compartmental_structure': 'SEIR', # This is which subsystem key to use
+    'beta_int': .1,                     # Internal infection rate
+    'density_expo' : 1.,
+    'recovery_rate': 1 / (PRODROME_PERIOD +
+                          SYMPTOM_PERIOD),           # Recovery rate
+    'incubation_rate': 1 / LATENT_PERIOD,         # E->I incubation rate
+    'sus': array([1, 1 - VACC_SUS_RED]),          # Relative susceptibility by risk class
+    'inf' : [array([1, 1 - VACC_INF_RED])],
+    'fit_method' : 'EL',
+    'k_home': ones((2, 2), dtype=float),
+    'k_ext': ones((2, 2), dtype=float),
+    'skip_ext_scale' : True
+}
+
 BDS_20_65_UK_SPEC = {
     'k_home': {
         'file_name': 'inputs/MUestimates_home_2.xlsx',
