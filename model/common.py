@@ -122,8 +122,9 @@ class MatrixImportRateEquations:
         self.import_rate_mat = sparse(self.matrix_shape,)
 
         denom = model_input.ave_hh_by_class
+        denom[denom==0] = 1
         self.outflow_mat = sum(
-            [(self.ext_matrix_list[ic].dot((self.inf_by_state_list[ic]/model_input.ave_hh_by_class).T)).T
+            [(self.ext_matrix_list[ic].dot((self.inf_by_state_list[ic]/denom).T)).T
             for ic in range(self.no_inf_compartments)],
             axis=0)
         
@@ -290,8 +291,9 @@ class UnloopedRateEquations:
         self.import_rate_mat = sparse(self.matrix_shape,)
 
         denom = model_input.ave_hh_by_class
+        denom[denom==0] = 1
         self.outflow_mat = sum(
-            [(self.ext_matrix_list[ic].dot((self.inf_by_state_list[ic]/model_input.ave_hh_by_class).T)).T
+            [(self.ext_matrix_list[ic].dot((self.inf_by_state_list[ic]/denom).T)).T
             for ic in range(self.no_inf_compartments)],
             axis=0)
 
@@ -308,7 +310,18 @@ class UnloopedRateEquations:
                      sparse((array(self.inf_event_inflow).flatten(),
                              (self.inf_event_row,
                               self.inf_event_row)), shape=self.matrix_shape)
-        self.Q_import = 0 * self.Q_int
+        if self.import_model.default_call_property == "matrix":
+            self.Q_import = self.import_model.matrix(0)
+        else:
+            self.import_rates = self.inf_event_sus.dot(
+                self.model_input.k_ext).dot(diag(self.import_model.cases(0)))
+
+            self.Q_import = sparse((self.import_rates[arange(len(self.inf_event_row)), self.inf_event_class],
+                                    (self.inf_event_row,
+                                     self.inf_event_col)), shape=self.matrix_shape) - \
+                            sparse((self.import_rates[arange(len(self.inf_event_row)), self.inf_event_class],
+                                    (self.inf_event_row,
+                                     self.inf_event_row)), shape=self.matrix_shape)
 
         # These attributes divide the internal dynamics matrix into an infection events component and everything else for
         # convenience when implementing MCMC. Infection events happen at a rate which is linear in the per-contact infection
