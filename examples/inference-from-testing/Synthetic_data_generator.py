@@ -161,9 +161,6 @@ def run_simulation(lambda_val, tau_val):
     multi_hh_data = [generate_single_hh_test_data(test_times) for i in range(n_hh)]
     return multi_hh_data, rhs
 
-
-import os
-
 # Make sure to run this first:
 multi_hh_data, rhs = run_simulation(lambda_0, tau_0)
 
@@ -174,32 +171,11 @@ if SAVE_INFERENCE_RESULTS:
         "rhs": rhs
     }
 
-    # Save file in the same folder as this script
-    script_dir = os.path.dirname(os.path.abspath(__file__))
-    save_path = os.path.join(script_dir, "synthetic_data_simulation_results.pkl")
+    # Save file relative to current working directory
+    script_dir = os.getcwd()
+    save_path = os.path.join(script_dir, "synthetic_data_simulation_fixed_import_results.pkl")
 
     with open(save_path, "wb") as f:
         pickle.dump(results, f)
 
     print(f"✅ Simulation results saved to {save_path}")
-
-# Make sure to run this first:
-multi_hh_data, rhs = run_simulation(lambda_0, tau_0)
-
-# Save results if flag is enabled
-if SAVE_INFERENCE_RESULTS:
-    results = {
-        "multi_hh_data": multi_hh_data,
-        "rhs": rhs
-    }
-
-    # Force save in the exact folder you want
-    save_dir = r"C:\Users\igmsb\Documents\Github\covid-19-in-households-public\examples\inference-from-testing"
-    os.makedirs(save_dir, exist_ok=True)
-    save_path = os.path.join(save_dir, "synthetic_data_simulation_result.pkl")
-
-    with open(save_path, "wb") as f:
-        pickle.dump(results, f)
-
-    print(f"Simulation results saved to {save_path}")
-

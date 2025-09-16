@@ -40,15 +40,13 @@ if 'inference-from-testing' in os.getcwd():
 os.getcwd()
 
 # Load synthetic data generated in script Synthetic_data_generator.py
-pickle_path = r"C:\Users\igmsb\Documents\Github\covid-19-in-households-public\examples\inference-from-testing\synthetic_data_simulation_result.pkl"
+pickle_path = "synthetic_data_simulation_fixed_import_results.pkl"
 
 with open(pickle_path, "rb") as f:
     results = pickle.load(f)
 
 multi_hh_data = results["multi_hh_data"]
-#base_rhs = results["base_rhs"]
-
-print(f"Loaded synthetic data: {len(multi_hh_data)} households")
+#rhs = results["base_rhs"]
 
 # Model setup
 comp_dist = array([1])
@@ -172,7 +170,6 @@ t2 = test_times[1]
 
 def likelihood_tau_lambda(tau, lam, t0, t1, t2, P0, Q1, Q2, Q0, Chi_1, Chi_2):
 
-
     # Ingridients
     Q_theta = tau * Q1.T + lam * Q2.T + Q0.T
     A = expm((t1 - t0) * Q_theta)
@@ -180,55 +177,18 @@ def likelihood_tau_lambda(tau, lam, t0, t1, t2, P0, Q1, Q2, Q0, Chi_1, Chi_2):
     u = Chi_1.dot(A.dot(P0))
     v = Chi_2.dot(B.dot(u))
 
-    # print(A.todense())
-    # print(B.todense())
-    # print(A.dot(P0))
-    # print(u)
-    # print(v)
-
     # Likelihood
-    return np.sum(v) / np.sum(u)
+    lh = np.sum(v) / np.sum(u)
+    llh = np.log(lh)
+
+    return lh, llh
 
 # Compute likelihood
-like_val = likelihood_tau_lambda(tau_0, lambda_0, t0, t1, t2, P0, Q1, Q2, Q0, Chi_1, Chi_2)
-print(f"Likelihood for household 0: {like_val}")
+single_llh_val = likelihood_tau_lambda(tau_0, lambda_0, t0, t1, t2, P0, Q1, Q2, Q0, Chi_1, Chi_2)
+print(f"Likelihood for a single household: {single_llh_val[0]}")
+print(f"Log-Likelihood for a single household: {single_llh_val[1]}")
 
 # Step 6: Compute the gradient of the likelihood
-
-def gradients(tau, lam, t0, t1, t2, P0, Q1, Q2, Q0, Chi_1, Chi_2):
-    # Ingridiens
-    Q_theta = tau * Q1 + lam * Q2 + Q0
-    A = expm((t1 - t0) * Q_theta)
-    B = expm((t2 - t1) * Q_theta)
-    u = Chi_1 @ (A @ P0)
-    v = Chi_2 @ (B @ u)
-
-    # Norms
-    u_norm = np.sum(u)
-    v_norm = np.sum(v)
-
-    # du/dtau, du/dlambda
-    du_dtau = Chi_1 @ (Q1 @ (A @ P0))
-    du_dlam = Chi_1 @ (Q2 @ (A @ P0))
-
-    du_dtau_norm = one_vec @ du_dtau
-    du_dlam_norm = one_vec @ du_dlam
-
-    # dv/dtau, dv/dlambda
-    dv_dtau = Chi_2 @ (Q1 @ (B @ (Chi_1 @ (A @ P0))) + B @ (Chi_1 @ (Q1 @ (A @ P0))))
-    dv_dlam = Chi_2 @ (Q2 @ (B @ (Chi_1 @ (A @ P0))) + B @ (Chi_1 @ (Q2 @ (A @ P0))))
-
-    dv_dtau_norm = one_vec @ dv_dtau
-    dv_dlam_norm = one_vec @ dv_dlam
-
-    # Likelihood
-    L = v_norm / u_norm
-
-    # Gradients (quotient rule)
-    dL_dtau = (dv_dtau_norm * u_norm - v_norm * du_dtau_norm) / (u_norm ** 2)
-    dL_dlam = (dv_dlam_norm * u_norm - v_norm * du_dlam_norm) / (u_norm ** 2)
-
-    return L, dL_dtau, dL_dlam
 
 def gradients(tau, lam, t0, t1, t2, P0, Q1, Q2, Q0, Chi_1, Chi_2):
     one_vec = np.ones((P0.shape[0], 1))
@@ -265,33 +225,34 @@ def gradients(tau, lam, t0, t1, t2, P0, Q1, Q2, Q0, Chi_1, Chi_2):
     dv_dlam_norm = float(one_vec.T @ dv_dlam)
 
     # Likelihood
-    L = v_norm / u_norm
+    lh = v_norm / u_norm
+    llh = np.log(lh)
 
     # Gradients (quotient rule)
     dL_dtau = (dv_dtau_norm * u_norm - v_norm * du_dtau_norm) / (u_norm ** 2)
     dL_dlam = (dv_dlam_norm * u_norm - v_norm * du_dlam_norm) / (u_norm ** 2)
 
-    return L, dL_dtau, dL_dlam
+    return lh, llh, dL_dtau, dL_dlam
 
-L, dL_dtau, dL_dlam = gradients(tau_0, lambda_0, t0, t1, t2, P0, Q1, Q2, Q0, Chi_1, Chi_2)
-print(f"Likelihood: {L}")
-print(f"dL/dtau: {dL_dtau}")
-print(f"dL/dlambda: {dL_dlam}")
+single_grad_val = gradients(tau_0, lambda_0, t0, t1, t2, P0, Q1, Q2, Q0, Chi_1, Chi_2)
+print(f"Gradient wrt tau for a single household: {single_grad_val[2]}")
+print(f"Gradient wrt lam for a single household: {single_grad_val[3]}")
 
 # All households likelihood calculation
 
 def all_households_loglike_and_grads(tau, lam, t0, t1, t2, hh_models, result_to_index, Chi, multi_hh_data):
-    loglike = 0.0
+    total_lh = 1.0        # start from 1.0 since we multiply likelihoods
+    total_llh = 0.0
     grad_tau = 0.0
     grad_lam = 0.0
 
-    for hh_data in multi_hh_data:
-        # Household size (assuming fixed for now)
-        N_HH = int(next(iter(hh_models.keys())))
-        P0 = hh_models[N_HH][2]
-        rhs = hh_models[N_HH][1]
-        Q1, Q2, Q0 = rhs.Q_int, rhs.Q_ext, rhs.Q_int_fixed
+    # Fixed household size
+    N_HH = int(composition_list[0, 0])  # = 3
+    P0 = hh_models[N_HH][2]
+    rhs = hh_models[N_HH][1]
+    Q1, Q2, Q0 = rhs.Q_int, rhs.Q_ext, rhs.Q_int_fixed
 
+    for hh_data in multi_hh_data:
         # Observations (positives at test times)
         obs1 = (N_HH, int(hh_data[0]))
         obs2 = (N_HH, int(hh_data[1]))
@@ -302,23 +263,26 @@ def all_households_loglike_and_grads(tau, lam, t0, t1, t2, hh_models, result_to_
         Chi_1 = Chi[k1]
         Chi_2 = Chi[k2]
 
-        # Households likelihood & gradients
-        L, dL_dtau, dL_dlam = gradients(
-            tau, lam, t0, t1, t2, P0, Q1, Q2, Q0, Chi_1, Chi_2
-        )
+        # Household likelihood & gradients
+        lh, llh, dL_dtau, dL_dlam = gradients(tau, lam, t0, t1, t2, P0, Q1, Q2, Q0, Chi_1, Chi_2)
 
-        # Add to log-likelihood
-        loglike += np.log(L + 1e-12)  # safeguard against log(0)
+        # Total likelihood / log-likelihood
+        total_lh *= lh
+        total_llh += np.log(lh + 1e-12)
 
-        # Add gradients (chain rule for log-likelihood)
-        grad_tau += dL_dtau / (L + 1e-12)
-        grad_lam += dL_dlam / (L + 1e-12)
+        # Add gradients for log-likelihood
+        grad_tau += dL_dtau / (lh + 1e-12)
+        grad_lam += dL_dlam / (lh + 1e-12)
 
-    return loglike, grad_tau, grad_lam
+    return total_lh, total_llh, grad_tau, grad_lam
 
-logL, dLdtau, dLdlam = all_households_loglike_and_grads(
-    tau_0, lambda_0, t0, t1, t2, hh_models, result_to_index, Chi, multi_hh_data)
+# Compute totals for all households
+total_lh, total_llh, grad_tau, grad_lam = all_households_loglike_and_grads(
+    tau_0, lambda_0, t0, t1, t2, hh_models, result_to_index, Chi, multi_hh_data
+)
 
-print("Dataset log-likelihood:", logL)
-print("Gradient wrt tau:", dLdtau)
-print("Gradient wrt lambda:", dLdlam)
+# Print results
+print(f"Total likelihood for all households: {total_lh}")
+print(f"Total log-likelihood for all households: {total_llh}")
+print(f"Gradient wrt tau for all households: {grad_tau}")
+print(f"Gradient wrt lambda for all households: {grad_lam}")
