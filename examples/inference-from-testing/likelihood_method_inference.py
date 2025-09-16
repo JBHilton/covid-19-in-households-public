@@ -42,15 +42,19 @@ from pandas import read_csv
 from scipy.integrate import solve_ivp
 from model.preprocessing import ( estimate_beta_ext, estimate_growth_rate,
         SEIRInput, HouseholdPopulation, make_initial_condition_by_eigenvector)
-from model.specs import SINGLE_AGE_SEIR_SPEC_FOR_FITTING, SINGLE_AGE_UK_SPEC
+from model.specs import SINGLE_AGE_SEIR_SPEC_FOR_FITTING, SINGLE_AGE_UK_SPEC, SINGLE_TYPE_INFERENCE_SPEC
 from model.common import UnloopedSEIRRateEquations, UnloopedSEPIRRateEquations
 from model.imports import FixedImportModel
 from model.imports import NoImportModel
 
-DATA_FILE = "synthetic_data_simulation_fixed_import_results.pkl"
+# Load synthetic data generated in script Synthetic_data_generator.py
+pickle_path = "synthetic_data_simulation_fixed_import_results.pkl"
 
-with open(DATA_FILE, "rb") as f:
-    multi_hh_data, rhs = pickle.load(f)
+with open(pickle_path, "rb") as f:
+    results = pickle.load(f)
+
+multi_hh_data = results["multi_hh_data"]
+rhs = results["rhs"]
 
 DOUBLING_TIME = 3
 growth_rate = log(2) / DOUBLING_TIME
@@ -61,14 +65,14 @@ pop_prev = 1e-3
 test_times = np.array([14, 28])
 
 # Set up
-SPEC = SINGLE_AGE_SEIR_SPEC_FOR_FITTING
-composition_distribution = np.array([1.])
-comp_list = np.array([[N]])
+SPEC = SINGLE_TYPE_INFERENCE_SPEC
+comp_dist = np.array([1.])
+comp_list = np.array([[3]])
 model_input = SEIRInput(SPEC, comp_list, comp_dist)
-household_population = HouseholdPopulation(comp_list, composition_distribution, model_input)
+household_population = HouseholdPopulation(comp_list, comp_dist, model_input)
 no_imports = NoImportModel(
-    no_inf_compartments=model_input["no_inf_compartments"],
-    no_age_classes=model_input["no_age_classes"]
+    no_inf_compartments=model_input.no_inf_compartments,
+    no_age_classes=model_input.no_age_classes
 )
 base_rhs = UnloopedSEIRRateEquations(model_input, household_population, no_imports)
 r_est = estimate_growth_rate(household_population, base_rhs, [0.001, 5], 1e-9)
@@ -84,8 +88,8 @@ base_H0 = make_initial_condition_by_eigenvector(
 )
 x0 = base_H0.T.dot(household_population.states[:, 2::4])
 fixed_imports = FixedImportModel(
-    no_inf_compartments=model_input["no_inf_compartments"],
-    no_age_classes=model_input["no_age_classes"],
+    no_inf_compartments=model_input.no_inf_compartments,
+    no_age_classes=model_input.no_age_classes,
     rhs=base_rhs,
     x0=x0
 )
@@ -96,19 +100,32 @@ def initialise_at_first_test_date(rhs, H0):
     base_sol = solve_ivp(rhs, (0, test_times[0]), H0, first_step=0.001, atol=1e-16)
     return base_sol.y[:, -1]
 
+
 def one_step_household_llh(hh_data, test_times, rhs, H_t0):
     Ht = 0 * H_t0
-    possible_states = where(abs(sum(rhs.states_inf_only, 1) - hh_data[0]) < 1e-1)[0]
-    norm_factor = sum(H_t0[possible_states])
+    possible_states = np.where(np.abs(np.sum(rhs.states_inf_only, 1) - hh_data[0]) < 1e-1)[0]
+    norm_factor = np.sum(H_t0[possible_states])
+
     if norm_factor == 0:
-        raise ValueError("Initial condition normalization failed: sum zero")
-    Ht[possible_states, ] = H_t0[possible_states, ] / norm_factor
+        # Impossible household, return large negative log-likelihood
+        return -1e6
+
+    Ht[possible_states,] = H_t0[possible_states,] / norm_factor
 
     tspan = (test_times[0], test_times[1])
     solution = solve_ivp(rhs, tspan, Ht, first_step=0.001, atol=1e-6)
+
     I = hh_data[1]
-    possible_states = where(abs(sum(rhs.states_inf_only, 1) - I) < 1e-1)[0]
-    return log(sum(solution.y[possible_states, -1]))
+    possible_states = np.where(np.abs(np.sum(rhs.states_inf_only, 1) - I) < 1e-1)[0]
+
+    llh_value = np.sum(solution.y[possible_states, -1])
+
+    # If sum is zero (another impossible state), penalize
+    if llh_value <= 0:
+        return -1e6
+
+    return np.log(llh_value)
+
 
 def one_step_population_likelihood(test_data, test_times, tau, lam, rhs, growth_rate, init_prev, R_comp):
     rhs = deepcopy(rhs)

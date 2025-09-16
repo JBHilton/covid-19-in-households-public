@@ -40,7 +40,7 @@ from pandas import read_csv
 from scipy.integrate import solve_ivp
 from model.preprocessing import ( estimate_beta_ext, estimate_growth_rate,
         SEIRInput, HouseholdPopulation, make_initial_condition_by_eigenvector)
-from model.specs import SINGLE_AGE_SEIR_SPEC_FOR_FITTING, SINGLE_AGE_UK_SPEC
+from model.specs import SINGLE_AGE_SEIR_SPEC_FOR_FITTING, SINGLE_AGE_UK_SPEC, SINGLE_TYPE_INFERENCE_SPEC
 from model.common import UnloopedSEIRRateEquations, UnloopedSEPIRRateEquations
 from model.imports import FixedImportModel
 from model.imports import NoImportModel
@@ -59,7 +59,7 @@ comp_dist = array([1])
 composition_list = array([[3]])
 
 # Specify model parameters
-SPEC = {**SINGLE_AGE_SEIR_SPEC_FOR_FITTING, **SINGLE_AGE_UK_SPEC}
+SPEC = SINGLE_TYPE_INFERENCE_SPEC
 DOUBLING_TIME = 3
 growth_rate = log(2) / DOUBLING_TIME
 
