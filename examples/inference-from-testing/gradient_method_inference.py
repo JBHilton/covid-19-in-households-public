@@ -46,7 +46,7 @@ with open(pickle_path, "rb") as f:
     results = pickle.load(f)
 
 multi_hh_data = results["multi_hh_data"]
-base_rhs = results["base_rhs"]
+#base_rhs = results["base_rhs"]
 
 print(f"Loaded synthetic data: {len(multi_hh_data)} households")
 
@@ -138,8 +138,8 @@ for hh_data in multi_hh_data:  # hh_data is array like [y1, y2]?
     Chi_1 = Chi[k1]
     Chi_2 = Chi[k2]
 
-    print(Chi_1.toarray())
-    print(Chi_2.toarray())
+    #print(Chi_1.toarray())
+    #print(Chi_2.toarray())
 
 # Step 5: Compute the likelihood
 
