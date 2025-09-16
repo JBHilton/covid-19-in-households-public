@@ -1412,6 +1412,56 @@ def estimate_beta_ext(household_population,rhs,r):
 
     return beta_ext
 
+def estimate_hh_reproductive_ratio(household_population,
+                                   rhs):
+
+    reverse_comp_dist = diag(household_population.composition_distribution). \
+        dot(household_population.composition_list)
+    denom = reverse_comp_dist.sum(0)
+    denom[denom == 0] = 1
+    reverse_comp_dist = reverse_comp_dist.dot(diag(1/denom))
+
+    Q_int = rhs.Q_int
+    FOI_by_state = zeros((Q_int.shape[0],household_population.no_risk_groups))
+    for ic in range(rhs.no_inf_compartments):
+        states_inf_only =  rhs.inf_by_state_list[ic]
+        FOI_by_state += (rhs.ext_matrix_list[ic].dot(
+                rhs.epsilon * states_inf_only.T)).T
+    index_states = where(
+    ((rhs.states_new_cases_only.sum(axis=1)==1) *
+    ((rhs.states_sus_only + rhs.states_new_cases_only).sum(axis=1)==\
+    household_population.hh_size_by_state)))[0]
+
+    no_index_states = len(index_states)
+    comp_by_index_state = household_population.which_composition[index_states]
+
+    index_prob = zeros((household_population.no_risk_groups,no_index_states))
+    for i in range(no_index_states):
+        index_class = where(rhs.states_new_cases_only[index_states[i],:]==1)[0]
+        index_prob[index_class,i] = \
+            reverse_comp_dist[comp_by_index_state[i], index_class]
+
+    multiplier = sparse((no_index_states, no_index_states))
+    discount_matrix = - Q_int
+    reward_mat = FOI_by_state.dot(index_prob)
+    # sA_iLU = spilu(discount_matrix)
+    # M = LinearOperator(discount_matrix.shape, sA_iLU.solve)
+    for i, index_state in enumerate(index_states):
+        result = isolve(discount_matrix, reward_mat[:, i])
+        col = result[0]
+        multiplier += sparse(
+            (col[index_states],
+            (range(no_index_states),
+            no_index_states * [i] )),
+            shape=(no_index_states, no_index_states))
+    if multiplier.shape==(1,1):
+        evalue = multiplier[0, 0]
+    elif multiplier.shape==(2,2):
+        evalue = (speig(multiplier.T.toarray(), k=1)[0]).real
+    else:
+        evalue = (speig(multiplier.T, k=1)[0]).real
+    return evalue
+
 def build_support_bubbles(
         composition_list,
         comp_dist,
