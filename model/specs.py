@@ -341,6 +341,22 @@ SEIR_VACC_SPEC = {
     'skip_ext_scale' : True
 }
 
+# The following is intended to be used while we are testing inference methods
+SINGLE_TYPE_INFERENCE_SPEC = {
+    'compartmental_structure': 'SEIR', # This is which subsystem key to use
+    'beta_int': 1.,                     # Internal infection rate
+    'density_expo' : 1.,
+    'recovery_rate': 1 / (PRODROME_PERIOD +
+                          SYMPTOM_PERIOD),           # Recovery rate
+    'incubation_rate': 1 / LATENT_PERIOD,         # E->I incubation rate
+    'sus': array([1]),          # Relative susceptibility by
+                                  # age/vulnerability class
+    'fit_method' : 'EL',
+    'k_home': ones((1, 1), dtype=float),
+    'k_ext': ones((1, 1), dtype=float),
+    'skip_ext_scale' : True
+}
+
 BDS_20_65_UK_SPEC = {
     'k_home': {
         'file_name': 'inputs/MUestimates_home_2.xlsx',
