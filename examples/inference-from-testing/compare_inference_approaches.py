@@ -181,7 +181,7 @@ def likelihood_tau_lambda(tau, lam, t0, t1, t2, P0, Q1, Q2, Q0, Chi_1, Chi_2):
     lh = np.sum(v) / np.sum(u)
     llh = np.log(sum(v)) - np.log(sum(u))
 
-    return lh, llh
+    return lh, llh, u, v, B.dot(u)
 
 # Compute likelihood
 single_llh_val = likelihood_tau_lambda(tau_0, lambda_0, t0, t1, t2, P0, Q1, Q2, Q0, Chi_1, Chi_2)
@@ -251,6 +251,9 @@ def all_households_loglike_and_grads(tau, lam, t0, t1, t2, hh_models, result_to_
     Q1, Q2, Q0 = rhs.Q_int_inf, rhs.Q_import, rhs.Q_int_fixed
 
     llh_list = []
+    k1_list = []
+    k2_list = []
+    alt_llh_list = []
     for hh_data in multi_hh_data:
         # Observations (positives at test times)
         obs1 = (N_HH, int(hh_data[0]))
@@ -259,24 +262,29 @@ def all_households_loglike_and_grads(tau, lam, t0, t1, t2, hh_models, result_to_
         # Map to Chi matrices
         k1 = result_to_index[obs1]
         k2 = result_to_index[obs2]
+        k1_list.append(k1)
+        k2_list.append(k2)
         Chi_1 = Chi[k1]
         Chi_2 = Chi[k2]
 
         # Household likelihood & gradients
         lh, llh, dL_dtau, dL_dlam = gradients(tau, lam, t0, t1, t2, P0, Q1, Q2, Q0, Chi_1, Chi_2)
+        alt_results = likelihood_tau_lambda(tau, lam, t0, t1, t2, P0, Q1, Q2, Q0, Chi_1, Chi_2)
+        alt_llh_list.append(alt_results[1])
 
         # Total likelihood / log-likelihood
         total_lh *= lh
         total_llh += llh
+        llh_list.append(llh)
 
         # Add gradients for log-likelihood
         grad_tau += dL_dtau / (lh + 1e-12)
         grad_lam += dL_dlam / (lh + 1e-12)
 
-    return total_lh, total_llh, grad_tau, grad_lam
+    return total_lh, total_llh, grad_tau, grad_lam, llh_list, k1_list, k2_list, alt_llh_list
 
 # Compute totals for all households
-total_lh, total_llh, grad_tau, grad_lam = all_households_loglike_and_grads(
+total_lh, total_llh, grad_tau, grad_lam, llh_list, k1_list, k2_list, alt_llh_list = all_households_loglike_and_grads(
     tau_0, lambda_0, t0, t1, t2, hh_models, result_to_index, Chi, multi_hh_data
 )
 
@@ -285,3 +293,76 @@ print(f"Total likelihood for all households: {total_lh}")
 print(f"Total log-likelihood for all households: {total_llh}")
 print(f"Gradient wrt tau for all households: {grad_tau}")
 print(f"Gradient wrt lambda for all households: {grad_lam}")
+
+def initialise_at_first_test_date(test_rhs, H0):
+    base_sol = solve_ivp(test_rhs, (0, test_times[0]), H0, first_step=0.001, atol=1e-16)
+    return base_sol.y[:, -1]
+
+
+def one_step_household_llh(hh_data, test_times, test_rhs, H_t0):
+    Ht = 0 * H_t0
+    possible_states = np.where(np.abs(np.sum(test_rhs.states_inf_only, 1) - hh_data[0]) < 1e-1)[0]
+    norm_factor = np.sum(H_t0[possible_states])
+
+    if norm_factor == 0:
+        # Impossible household, return large negative log-likelihood
+        return -1e6
+
+    Ht[possible_states,] = H_t0[possible_states,] / norm_factor
+
+    tspan = (test_times[0], test_times[1])
+    solution = solve_ivp(test_rhs, tspan, Ht, first_step=0.001, atol=1e-6)
+
+    I = hh_data[1]
+    possible_states = np.where(np.abs(np.sum(test_rhs.states_inf_only, 1) - I) < 1e-1)[0]
+
+    llh_value = np.sum(solution.y[possible_states, -1])
+
+    # If sum is zero (another impossible state), penalize
+    if llh_value <= 0:
+        return -1e6
+
+    return np.log(llh_value), norm_factor, solution.y, solution.t
+
+
+def one_step_population_likelihood(test_data, test_times, tau, lam, P0):
+    rhs_now = deepcopy(rhs)
+    rhs_now.update_int_rate(tau)
+    rhs_now.update_ext_rate(lam)
+
+    base_H0 = P0
+    H_t0 = initialise_at_first_test_date(rhs_now,
+                                         base_H0)
+
+    return array([one_step_household_llh(data_i, test_times, rhs_now, H_t0)[0] for data_i in test_data])
+
+llh_list_0 = one_step_population_likelihood(multi_hh_data,
+                                     test_times,
+                                     tau_0,
+                                     lambda_0,
+                                     hh_models[3][2])
+print(llh_list_0.sum())
+
+rhs_now = deepcopy(hh_models[3][1])
+rhs_now.update_int_rate(tau_0)
+rhs_now.update_ext_rate(lambda_0)
+H_t0 = initialise_at_first_test_date(rhs_now,
+                                     hh_models[3][2])
+oshl = one_step_household_llh(multi_hh_data[0],
+                                     test_times,
+                                     rhs_now,
+                                     H_t0)
+ltl = likelihood_tau_lambda(tau_0,
+                      lambda_0,
+                      t0,
+                      t1,
+                      t2,
+                      P0,
+                      Q1,
+                      Q2,
+                      Q0,
+                      Chi_1,
+                      Chi_2)
+print("Single hh likelihood from formula =", ltl[1])
+print("Single hh likelihood from step-by-step =", oshl[0])
+print("Single hh likelihood from gradient function=", single_grad_val[1])

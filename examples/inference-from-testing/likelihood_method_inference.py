@@ -148,6 +148,14 @@ def run_inference(multi_hh_data, rhs):
     tau_est, lambda_est = mle.x
     loglike = -mle.fun
     return tau_est, lambda_est, loglike
-
-tau_est, lambda_est, loglike_est = run_inference(multi_hh_data, rhs)
-print(f"🔎 Inference results: tau = {tau_est:.4f}, lambda  = {lambda_est:.4f}, loglike = {loglike_est:.4f}")
+llh = one_step_population_likelihood(multi_hh_data,
+                                     test_times,
+                                     tau_0,
+                                     lambda_0,
+                                     rhs,
+                                     growth_rate,
+                                     init_prev=pop_prev,
+                                     R_comp=3)
+print(llh)
+# tau_est, lambda_est, loglike_est = run_inference(multi_hh_data, rhs)
+# print(f"🔎 Inference results: tau = {tau_est:.4f}, lambda  = {lambda_est:.4f}, loglike = {loglike_est:.4f}")
