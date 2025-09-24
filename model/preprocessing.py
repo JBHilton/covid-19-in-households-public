@@ -826,8 +826,11 @@ class SEPIRInput(ModelInput):
         self.R_compartment = 4
 
         self.sus = spec['sus']
-        self.inf_scales = [spec['prodromal_trans_scaling'],
-                ones(shape(spec['prodromal_trans_scaling']))]
+        if {'inf'} <= spec.keys():
+            self.inf_scales = spec['inf']
+        else:
+            self.inf_scales = [spec['prodromal_trans_scaling'],
+                               ones(shape(spec['prodromal_trans_scaling']))]
 
 
 
@@ -888,9 +891,12 @@ class SEPIRQInput(ModelInput):
         self.R_compartment = 4
 
         self.sus = spec['sus']
-        self.inf_scales = [spec['prodromal_trans_scaling'],
-                ones(shape(spec['prodromal_trans_scaling'])),
-                spec['iso_trans_scaling']]
+        if {'inf'} <= spec.keys():
+            self.inf_scales = spec['inf']
+        else:
+            self.inf_scales =  [spec['prodromal_trans_scaling'],
+                                ones(shape(spec['prodromal_trans_scaling'])),
+                                spec['iso_trans_scaling']]
 
         self.alpha_2 = self.spec['symp_onset_rate']
 
@@ -1425,7 +1431,7 @@ def estimate_hh_reproductive_ratio(household_population,
     FOI_by_state = zeros((Q_int.shape[0],household_population.no_risk_groups))
     for ic in range(rhs.no_inf_compartments):
         states_inf_only =  rhs.inf_by_state_list[ic]
-        FOI_by_state += (rhs.ext_matrix_list[ic].dot(
+        FOI_by_state += (rhs.ext_matrix_list[ic].T.dot(
                 rhs.epsilon * states_inf_only.T)).T
     index_states = where(
     ((rhs.states_new_cases_only.sum(axis=1)==1) *
