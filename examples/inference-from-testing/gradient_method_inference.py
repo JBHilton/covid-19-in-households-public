@@ -24,6 +24,7 @@ from datetime import datetime
 from numpy import arange, array, atleast_2d, log, sum, where, zeros
 import pandas
 from pandas import read_csv
+from scipy.linalg import fractional_matrix_power
 from scipy.sparse.linalg import expm
 from scipy.stats import lognorm
 from scipy.sparse import csr_matrix
@@ -168,10 +169,18 @@ t0 = 0.0
 t1 = test_times[0]
 t2 = test_times[1]
 
-# Ingridients
+# Ingredients
 Q_theta = tau_0 * Q1.T + lambda_0 * Q2.T + Q0.T
 A = expm((t1 - t0) * Q_theta)
 B = expm((t2 - t1) * Q_theta)
+
+# If we could get fractional matrix exponentials to work effectively, this stuff could be precalculated:
+A1 = expm((t1 - t0) * Q1.T)
+B1 = expm((t2 - t1) * Q1.T)
+A2 = expm((t1 - t0) * Q2.T)
+B2 = expm((t2 - t1) * Q2.T)
+A0 = expm((t1 - t0) * Q0.T)
+B0 = expm((t2 - t1) * Q0.T)
 
 def likelihood_tau_lambda(A, B, P0, Q1, Q2, Q0, Chi_1, Chi_2):
 
@@ -182,7 +191,7 @@ def likelihood_tau_lambda(A, B, P0, Q1, Q2, Q0, Chi_1, Chi_2):
     lh = np.sum(v) / np.sum(u)
     llh = np.log(sum(v)) - np.log(sum(u))
 
-    return lh, llh
+    return lh, llh, u, v
 
 # Compute likelihood
 single_llh_val = likelihood_tau_lambda(A, B, P0, Q1, Q2, Q0, Chi_1, Chi_2)
@@ -191,27 +200,29 @@ print(f"Log-Likelihood for a single household: {single_llh_val[1]}")
 
 # Step 6: Compute the gradient of the likelihood
 
-def gradients(A, B, P0, Q1, Q2, Q0, Chi_1, Chi_2):
+Chi_1_Q1 = Chi_1.dot(Q1.T)
+Chi_1_Q2 = Chi_1.dot(Q2.T)
+Chi_2_Q1 = Chi_2.dot(Q1.T)
+Chi_2_Q2 = Chi_2.dot(Q2.T)
 
-    u = Chi_1.dot(A.dot(P0))
-    v = Chi_2.dot(B.dot(u))
+def gradients(A, B, P0, Q1, Q2, Q0, Chi_1, Chi_2, u, v):
 
     # Norms
     u_norm = u.sum()
     v_norm = v.sum()
 
     # Derivatives of u wrt tau and lambda
-    du_dtau = Chi_1.dot(Q1.dot(A.dot(P0)))
-    du_dlam = Chi_2.dot(Q2.dot(B.dot(u)))
+    du_dtau = Chi_1_Q1.dot(A.dot(P0))
+    du_dlam = Chi_2_Q2.dot(B.dot(u))
 
     du_dtau_norm = du_dtau.sum()
     du_dlam_norm = du_dlam.sum()
 
     # Derivatives of v wrt tau and lambda
-    dv_dtau = Chi_2.dot(Q1.T.dot(B.dot(Chi_1.dot(A.dot(P0)))) +
-                        B.dot(Chi_1.dot(Q1.T.dot(A.dot(P0)))))
-    dv_dlam = Chi_2.dot(Q2.T.dot(B.dot(Chi_1.dot(A.dot(P0)))) +
-                        B.dot(Chi_1.dot(Q2.T.dot(A.dot(P0)))))
+    dv_dtau = Chi_2.dot(Q1.T.dot(B.dot(u)) +
+                        B.dot(Chi_1_Q1.dot(A.dot(P0))))
+    dv_dlam = Chi_2.dot(Q2.T.dot(B.dot(u)) +
+                        B.dot(Chi_1_Q2.dot(A.dot(P0))))
 
     dv_dtau_norm = dv_dtau.sum()
     dv_dlam_norm = dv_dlam.sum()
@@ -222,13 +233,19 @@ def gradients(A, B, P0, Q1, Q2, Q0, Chi_1, Chi_2):
 
     return dL_dtau, dL_dlam
 
-single_grad_val = gradients(A, B, P0, Q1, Q2, Q0, Chi_1, Chi_2)
+u = Chi_1.dot(A.dot(P0))
+v = Chi_2.dot(B.dot(u))
+single_grad_val = gradients(A, B, P0, Q1, Q2, Q0, Chi_1, Chi_2, u, v)
 print(f"Gradient wrt tau for a single household: {single_grad_val[0]}")
 print(f"Gradient wrt lam for a single household: {single_grad_val[1]}")
 
 # All households likelihood calculation
 
-def all_households_loglike_and_grads(A, B, hh_models, result_to_index, Chi, multi_hh_data):
+def all_households_loglike_and_grads(tau, lam, hh_models, result_to_index, Chi, multi_hh_data):
+    Q_theta = tau * Q1.T + lam * Q2.T + Q0.T
+    A = expm((t1 - t0) * Q_theta)
+    B = expm((t2 - t1) * Q_theta)
+
     total_lh = 1.0        # start from 1.0 since we multiply likelihoods
     total_llh = 0.0
     grad_tau = 0.0
@@ -248,8 +265,8 @@ def all_households_loglike_and_grads(A, B, hh_models, result_to_index, Chi, mult
         Chi_2 = Chi[k2]
 
         # Household likelihood & gradients
-        lh, llh = likelihood_tau_lambda(A, B, P0, Q1, Q2, Q0, Chi_1, Chi_2)
-        dL_dtau, dL_dlam = gradients(A, B, P0, Q1, Q2, Q0, Chi_1, Chi_2)
+        lh, llh, u, v = likelihood_tau_lambda(A, B, P0, Q1, Q2, Q0, Chi_1, Chi_2)
+        dL_dtau, dL_dlam = gradients(A, B, P0, Q1, Q2, Q0, Chi_1, Chi_2, u, v)
 
         # Total likelihood / log-likelihood
         total_lh *= lh
@@ -263,7 +280,7 @@ def all_households_loglike_and_grads(A, B, hh_models, result_to_index, Chi, mult
 
 # Compute totals for all households
 total_lh, total_llh, grad_tau, grad_lam = all_households_loglike_and_grads(
-    A, B, hh_models, result_to_index, Chi, multi_hh_data
+    tau_0, lambda_0, hh_models, result_to_index, Chi, multi_hh_data
 )
 
 # Print results
@@ -274,12 +291,17 @@ print(f"Gradient wrt lambda for all households: {grad_lam}")
 
 # Compute the conditional log-likelihood, collapsed over unique datapoints.
 
-def loglike_with_counts(A, B, P0, Q1, Q2, Q0, Chi, result_to_index, multi_hh_data):
+def loglike_with_counts(tau, lam, P0, Q1, Q2, Q0, Chi, result_to_index, multi_hh_data):
+    Q_theta = tau * Q1.T + lam * Q2.T + Q0.T
+    A = expm((t1 - t0) * Q_theta)
+    B = expm((t2 - t1) * Q_theta)
 
     obs_counts = Counter(tuple(map(int, hh)) for hh in multi_hh_data)
 
     total_llh = 0.0
     total_lh = 1.0
+    grad_tau = .0
+    grad_lam = .0
 
     for (y1, y2), count in obs_counts.items():
         # Map to Chi matrices
@@ -291,21 +313,82 @@ def loglike_with_counts(A, B, P0, Q1, Q2, Q0, Chi, result_to_index, multi_hh_dat
         u = Chi_1 @ (A @ P0)
         v = Chi_2 @ (B @ u)
 
-        lh = np.sum(v) / np.sum(u)
+        # Household likelihood & gradients
+        lh, llh, u, v = likelihood_tau_lambda(A, B, P0, Q1, Q2, Q0, Chi_1, Chi_2)
+        dL_dtau, dL_dlam = gradients(A, B, P0, Q1, Q2, Q0, Chi_1, Chi_2, u, v)
 
-        total_lh = total_lh * (lh ** count)
-        total_llh = total_llh + count * np.log(lh)
+        # Total likelihood / log-likelihood
+        total_lh *= (lh ** count)
+        total_llh += count * llh
+
+        # Add gradients for log-likelihood
+        grad_tau += dL_dtau / (lh + 1e-12)
+        grad_lam += dL_dlam / (lh + 1e-12)
 
 
         # Print each unique observation
-        print(f"Obs (y1={y1}, y2={y2}), count={count}, lh={lh:.6e}, log-like contrib={count*np.log(lh):.6f}")
+        # print(f"Obs (y1={y1}, y2={y2}), count={count}, lh={lh:.6e}, log-like contrib={count*np.log(lh):.6f}")
 
-    return total_lh, total_llh
+    return total_lh, total_llh, grad_tau, grad_lam
 
 
-total_lh, total_llh = loglike_with_counts(
-    A, B, P0, Q1, Q2, Q0, Chi, result_to_index, multi_hh_data)
+total_lh, total_llh, grad_tau, grad_lam = loglike_with_counts(
+    tau_0, lambda_0, P0, Q1, Q2, Q0, Chi, result_to_index, multi_hh_data)
 
 # Print results
 print(f"Total likelihood for all households: {total_lh:.6e}")
 print(f"Total log-likelihood for all households: {total_llh:.6f}")
+
+def all_households_loglike(tau, lam, result_to_index, Chi, multi_hh_data):
+    Q_theta = tau * Q1.T + lam * Q2.T + Q0.T
+    A = expm((t1 - t0) * Q_theta)
+    B = expm((t2 - t1) * Q_theta)
+
+    total_lh = 1.0        # start from 1.0 since we multiply likelihoods
+    total_llh = 0.0
+
+
+    llh_list = []
+    for hh_data in multi_hh_data:
+        # Observations (positives at test times)
+        obs1 = (N_HH, int(hh_data[0]))
+        obs2 = (N_HH, int(hh_data[1]))
+
+        # Map to Chi matrices
+        k1 = result_to_index[obs1]
+        k2 = result_to_index[obs2]
+        Chi_1 = Chi[k1]
+        Chi_2 = Chi[k2]
+
+        # Household likelihood & gradients
+        lh, llh, u, v = likelihood_tau_lambda(A, B, P0, Q1, Q2, Q0, Chi_1, Chi_2)
+
+        # Total likelihood / log-likelihood
+        total_lh *= lh
+        total_llh += llh
+
+    return total_lh, total_llh
+
+nsample = int(1e2)
+
+non_count_start = time.time()
+[all_households_loglike(
+    tau_0, lambda_0, result_to_index, Chi, multi_hh_data) for i in range(nsample)]
+non_count_end = time.time()
+print("Execution time for by-household evaluation is",
+      non_count_end - non_count_start)
+
+non_count_grad_start = time.time()
+[all_households_loglike_and_grads(
+    tau_0, lambda_0, hh_models, result_to_index, Chi, multi_hh_data
+) for i in range(nsample)]
+non_count_grad_end = time.time()
+print("Execution time for by-household evaluation with gradient is",
+      non_count_grad_end - non_count_grad_start)
+
+count_start = time.time()
+[loglike_with_counts(
+    tau_0, lambda_0, P0, Q1, Q2, Q0, Chi, result_to_index, multi_hh_data) for i in range(nsample)]
+count_end = time.time()
+print("Execution time for frequency-based evaluation is",
+      count_end - count_start)
