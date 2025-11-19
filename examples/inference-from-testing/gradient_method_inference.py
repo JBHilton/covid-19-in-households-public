@@ -212,17 +212,17 @@ def gradients(A, B, P0, Q1, Q2, Q0, Chi_1, Chi_2, u, v):
     v_norm = v.sum()
 
     # Derivatives of u wrt tau and lambda
-    du_dtau = Chi_1_Q1.dot(A.dot(P0))
-    du_dlam = Chi_2_Q2.dot(B.dot(u))
+    du_dtau = (t1 - t0) * Chi_1.dot(Q1.T).dot(A.dot(P0))
+    du_dlam = (t1 - t0) * Chi_1.dot(Q2.T).dot(A.dot(P0))
 
     du_dtau_norm = du_dtau.sum()
     du_dlam_norm = du_dlam.sum()
 
     # Derivatives of v wrt tau and lambda
-    dv_dtau = Chi_2.dot(Q1.T.dot(B.dot(u)) +
-                        B.dot(Chi_1_Q1.dot(A.dot(P0))))
-    dv_dlam = Chi_2.dot(Q2.T.dot(B.dot(u)) +
-                        B.dot(Chi_1_Q2.dot(A.dot(P0))))
+    dv_dtau = Chi_2.dot((t2 - t1) * Q1.T.dot(B.dot(u)) +
+                        B.dot(du_dtau))
+    dv_dlam = Chi_2.dot((t2 - t1) * Q2.T.dot(B.dot(u)) +
+                        B.dot(du_dlam))
 
     dv_dtau_norm = dv_dtau.sum()
     dv_dlam_norm = dv_dlam.sum()
@@ -310,9 +310,6 @@ def loglike_with_counts(tau, lam, P0, Q1, Q2, Q0, Chi, result_to_index, multi_hh
         Chi_1 = Chi[k1]
         Chi_2 = Chi[k2]
 
-        u = Chi_1 @ (A @ P0)
-        v = Chi_2 @ (B @ u)
-
         # Household likelihood & gradients
         lh, llh, u, v = likelihood_tau_lambda(A, B, P0, Q1, Q2, Q0, Chi_1, Chi_2)
         dL_dtau, dL_dlam = gradients(A, B, P0, Q1, Q2, Q0, Chi_1, Chi_2, u, v)
@@ -321,9 +318,9 @@ def loglike_with_counts(tau, lam, P0, Q1, Q2, Q0, Chi, result_to_index, multi_hh
         total_lh *= (lh ** count)
         total_llh += count * llh
 
-        # Add gradients for log-likelihood
-        grad_tau += dL_dtau / (lh + 1e-12)
-        grad_lam += dL_dlam / (lh + 1e-12)
+        # Add gradients
+        grad_tau += count * dL_dtau / lh
+        grad_lam += count * dL_dlam / lh
 
 
         # Print each unique observation
@@ -392,3 +389,78 @@ count_start = time.time()
 count_end = time.time()
 print("Execution time for frequency-based evaluation is",
       count_end - count_start)
+
+
+# Do some numerical investigation of likelihood and gradient functions
+from scipy import optimize
+
+def f(pars):
+    tau = pars[0]
+    lam = pars[1]
+    return -loglike_with_counts(tau, lam, P0, Q1, Q2, Q0, Chi, result_to_index, multi_hh_data)[1]
+
+def f_grad(pars):
+    tau = pars[0]
+    lam = pars[1]
+    result = loglike_with_counts(tau, lam, P0, Q1, Q2, Q0, Chi, result_to_index, multi_hh_data)
+    return [result[2], result[3]]
+
+t_range = arange(0.05, 1., 0.05)
+t0 = t_range[0]
+t1 = t_range[-1]
+l_range = arange(0.5, 10., 0.5)
+l0 = l_range[0]
+l1 = l_range[-1]
+llh_array = array([-f([t, l]) for t in t_range for l in l_range]).reshape(len(t_range), len(l_range))
+
+# Can also get an estimate of MLE by looking in grid:
+mle_idx = np.unravel_index(np.argmax(llh_array, axis=None), llh_array.shape)
+print("Grid estimate of MLE: (",
+      t_range[mle_idx[0]],
+      ", ",
+      l_range[mle_idx[1]],
+      ")")
+
+# Let's have a look at the gradient:
+dldu_array = array([f_grad([t, l])[0] for t in t_range for l in l_range]).reshape(len(t_range), len(l_range))
+dldv_array = array([f_grad([t, l])[1] for t in t_range for l in l_range]).reshape(len(t_range), len(l_range))
+min_grad_array = array([min(abs(dldu_array[i, j]), abs(dldv_array[i, j])) for i in range(len(t_range)) for j in range(len(l_range))]).reshape(len(t_range), len(l_range))
+mle_grad_idx = np.unravel_index(np.argmin(min_grad_array, axis=None), min_grad_array.shape)
+print("Grid estimate of MLE from gradient: (",
+      t_range[mle_grad_idx[0]],
+      ", ",
+      l_range[mle_grad_idx[1]],
+      ")")
+
+# Estimate MLE with optimisation and root finding:
+mle = optimize.minimize(f,
+                        array([tau_0, lambda_0]),
+                        bounds=((1e-9, 100), (1e-9, 100)),
+                        method='Nelder-Mead')
+mle_grad = optimize.root(f_grad,
+                         array([tau_0, lambda_0]))
+
+from matplotlib.pyplot import subplots
+
+fig, ax1 = subplots(1, 1, constrained_layout=True)
+
+ax1.imshow(llh_array,
+                origin='lower',
+           extent=(l0, l1, t0, t1))
+ax1.scatter([mle.x[1]], [mle.x[0]], color='k')
+ax1.set_aspect((l1-l0)/(t1-t0))
+fig.show()
+
+fig, (axu, axv) = subplots(1, 2, constrained_layout=True)
+
+axu.imshow(dldu_array,
+                origin='lower',
+           extent=(l0, l1, t0, t1))
+axu.scatter([mle_grad.x[1]], [mle_grad.x[0]], color='k')
+axu.set_aspect((l1-l0)/(t1-t0))
+axv.imshow(dldv_array,
+                origin='lower',
+           extent=(l0, l1, t0, t1))
+axv.scatter([mle_grad.x[1]], [mle_grad.x[0]], color='k')
+axv.set_aspect((l1-l0)/(t1-t0))
+fig.show()
