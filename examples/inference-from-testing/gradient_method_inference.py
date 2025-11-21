@@ -1,5 +1,6 @@
 SAVE_INFERENCE_RESULTS = True
 # Imports
+
 import matplotlib.pyplot as plt
 from matplotlib.pyplot import subplots, savefig
 from matplotlib.cm import get_cmap
@@ -397,7 +398,10 @@ from scipy import optimize
 def f(pars):
     tau = pars[0]
     lam = pars[1]
-    return -loglike_with_counts(tau, lam, P0, Q1, Q2, Q0, Chi, result_to_index, multi_hh_data)[1]
+    if (tau<=0)|(lam<=0):
+        return 1e6
+    else:
+        return -loglike_with_counts(tau, lam, P0, Q1, Q2, Q0, Chi, result_to_index, multi_hh_data)[1]
 
 def f_grad(pars):
     tau = pars[0]
@@ -407,7 +411,7 @@ def f_grad(pars):
 
 t_range = arange(0.05, 1., 0.05)
 t0 = t_range[0]
-t1 = t_range[-1]
+t_end = t_range[-1]
 l_range = arange(0.5, 10., 0.5)
 l0 = l_range[0]
 l1 = l_range[-1]
@@ -438,29 +442,37 @@ mle = optimize.minimize(f,
                         bounds=((1e-9, 100), (1e-9, 100)),
                         method='Nelder-Mead')
 mle_grad = optimize.root(f_grad,
-                         array([tau_0, lambda_0]))
+                         array([tau_0, lambda_0]),
+                         method = 'krylov')
 
 from matplotlib.pyplot import subplots
+from matplotlib import colors
 
 fig, ax1 = subplots(1, 1, constrained_layout=True)
 
 ax1.imshow(llh_array,
                 origin='lower',
-           extent=(l0, l1, t0, t1))
+           extent=(l0, l1, t0, t_end))
 ax1.scatter([mle.x[1]], [mle.x[0]], color='k')
-ax1.set_aspect((l1-l0)/(t1-t0))
+ax1.set_aspect((l1-l0)/(t_end-t0))
 fig.show()
 
 fig, (axu, axv) = subplots(1, 2, constrained_layout=True)
 
 axu.imshow(dldu_array,
-                origin='lower',
-           extent=(l0, l1, t0, t1))
+           cmap = plt.cm.BrBG,
+           origin='lower',
+           norm = colors.CenteredNorm(),
+           extent=(l0, l1, t0, t_end))
 axu.scatter([mle_grad.x[1]], [mle_grad.x[0]], color='k')
-axu.set_aspect((l1-l0)/(t1-t0))
+axu.scatter([mle.x[1]], [mle.x[0]], color='r')
+axu.set_aspect((l1-l0)/(t_end-t0))
 axv.imshow(dldv_array,
-                origin='lower',
-           extent=(l0, l1, t0, t1))
+           cmap = plt.cm.BrBG,
+           origin='lower',
+           norm = colors.CenteredNorm(),
+           extent=(l0, l1, t0, t_end))
 axv.scatter([mle_grad.x[1]], [mle_grad.x[0]], color='k')
-axv.set_aspect((l1-l0)/(t1-t0))
+axv.scatter([mle.x[1]], [mle.x[0]], color='r')
+axv.set_aspect((l1-l0)/(t_end-t0))
 fig.show()
