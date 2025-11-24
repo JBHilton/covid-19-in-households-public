@@ -859,7 +859,6 @@ class SEPIRInput(ModelInput):
             pars = minimize(sitp_rmse, array([1e-1,1]), bounds=((0,None),(0,1))).x
             self.beta_int = pars[0]
             self.density_expo = pars[1]
-            print('Estimated beta_int=',pars[0],', estimated density=',pars[1])
 
         self.k_home = self.beta_int * self.k_home
 
@@ -1322,7 +1321,7 @@ def estimate_growth_rate(household_population,
     FOI_by_state = zeros((Q_int.shape[0],household_population.no_risk_groups))
     for ic in range(rhs.no_inf_compartments):
         states_inf_only =  rhs.inf_by_state_list[ic]
-        FOI_by_state += (rhs.ext_matrix_list[ic].dot(
+        FOI_by_state += (rhs.ext_matrix_list[ic].T.dot(
                 rhs.epsilon * states_inf_only.T)).T
     index_states = where(
     ((rhs.states_new_cases_only.sum(axis=1)==1) *
@@ -1377,7 +1376,7 @@ def estimate_beta_ext(household_population,rhs,r):
     FOI_by_state = zeros((Q_int.shape[0],household_population.no_risk_groups))
     for ic in range(rhs.no_inf_compartments):
         states_inf_only =  rhs.inf_by_state_list[ic]
-        FOI_by_state += (rhs.ext_matrix_list[ic].dot(
+        FOI_by_state += (rhs.ext_matrix_list[ic].T.dot(
                 rhs.epsilon * states_inf_only.T)).T
 
     index_states = where(
@@ -1466,7 +1465,7 @@ def estimate_hh_reproductive_ratio(household_population,
         evalue = (speig(multiplier.T.toarray(), k=1)[0]).real
     else:
         evalue = (speig(multiplier.T, k=1)[0]).real
-    return evalue
+    return evalue, FOI_by_state, multiplier
 
 def build_support_bubbles(
         composition_list,
