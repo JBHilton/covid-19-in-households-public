@@ -38,19 +38,20 @@ from model.specs import SINGLE_AGE_SEIR_SPEC_FOR_FITTING, SINGLE_AGE_UK_SPEC, SI
 from model.common import UnloopedSEIRRateEquations, UnloopedSEPIRRateEquations
 from model.imports import FixedImportModel, NoImportModel
 
-
-if 'inference-from-testing' in os.getcwd():
-    os.chdir("../..")
-os.getcwd()
+#########USE IF NEED SYNTHETIC DATA GENERATOR FILE
+#if 'inference-from-testing' in os.getcwd():
+#    os.chdir("../..")
+#os.getcwd()
 
 # Load synthetic data generated in script Synthetic_data_generator.py
-pickle_path = "synthetic_data_simulation_fixed_import_results.pkl"
+#pickle_path = "synthetic_data_simulation_fixed_import_results.pkl"
 
-with open(pickle_path, "rb") as f:
-    results = pickle.load(f)
+#with open(pickle_path, "rb") as f:
+#    results = pickle.load(f)
 
-multi_hh_data = results["multi_hh_data"]
+#multi_hh_data = results["multi_hh_data"]
 #rhs = results["base_rhs"]
+###############
 
 # Model setup
 comp_dist = array([1])
@@ -66,6 +67,89 @@ tau_0 = 0.25
 n_hh = 100
 pop_prev = 1e-3
 test_times = np.array([14, 28])
+
+##### DATA GENERATOR
+# Initialize model input based on specifications
+model_input_to_fit = SEIRInput(SPEC, composition_list, comp_dist)
+'''Quick fix to make sure initial states are in form S>0, I>0 rather than S>0, E>0'''
+model_input_to_fit.new_case_compartment = 2
+#true_density_expo = .5 # Todo: bring this in from model input rather than defining directly
+test_times = np.array([14, 28])
+
+def initialise_at_first_test_date(rhs,
+                                  H0):
+    base_sol = solve_ivp(rhs,
+                         (0, test_times[0]),
+                         H0,
+                         first_step=0.001,
+                         atol=1e-16)
+    H_t0 = base_sol.y[:, -1]
+    return H_t0
+
+
+# Simulation function to generate data
+def run_simulation(lambda_val, tau_val):
+    model_input = deepcopy(model_input_to_fit)
+    model_input.k_home *= tau_val  / model_input_to_fit.beta_int
+    model_input.beta_int = tau_val
+    model_input.k_ext *= lambda_val
+
+    true_density_expo = model_input.density_expo
+
+    # With the parameters chosen, we calculate Q_int:
+    household_population = HouseholdPopulation(
+        composition_list, comp_dist, model_input)
+
+    no_imports = NoImportModel(4, 1)
+
+    base_rhs = UnloopedSEIRRateEquations(model_input, household_population, no_imports)
+    r_est = estimate_growth_rate(household_population, base_rhs, [0.001, 5], 1e-9)
+    base_H0 = make_initial_condition_by_eigenvector(r_est,
+                                                    model_input,
+                                                    household_population,
+                                                    base_rhs,
+                                                    pop_prev,
+                                                    0.0,
+                                                    False,
+                                                    3)
+    x0 = base_H0.T.dot(household_population.states[:, 2::4])
+
+    fixed_imports = FixedImportModel(4,
+                                     1,
+                                     base_rhs,
+                                     x0)
+
+    rhs = UnloopedSEIRRateEquations(model_input, household_population, fixed_imports, sources="IMPORT")
+    H_t0 = initialise_at_first_test_date(rhs,
+                                  base_H0)
+
+    solve_times = np.array([0, test_times[0], test_times[1]])
+    def generate_single_hh_test_data(test_times):
+        Ht = deepcopy(H_t0)
+        test_data = np.zeros((len(test_times),))
+        for i in range(len(test_times)):
+            tspan = (solve_times[i], solve_times[i+1])
+            solution = solve_ivp(rhs, tspan, Ht, first_step=0.001, atol=1e-16)
+            T = solution.t
+            H = solution.y
+            state = choice(range(len(H[:, -1])), 1, p=H[:, -1] / sum(H[:, -1]))
+            test_data[i] = rhs.states_inf_only[state]
+            Ht *= 0
+            Ht[state] = 1
+        return (test_data)
+
+    ## Now do multiple households
+
+    # Generate test data:
+
+    multi_hh_data = [generate_single_hh_test_data(test_times) for i in range(n_hh)]
+    return multi_hh_data, rhs
+
+# Make sure to run this first:
+multi_hh_data, rhs = run_simulation(lambda_0, tau_0)
+
+######################################
+
 
 # Single Household likelihood calculation
 # Step 1: Create mappings

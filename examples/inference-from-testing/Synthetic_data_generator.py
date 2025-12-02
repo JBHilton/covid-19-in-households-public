@@ -29,14 +29,11 @@ os.getcwd()
 import numpy as np
 from scipy.sparse.linalg import expm
 from numpy.random import choice
-from scipy.optimize import minimize
-import scipy as sp
-import time
+
 from copy import deepcopy
 from datetime import datetime
 from numpy import arange, array, atleast_2d, log, sum, where, zeros
-import pandas
-from pandas import read_csv
+
 from scipy.integrate import solve_ivp
 from model.preprocessing import ( estimate_beta_ext, estimate_growth_rate,
         SEIRInput, HouseholdPopulation, make_initial_condition_by_eigenvector)
@@ -46,16 +43,8 @@ from model.imports import FixedImportModel
 from model.imports import NoImportModel
 from scipy.stats import lognorm
 
-# Load and process demographic data
-# comp_dist = read_csv(
-#     'inputs/england_hh_size_dist.csv',
-#     header=0).to_numpy().squeeze()
-# comp_dist = comp_dist[:3]
-# comp_dist[:2] *= 0
-# comp_dist = comp_dist/sum(comp_dist)
+
 comp_dist = array([1])
-# max_hh_size = len(comp_dist)
-# composition_list = np.atleast_2d(arange(1, max_hh_size+1)).T
 composition_list = array([[3]])
 
 # Specify model parameters
@@ -68,7 +57,6 @@ n_sims = 10
 lambda_0 = 3.0
 tau_0 = 0.25
 n_hh = 100  # Number of households for synthetic data
-
 pop_prev = 1e-3 # Initial prevalence in simulation
 
 # Initialize model input based on specifications
@@ -124,20 +112,6 @@ def run_simulation(lambda_val, tau_val):
     rhs = UnloopedSEIRRateEquations(model_input, household_population, fixed_imports, sources="IMPORT")
     H_t0 = initialise_at_first_test_date(rhs,
                                   base_H0)
-
-    # H0 = np.zeros((household_population.total_size), )
-    # all_sus = np.where(np.sum(rhs.states_exp_only + rhs.states_inf_only + rhs.states_rec_only, 1) < 1e-1)[0]
-    # one_inf = np.where((np.abs(np.sum(rhs.states_inf_only, 1) - 1) < 1e-1) & (
-    #             np.sum(rhs.states_exp_only + rhs.states_rec_only, 1) < 1e-1))[0]
-    # H0[all_sus] = comp_dist
-    #
-    # ## Now set up evaluation time points and solve system:
-    #
-    # # New time at which we evaluate the infection
-    # trange = np.arange(0, 7 * 5, 7)  # Evaluate for 12 weeks
-    #
-    # H0 = make_initial_condition_by_eigenvector(growth_rate, model_input, household_population, rhs, 1e-1, 0.0, False, 3)
-
 
     solve_times = np.array([0, test_times[0], test_times[1]])
     def generate_single_hh_test_data(test_times):
