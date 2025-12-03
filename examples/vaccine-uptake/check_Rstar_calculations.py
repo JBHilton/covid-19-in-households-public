@@ -109,7 +109,6 @@ def rstar_from_scale_by_ode(idx):
     print("idx=",idx)
     ext_scale = external_mix_range[idx]
     rhs_scaled = deepcopy(rhs)
-    rhs_scaled.update_ext_rate(0)
 
     H0 = make_initial_condition_by_eigenvector(r_by_scale[idx],
                                                model_input,
@@ -119,6 +118,7 @@ def rstar_from_scale_by_ode(idx):
                                                0.0,
                                                False,
                                                3)
+    rhs_scaled.update_ext_rate(0)
     solution = solve_ivp(rhs_scaled,
                          tspan,
                          H0,

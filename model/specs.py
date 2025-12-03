@@ -321,8 +321,8 @@ TWO_AGE_UK_SPEC = {
     'adult_bd' : 1
 }
 
-VACC_INF_RED = .5
-VACC_SUS_RED = .5
+VACC_INF_RED = .9
+VACC_SUS_RED = .9
 
 # Specs for model with an unvaccinated (class 0) and vaccinated (class 1) risk class.
 # This is for a simple model with a single risk class (independent of vaccination).
