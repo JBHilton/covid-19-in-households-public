@@ -29,6 +29,8 @@ from scipy.linalg import fractional_matrix_power
 from scipy.sparse.linalg import expm
 from scipy.stats import lognorm
 from scipy.sparse import csr_matrix
+from scipy.optimize import minimize
+import warnings
 
 from model.preprocessing import (
     estimate_beta_ext, estimate_growth_rate,
@@ -451,112 +453,118 @@ def all_households_loglike(tau, lam, result_to_index, Chi, multi_hh_data):
 
     return total_lh, total_llh
 
-nsample = int(1e2)
+# Negative log-likelihood wrapper using the collapsed-with-counts function you wrote
+def neg_loglike(params):
+    """Return negative total log-likelihood for params = [tau, lam]."""
+    tau, lam = params[0], params[1]
+    # loglike_with_counts returns: total_lh, total_llh, grad_tau, grad_lam
+    _, total_llh, grad_tau, grad_lam = loglike_with_counts(
+        tau, lam, P0, Q1, Q2, Q0, Chi, result_to_index, multi_hh_data
+    )
+    return -total_llh
 
-non_count_start = time.time()
-[all_households_loglike(
-    tau_0, lambda_0, result_to_index, Chi, multi_hh_data) for i in range(nsample)]
-non_count_end = time.time()
-print("Execution time for by-household evaluation is",
-      non_count_end - non_count_start)
+def neg_loglike_and_grad(params):
+    """Return (neg_loglike, neg_grad) for optimizer that accepts jac."""
+    tau, lam = params[0], params[1]
+    _, total_llh, grad_tau, grad_lam = loglike_with_counts(
+        tau, lam, P0, Q1, Q2, Q0, Chi, result_to_index, multi_hh_data
+    )
+    neg_ll = -total_llh
+    # grad_tau and grad_lam are derivatives of the log-likelihood; we need derivative of -log-likelihood
+    neg_grad = -np.array([grad_tau, grad_lam], dtype=float)
+    return neg_ll, neg_grad
 
-non_count_grad_start = time.time()
-[all_households_loglike_and_grads(
-    tau_0, lambda_0, hh_models, result_to_index, Chi, multi_hh_data
-) for i in range(nsample)]
-non_count_grad_end = time.time()
-print("Execution time for by-household evaluation with gradient is",
-      non_count_grad_end - non_count_grad_start)
+# Callback to watch progress
+def callback_print(xk):
+    print("trying", xk)
 
-count_start = time.time()
-[loglike_with_counts(
-    tau_0, lambda_0, P0, Q1, Q2, Q0, Chi, result_to_index, multi_hh_data) for i in range(nsample)]
-count_end = time.time()
-print("Execution time for frequency-based evaluation is",
-      count_end - count_start)
+# Initial guess and bounds (ensure tau, lambda remain positive)
+initial_guess = np.array([tau_0, lambda_0])  # you already set tau_0, lambda_0 above
+bounds = [(1e-8, None), (1e-8, None)]  # enforce positivity
 
+# Choose optimizer: L-BFGS-B (use jac), fallback to Nelder-Mead if you prefer derivative-free
+#I think L-BFGS-B is a bit better and faster. (opinion)
+#res = minimize(
+#    neg_loglike,
+#    initial_guess,
+#    method="Nelder-Mead",
+#    callback=lambda x: print("trying", x),
+#    options={"maxiter": 1000, "disp": True}
+#)
 
-# Do some numerical investigation of likelihood and gradient functions
-from scipy import optimize
+res = minimize(
+    fun=lambda p: neg_loglike_and_grad(p)[0],
+    x0=initial_guess,
+    method="L-BFGS-B",
+    jac=lambda p: neg_loglike_and_grad(p)[1],
+    bounds=bounds,
+    callback=callback_print,
+    options={"disp": True, "maxiter": 1000}
+)
 
-def f(pars):
-    tau = pars[0]
-    lam = pars[1]
-    if (tau<=0)|(lam<=0):
-        return 1e6
+# If L-BFGS-B fails or you explicitly want Nelder-Mead:
+# res = minimize(lambda p: neg_loglike(p), initial_guess, method='Nelder-Mead', callback=callback_print)
+
+print("\nOptimization result:\n", res)
+
+# Extract MLE
+xhat = res.x
+tau_hat, lam_hat = xhat[0], xhat[1]
+print(f"\nEstimated parameters: tau = {tau_hat:.6f}, lambda = {lam_hat:.6f}")
+
+# Hessian and covariance estimation
+def compute_hessian_at(f, x0):
+    """Try numdifftools Hessian, fallback to finite-diff (approx)."""
+    if _have_numdifftools:
+        Hfun = nd.Hessian(f)
+        H = Hfun(x0)
     else:
-        return -loglike_with_counts(tau, lam, P0, Q1, Q2, Q0, Chi, result_to_index, multi_hh_data)[1]
+        # Finite-diff approximation using 2-sided differences (small step)
+        eps = np.sqrt(np.finfo(float).eps)
+        n = len(x0)
+        H = np.zeros((n, n), float)
+        f0 = f(x0)
+        for i in range(n):
+            ei = np.zeros(n); ei[i] = 1.0
+            for j in range(i, n):
+                ej = np.zeros(n); ej[j] = 1.0
+                h = eps * max(1.0, abs(x0[i]), abs(x0[j]))
+                x_pp = x0 + 0.5*h*(ei+ej)
+                x_pm = x0 + 0.5*h*(ei-ej)
+                x_mp = x0 + 0.5*h*(-ei+ej)
+                x_mm = x0 - 0.5*h*(ei+ej)
+                # mixed second derivative approx
+                H_ij = (f(x_pp) - f(x_pm) - f(x_mp) + f(x_mm)) / (h*h)
+                H[i, j] = H_ij
+                H[j, i] = H_ij
+    return H
 
-def f_grad(pars):
-    tau = pars[0]
-    lam = pars[1]
-    result = loglike_with_counts(tau, lam, P0, Q1, Q2, Q0, Chi, result_to_index, multi_hh_data)
-    return [result[2], result[3]]
+# Compute Hessian of negative log-likelihood at the MLE
+with warnings.catch_warnings():
+    warnings.simplefilter("ignore")
+    H = compute_hessian_at(neg_loglike, xhat)
 
-t_range = arange(0.05, 1., 0.05)
-t0 = t_range[0]
-t_end = t_range[-1]
-l_range = arange(0.5, 10., 0.5)
-l0 = l_range[0]
-l1 = l_range[-1]
-llh_array = array([-f([t, l]) for t in t_range for l in l_range]).reshape(len(t_range), len(l_range))
+# Optional: try to use numdifftools if installed for Hessian
+try:
+    import numdifftools as nd
+    _have_numdifftools = True
+except Exception:
+    _have_numdifftools = False
+    from scipy.linalg import pinv
 
-# Can also get an estimate of MLE by looking in grid:
-mle_idx = np.unravel_index(np.argmax(llh_array, axis=None), llh_array.shape)
-print("Grid estimate of MLE: (",
-      t_range[mle_idx[0]],
-      ", ",
-      l_range[mle_idx[1]],
-      ")")
+# Try to invert Hessian to get covariance; handle non-PD case gracefully
+try:
+    # If Hessian is positive definite, np.linalg.inv works
+    cov = np.linalg.inv(H)
+except Exception:
+    # fallback to pseudo-inverse
+    cov = pinv(H)
 
-# Let's have a look at the gradient:
-dldu_array = array([f_grad([t, l])[0] for t in t_range for l in l_range]).reshape(len(t_range), len(l_range))
-dldv_array = array([f_grad([t, l])[1] for t in t_range for l in l_range]).reshape(len(t_range), len(l_range))
-min_grad_array = array([min(abs(dldu_array[i, j]), abs(dldv_array[i, j])) for i in range(len(t_range)) for j in range(len(l_range))]).reshape(len(t_range), len(l_range))
-mle_grad_idx = np.unravel_index(np.argmin(min_grad_array, axis=None), min_grad_array.shape)
-print("Grid estimate of MLE from gradient: (",
-      t_range[mle_grad_idx[0]],
-      ", ",
-      l_range[mle_grad_idx[1]],
-      ")")
+# Extract standard errors and 95% CIs
+stds = np.sqrt(np.abs(np.diag(cov)))  # abs to avoid tiny negative numerical noise
+ci_lower = xhat - 1.96 * stds
+ci_upper = xhat + 1.96 * stds
 
-# Estimate MLE with optimisation and root finding:
-mle = optimize.minimize(f,
-                        array([tau_0, lambda_0]),
-                        bounds=((1e-9, 100), (1e-9, 100)),
-                        method='Nelder-Mead')
-mle_grad = optimize.root(f_grad,
-                         array([tau_0, lambda_0]),
-                         method = 'krylov')
-
-from matplotlib.pyplot import subplots
-from matplotlib import colors
-
-fig, ax1 = subplots(1, 1, constrained_layout=True)
-
-ax1.imshow(llh_array,
-                origin='lower',
-           extent=(l0, l1, t0, t_end))
-ax1.scatter([mle.x[1]], [mle.x[0]], color='k')
-ax1.set_aspect((l1-l0)/(t_end-t0))
-fig.show()
-
-fig, (axu, axv) = subplots(1, 2, constrained_layout=True)
-
-axu.imshow(dldu_array,
-           cmap = plt.cm.BrBG,
-           origin='lower',
-           norm = colors.CenteredNorm(),
-           extent=(l0, l1, t0, t_end))
-axu.scatter([mle_grad.x[1]], [mle_grad.x[0]], color='k')
-axu.scatter([mle.x[1]], [mle.x[0]], color='r')
-axu.set_aspect((l1-l0)/(t_end-t0))
-axv.imshow(dldv_array,
-           cmap = plt.cm.BrBG,
-           origin='lower',
-           norm = colors.CenteredNorm(),
-           extent=(l0, l1, t0, t_end))
-axv.scatter([mle_grad.x[1]], [mle_grad.x[0]], color='k')
-axv.scatter([mle.x[1]], [mle.x[0]], color='r')
-axv.set_aspect((l1-l0)/(t_end-t0))
-fig.show()
+print("\nStandard errors:", stds)
+print("95% CI for tau: [{:.6f}, {:.6f}]".format(ci_lower[0], ci_upper[0]))
+print("95% CI for lambda: [{:.6f}, {:.6f}]".format(ci_lower[1], ci_upper[1]))
