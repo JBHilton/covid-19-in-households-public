@@ -63,7 +63,7 @@ growth_rate = log(2) / DOUBLING_TIME
 
 n_sims = 10
 lambda_0 = 3.0
-tau_0 = 0.25
+tau_0 = .25
 n_hh = 100
 pop_prev = 1e-3
 test_times = np.array([14, 28])
@@ -297,16 +297,16 @@ def gradients(A, B, P0, Q1, Q2, Q0, Chi_1, Chi_2, u, v):
     v_norm = v.sum()
 
     # Derivatives of u wrt tau and lambda
-    du_dtau = (t1 - t0) * Chi_1.dot(Q1.T).dot(A.dot(P0))
-    du_dlam = (t1 - t0) * Chi_1.dot(Q2.T).dot(A.dot(P0))
+    du_dtau = (t1 - t0) * Chi_1.dot(Q1.T * A.dot(P0))
+    du_dlam = (t1 - t0) * Chi_1.dot(Q2.T * A.dot(P0))
 
     du_dtau_norm = du_dtau.sum()
     du_dlam_norm = du_dlam.sum()
 
     # Derivatives of v wrt tau and lambda
-    dv_dtau = Chi_2.dot((t2 - t1) * Q1.T.dot(B.dot(u)) +
+    dv_dtau = Chi_2.dot((t2 - t1) * Q1.T * B.dot(u) +
                         B.dot(du_dtau))
-    dv_dlam = Chi_2.dot((t2 - t1) * Q2.T.dot(B.dot(u)) +
+    dv_dlam = Chi_2.dot((t2 - t1) * Q2 * B.dot(u) +
                         B.dot(du_dlam))
 
     dv_dtau_norm = dv_dtau.sum()
@@ -537,7 +537,7 @@ fig, ax1 = subplots(1, 1, constrained_layout=True)
 ax1.imshow(llh_array,
                 origin='lower',
            extent=(l0, l1, t0, t_end))
-ax1.scatter([mle.x[1]], [mle.x[0]], color='k')
+# ax1.scatter([mle.x[1]], [min(mle.x[0], t_end)], color='k')
 ax1.set_aspect((l1-l0)/(t_end-t0))
 fig.show()
 
@@ -548,15 +548,51 @@ axu.imshow(dldu_array,
            origin='lower',
            norm = colors.CenteredNorm(),
            extent=(l0, l1, t0, t_end))
-axu.scatter([mle_grad.x[1]], [mle_grad.x[0]], color='k')
-axu.scatter([mle.x[1]], [mle.x[0]], color='r')
+# axu.scatter([mle_grad.x[1]], [min(mle_grad.x[0], t_end)], color='k')
+# axu.scatter([mle.x[1]], [mle.x[0]], color='r')
 axu.set_aspect((l1-l0)/(t_end-t0))
 axv.imshow(dldv_array,
            cmap = plt.cm.BrBG,
            origin='lower',
            norm = colors.CenteredNorm(),
            extent=(l0, l1, t0, t_end))
-axv.scatter([mle_grad.x[1]], [mle_grad.x[0]], color='k')
-axv.scatter([mle.x[1]], [mle.x[0]], color='r')
+# axv.scatter([mle_grad.x[1]], [mle_grad.x[0]], color='k')
+# axv.scatter([mle.x[1]], [mle.x[0]], color='r')
 axv.set_aspect((l1-l0)/(t_end-t0))
+fig.show()
+
+
+# Meshgrid
+tgrid, lgrid = np.meshgrid(t_range, l_range)
+
+# Directional vectors
+ddt = 0 * tgrid
+ddl = 0 * lgrid
+
+d1 = tgrid.shape[0]
+d2 = tgrid.shape[1]
+
+for i in range(d1):
+    for j in range(d2):
+        thing = f_grad([tgrid[i, j], lgrid[i, j]])
+        ddt[i, j] = thing[0]
+        ddl[i, j] = thing[1]
+
+fig, axgrad = subplots(1, 1, constrained_layout=True)
+
+# Plotting Vector Field with QUIVER
+axgrad.quiver(tgrid, lgrid, ddt, ddl)
+axgrad.imshow(llh_array.T,
+                origin='lower',
+           extent=(t0, t_end, l0, l1))
+# axgrad.scatter([mle_grad.x[0]], [mle_grad.x[1]], color='b')
+# axgrad.scatter([mle.x[0]], [mle.x[1]], color='r')
+axgrad.set_aspect((t_end-t0)/(l1-l0))
+
+# # Setting x, y boundary limits
+# plt.xlim(-7, 7)
+# plt.ylim(-7, 7)
+
+# Show plot with grid
+axgrad.grid()
 fig.show()
