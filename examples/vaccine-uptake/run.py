@@ -45,12 +45,34 @@ uptake_df = concat([read_csv('inputs/hh_vax_1.csv').drop(["Unnamed: 0"], axis = 
 
 hh_size_by_uptake_column = array(uptake_df.drop('week', axis=1).columns.str.extract('H=(\d+)')).astype(int)
 vacc_by_uptake_column = array(uptake_df.drop('week', axis=1).columns.str.extract('V=(\d+)')).astype(int)
+max_hh_size = hh_size_by_uptake_column.max()
+n_wks = uptake_df.shape[0]
+
+fig_raw, axs = subplots(3,
+                           2,
+                           figsize = (10, 8),
+                          sharex=True)
+for hh_size in range(1, max_hh_size + 1):
+    where_size = where(hh_size_by_uptake_column == hh_size)[0]
+    udf = uptake_df.iloc[:, 1 + where_size]
+    udf.columns = vacc_by_uptake_column[where_size].flatten().tolist()
+    udf.plot(kind = 'line',
+             ax=axs[int((hh_size - 1) / 2), ((hh_size - 1) % 2)],
+             legend = False,
+             title = 'HH size =' + str(hh_size)
+             )
+axs[2, 1].legend(bbox_to_anchor=(1.1, 1.05))
+fig_raw.tight_layout()
+fig_raw.show()
+fname = 'plots/vaccine-uptake/raw_uptake_data.png'
+fig_raw.savefig(fname, bbox_inches='tight', dpi=300)
+
+
 n_combinations = len(vacc_by_uptake_column)
 composition_list = vstack([array([hh_size_by_uptake_column[i] - vacc_by_uptake_column[i],
                                   vacc_by_uptake_column[i]]).T for i in range(n_combinations)])
 
-max_hh_size = hh_size_by_uptake_column.max()
-n_wks = uptake_df.shape[0]
+
 
 # Start with some exploratory analysis with the uptake by time
 

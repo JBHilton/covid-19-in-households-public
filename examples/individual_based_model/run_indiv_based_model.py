@@ -16,6 +16,7 @@ from model.preprocessing import ( estimate_beta_ext, estimate_growth_rate,
 from model.common import UnloopedSEIRRateEquations
 from model.imports import FixedImportModel, NoImportModel
 
+beta_int = .1
 beta_ext = 0.1
 x0 = [.1]
 t_eval = arange(0, 361., 30.)
@@ -29,7 +30,7 @@ def build_indiv_system(hh_size):
 
     SPEC = {
         'compartmental_structure': 'SEIR', # This is which subsystem key to use
-        'beta_int': 0.,                     # Internal infection rate
+        'beta_int': beta_int,                     # Internal infection rate
         'density_expo' : 1.,
         'recovery_rate': 1 / (PRODROME_PERIOD +
                               SYMPTOM_PERIOD),           # Recovery rate
@@ -37,8 +38,8 @@ def build_indiv_system(hh_size):
         'sus': array([1] * hh_size),          # Relative susceptibility by
                                       # age/vulnerability class
         'fit_method' : 'EL',
-        'k_home': ones((hh_size, hh_size), dtype=float),
-        'k_ext': hh_size * ones((hh_size, hh_size), dtype=float),
+        'k_home': (1 / hh_size) * ones((hh_size, hh_size), dtype=float),
+        'k_ext': ones((hh_size, hh_size), dtype=float),
         'skip_ext_scale' : True
     }
 
@@ -55,7 +56,7 @@ def build_indiv_system(hh_size):
     fixed_imports = FixedImportModel(4,
                                      hh_size,
                                      base_rhs,
-                                     array(x0 * hh_size))
+                                     (1 / hh_size) * array(x0 * hh_size))
 
     rhs = UnloopedSEIRRateEquations(model_input,
                                     household_population,
@@ -122,77 +123,100 @@ for hh_size in hh_size_list:
     time_series_list.append(time_series)
 
 # Next: compare outputs from an individual-based and non-individual-based model:
-hh_size = hh_size_list[0]
-composition_list = array([[hh_size]])
-# Proportion of households which are in each composition
-comp_dist = array([1.])
+def do_aggregated_model(hh_size):
+    composition_list = array([[hh_size]])
+    # Proportion of households which are in each composition
+    comp_dist = array([1.])
+    
+    int_mix_rate = max(eig(ones((hh_size, hh_size)))[0])
+    ext_mix_rate = max(eig(ones((hh_size, hh_size)))[0])
+    
+    SPEC = {
+        'compartmental_structure': 'SEIR', # This is which subsystem key to use
+        'beta_int': beta_int,                     # Internal infection rate
+        'density_expo' : 1.,
+        'recovery_rate': 1 / (PRODROME_PERIOD +
+                              SYMPTOM_PERIOD),           # Recovery rate
+        'incubation_rate': 1 / LATENT_PERIOD,         # E->I incubation rate
+        'sus': array([1]),          # Relative susceptibility by
+                                      # age/vulnerability class
+        'fit_method' : 'EL',
+        'k_home': ones((1, 1), dtype=float),
+        'k_ext': ones((1, 1), dtype=float),
+        'skip_ext_scale' : True
+    }
+    
+    model_input = SEIRInput(SPEC, composition_list, comp_dist)
+    model_input.k_ext *= beta_ext
+    
+    # With the parameters chosen, we calculate Q_int:
+    household_population = HouseholdPopulation(
+        composition_list, comp_dist, model_input)
+    
+    # Set up import model
+    no_imports = NoImportModel(4, 1)
+    base_rhs = UnloopedSEIRRateEquations(model_input, household_population, no_imports)
+    fixed_imports = FixedImportModel(4,
+                                     1,
+                                     base_rhs,
+                                     array(x0))
+    
+    rhs = UnloopedSEIRRateEquations(model_input,
+                                    household_population,
+                                    fixed_imports,
+                                    sources="IMPORT")
+    H0 = zeros(household_population.total_size, )
+    all_sus = where(sum(rhs.states_exp_only + rhs.states_inf_only + rhs.states_rec_only, 1) < 1e-1)[0]
+    H0[all_sus] = 1. / len(all_sus)
+    tspan = (0.0, 361)
+    solution = solve_ivp(rhs,
+                         tspan,
+                         H0,
+                         first_step=0.001,
+                         atol=1e-16,
+                         t_eval=t_eval)
+    
+    t = solution.t
+    H = solution.y
+    S = H.T.dot(household_population.states[:, ::4])
+    E = H.T.dot(household_population.states[:, 1::4])
+    I = H.T.dot(household_population.states[:, 2::4])
+    R = H.T.dot(household_population.states[:, 3::4])
+    time_series = {
+    'time':t,
+    'S':S,
+    'E':E,
+    'I':I,
+    'R':R
+    }
+    return time_series
+agg_time_series_list = [do_aggregated_model(hh_size) for hh_size in hh_size_list]
+from matplotlib.pyplot import subplots
 
-int_mix_rate = max(eig(ones((hh_size, hh_size)))[0])
-ext_mix_rate = max(eig(ones((hh_size, hh_size)))[0])
+for i in range(len(hh_size_list)):
 
-SPEC = {
-    'compartmental_structure': 'SEIR', # This is which subsystem key to use
-    'beta_int': 0.,                     # Internal infection rate
-    'density_expo' : 1.,
-    'recovery_rate': 1 / (PRODROME_PERIOD +
-                          SYMPTOM_PERIOD),           # Recovery rate
-    'incubation_rate': 1 / LATENT_PERIOD,         # E->I incubation rate
-    'sus': array([1]),          # Relative susceptibility by
-                                  # age/vulnerability class
-    'fit_method' : 'EL',
-    'k_home': ones((1, 1), dtype=float),
-    'k_ext': (1 / hh_size) * ones((1, 1), dtype=float),
-    'skip_ext_scale' : True
-}
+    print("hh_size =", hh_size_list[i])
+    print("Max relative error in S:",
+          (abs(time_series_list[i]['S'][1:].sum(1) - agg_time_series_list[i]['S'][1:].T) /
+           time_series_list[i]['S'][1:].sum(1)).max())
+    print("Max relative error in E:",
+          (abs(time_series_list[i]['E'][1:].sum(1) - agg_time_series_list[i]['E'][1:].T) /
+           time_series_list[i]['E'][1:].sum(1)).max())
+    print("Max relative error in I:",
+          (abs(time_series_list[i]['I'][1:].sum(1) - agg_time_series_list[i]['I'][1:].T) /
+           time_series_list[i]['I'][1:].sum(1)).max())
+    print("Max relative error in R:",
+          (abs(time_series_list[i]['R'][1:].sum(1) - agg_time_series_list[i]['R'][1:].T) /
+           time_series_list[i]['R'][1:].sum(1)).max())
 
-model_input = SEIRInput(SPEC, composition_list, comp_dist)
-model_input.k_ext *= beta_ext
-
-# With the parameters chosen, we calculate Q_int:
-household_population = HouseholdPopulation(
-    composition_list, comp_dist, model_input)
-
-# Set up import model
-no_imports = NoImportModel(4, 1)
-base_rhs = UnloopedSEIRRateEquations(model_input, household_population, no_imports)
-fixed_imports = FixedImportModel(4,
-                                 1,
-                                 base_rhs,
-                                 array(x0))
-
-rhs = UnloopedSEIRRateEquations(model_input,
-                                household_population,
-                                fixed_imports,
-                                sources="IMPORT")
-H0 = zeros(household_population.total_size, )
-all_sus = where(sum(rhs.states_exp_only + rhs.states_inf_only + rhs.states_rec_only, 1) < 1e-1)[0]
-H0[all_sus] = 1. / len(all_sus)
-tspan = (0.0, 361)
-solution = solve_ivp(rhs,
-                     tspan,
-                     H0,
-                     first_step=0.001,
-                     atol=1e-16,
-                     t_eval=t_eval)
-
-t = solution.t
-H = solution.y
-S = H.T.dot(household_population.states[:, ::4])
-E = H.T.dot(household_population.states[:, 1::4])
-I = H.T.dot(household_population.states[:, 2::4])
-R = H.T.dot(household_population.states[:, 3::4])
-time_series = {
-'time':t,
-'S':S,
-'E':E,
-'I':I,
-'R':R
-}
-print("Relative error in S:",
-      abs(time_series_list[0]['S'][1:].sum(1) - S[1:].T) / time_series_list[0]['S'][1:].sum(1))
-print("Relative error in E:",
-      abs(time_series_list[0]['E'][1:].sum(1) - E[1:].T) / time_series_list[0]['E'][1:].sum(1))
-print("Relative error in I:",
-      abs(time_series_list[0]['I'][1:].sum(1) - I[1:].T) / time_series_list[0]['I'][1:].sum(1))
-print("Relative error in R:",
-      abs(time_series_list[0]['R'][1:].sum(1) - R[1:].T) / time_series_list[0]['R'][1:].sum(1))
+    fig, (ax_ibm, ax_agg) = subplots(1, 2)
+    ax_ibm.plot(time_series_list[i]['S'].sum(1))
+    ax_ibm.plot(time_series_list[i]['E'].sum(1))
+    ax_ibm.plot(time_series_list[i]['I'].sum(1))
+    ax_ibm.plot(time_series_list[i]['R'].sum(1))
+    ax_agg.plot(agg_time_series_list[i]['S'].sum(1))
+    ax_agg.plot(agg_time_series_list[i]['E'].sum(1))
+    ax_agg.plot(agg_time_series_list[i]['I'].sum(1))
+    ax_agg.plot(agg_time_series_list[i]['R'].sum(1))
+    ax_ibm.set_title("HH size = " + str(hh_size_list[i]))
+    fig.show()
