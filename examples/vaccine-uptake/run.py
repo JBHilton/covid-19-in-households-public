@@ -100,7 +100,7 @@ for i in range(max_hh_size):
     ax.plot(uptake_by_time_by_size[i, :], label = 'N ='+ str(i+1))
     ax.set_ylabel('Uptake')
     ax.set_xlabel('Week')
-ax.plot(uptake_by_time, color = "k", label = 'Overall')
+ax.plot(uptake_by_time, ls = ":", color = "k", label = 'Overall')
 ax.legend()
 fig_uptake.show()
 
