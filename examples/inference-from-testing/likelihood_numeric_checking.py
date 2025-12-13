@@ -112,7 +112,7 @@ growth_rate = log(2) / DOUBLING_TIME
 
 n_sims = 10
 lambda_0 = 3.0
-tau_0 = .25
+tau_0 = 1.
 n_hh = 100
 pop_prev = 1e-3
 test_times = array([14, 28])
@@ -143,8 +143,6 @@ def run_simulation(lambda_val, tau_val):
     model_input.beta_int = tau_val
     model_input.k_ext *= lambda_val
 
-    true_density_expo = model_input.density_expo
-
     # With the parameters chosen, we calculate Q_int:
     household_population = HouseholdPopulation(
         composition_list, comp_dist, model_input)
@@ -152,16 +150,8 @@ def run_simulation(lambda_val, tau_val):
     no_imports = NoImportModel(4, 1)
 
     base_rhs = UnloopedSEIRRateEquations(model_input, household_population, no_imports)
-    r_est = estimate_growth_rate(household_population, base_rhs, [0.001, 5], 1e-9)
-    base_H0 = make_initial_condition_by_eigenvector(r_est,
-                                                    model_input,
-                                                    household_population,
-                                                    base_rhs,
-                                                    pop_prev,
-                                                    0.0,
-                                                    False,
-                                                    3)
-    x0 = base_H0.T.dot(household_population.states[:, 2::4])
+
+    x0 = array([pop_prev])
 
     fixed_imports = FixedImportModel(4,
                                      1,
@@ -169,8 +159,10 @@ def run_simulation(lambda_val, tau_val):
                                      x0)
 
     rhs = UnloopedSEIRRateEquations(model_input, household_population, fixed_imports, sources="IMPORT")
+    P0 = zeros(rhs.total_size, )
+    P0[where(abs(rhs.states_sus_only - rhs.household_population.composition_by_state) < 1e-1)[0]] = 1.
     H_t0 = initialise_at_first_test_date(rhs,
-                                  base_H0)
+                                  P0)
 
     solve_times = array([0, test_times[0], test_times[1]])
     def generate_single_hh_test_data(test_times):
@@ -216,10 +208,6 @@ def create_result_mappings(max_hh_size):
 max_hh_size = composition_list.max()  # e.g., 3
 result_to_index, index_to_result = create_result_mappings(max_hh_size)
 
-# Check mappings:
-print("Mapping (N_HH, y) → index:")
-for k, v in result_to_index.items():
-    print(f"{k} → {v}")
 
 # Construct models (should only be one type if we're doing uniform households)
 hh_models = {}
@@ -337,7 +325,7 @@ def likelihood_tau_lambda_ode(rhs, H_t0, Chi_1, Chi_2):
 
 def loglike_with_counts_odes(tau, lam, obs_counts):
     tau = tau / rhs.model_input.beta_int  # Rescale to match method from data generation
-    
+
     # Set up model:
     rhs_tau_lam = deepcopy(rhs)
     rhs_tau_lam.update_int_rate(tau)
@@ -410,8 +398,8 @@ for i in range(n_attempt):
     linear_sol = do_matrix_solve(t_eval, P0)
     t_matrix += time() - t
 
-print("Ave. execution time for ODE solves:", t_ode / n_attempt)
-print("Ave. execution time for matrix solves:", t_matrix / n_attempt)
+print("Ave. execution time for ODE solves in likelihood:", t_ode / n_attempt)
+print("Ave. execution time for matrix solves in likelihood:", t_matrix / n_attempt)
 
 # Accuracy at this scale:
 solution = solve_ivp(rhs, tspan, P0, first_step=0.001, atol=1e-16, t_eval=t_eval)
@@ -422,7 +410,7 @@ for i in range(1, len(t_eval)):
 errs = [(abs(solution.y[where(solution.y[:, i]>1e-9)[0], i] - linear_sol[i][where(solution.y[:, i]>1e-9)[0]]) /
          solution.y[where(solution.y[:, i]>1e-9)[0], i]).sum() for i in range(len(t_eval))]
 
-print("Errors in matrix calculations:", errs)
+print("Errors in likelihood matrix calculations:", errs)
 
 # Check we get to same P(t1) (or H(t1)):
 H_t1_ode = initialise_at_first_test_date(rhs,
@@ -432,13 +420,32 @@ H_t1_matrix = expm((t2 - t1) * (rhs.Q_int_fixed.T + rhs.Q_int_inf.T + rhs.Q_impo
 print("Error in time point 1 evaluation:",
       (abs(H_t1_ode - H_t1_matrix) / H_t1_ode).sum())
 
+# Check solver used for simulations against solver used for likelihood:
+t_eval = array([t0, t1, t2])
+sol_sim = solve_ivp(sim_rhs, (t0, t2), P0, first_step=0.001, t_eval=t_eval, atol=1e-16)
+rhs_tau_lam = deepcopy(rhs)
+rhs_tau_lam.update_int_rate(tau_0)
+rhs_tau_lam.update_ext_rate(lambda_0)
+sol_overwrite = solve_ivp(rhs_tau_lam, (t0, t2), P0, first_step=0.001, t_eval=t_eval, atol=1e-16)
+H_sim = sol_sim.y
+H_overwrite = sol_overwrite.y
+H_err = abs((H_sim + 1e-9) - (H_overwrite + 1e-9)) / (H_sim + 1e-9)
+
+print("Relative error in solutions =",
+      H_err.sum())
+
+# Make sure overwriting of parameters works correctly:
+tau_check = tau_0 / rhs.model_input.beta_int # Rescale to match method from data generation
+print("Max difference in internal infection matrix: ", abs(tau_check * rhs.Q_int_inf.todense() - sim_rhs.Q_int_inf).max())
+print("Max difference in import matrix: ", abs(lambda_0 * rhs.Q_import.todense() - sim_rhs.Q_import).max())
+
 # Now do likelihood surface with both methods:
 
-t_range = arange(.5, 1.5, .05)
-t0 = t_range[0]
+t_range = tau_0 * arange(.5, 1.55, .1)
+t_start = t_range[0]
 t_end = t_range[-1]
-l_range = arange(.5, 1.5, .05)
-l0 = l_range[0]
+l_range = lambda_0 * arange(.5, 1.55, .1)
+l_start = l_range[0]
 l_end = l_range[-1]
 
 me_start = time()
@@ -458,13 +465,15 @@ fig, (ax1, ax2) = subplots(1, 2)
 ax1.imshow(llh_array_matrix_exp,
            cmap = cm.magma,
            origin='lower',
-           extent=(l0, l_end, t0, t_end))
-ax1.scatter([1.], [1.], color = 'k')
-ax1.set_aspect((l_end-l0)/(t_end-t0))
+           extent=(l_start, l_end, t_start, t_end))
+ax1.scatter([lambda_0], [tau_0], color = 'k')
+ax1.set_aspect((l_end-l_start)/(t_end-t_start))
+ax1.set_title('Matrix exponential')
 ax2.imshow(llh_array_ode,
            cmap = cm.magma,
            origin='lower',
-           extent=(l0, l_end, t0, t_end))
-ax2.set_aspect((l_end-l0)/(t_end-t0))
-ax2.scatter([1.], [1.], color = 'k')
+           extent=(l_start, l_end, t_start, t_end))
+ax2.set_aspect((l_end-l_start)/(t_end-t_start))
+ax2.scatter([lambda_0], [tau_0], color = 'k')
+ax2.set_title('ODE')
 fig.show()
