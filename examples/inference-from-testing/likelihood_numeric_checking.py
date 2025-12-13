@@ -2,14 +2,16 @@
 from copy import deepcopy
 from collections import Counter
 from matplotlib.pyplot import cm, subplots
-from numpy import arange, array, log, ones, sum, unravel_index, where, zeros
+from numpy import arange, array, ceil, delete, log, ones, percentile, sum, unravel_index, where, zeros
 from numpy.random import choice
 from os import chdir, mkdir, getcwd
 from pandas import read_csv
+from scipy import optimize
 from scipy.integrate import solve_ivp
 from scipy.sparse import csr_matrix
 from scipy.sparse.linalg import expm
 from time import time
+from tqdm import tqdm
 from model.preprocessing import ( estimate_beta_ext, estimate_growth_rate,
         SEIRInput, HouseholdPopulation, make_initial_condition_by_eigenvector)
 from model.specs import SINGLE_TYPE_INFERENCE_SPEC, TWO_AGE_SEIR_SPEC_FOR_FITTING, TWO_AGE_UK_SPEC
@@ -112,7 +114,7 @@ growth_rate = log(2) / DOUBLING_TIME
 
 n_sims = 10
 lambda_0 = 3.0
-tau_0 = 1.
+tau_0 = .25
 n_hh = 100
 pop_prev = 1e-3
 test_times = array([14, 28])
@@ -354,24 +356,7 @@ def loglike_with_counts_odes(tau, lam, obs_counts):
     return total_llh
 
 
-# Do some numerical investigation of likelihood and gradient functions
-from scipy import optimize
-
-def f(pars):
-    tau = pars[0]
-    lam = pars[1]
-    if (tau<=0)|(lam<=0):
-        return 1e6
-    else:
-        return -loglike_with_counts(tau, lam, P0, Q1, Q2, Q0, Chi, result_to_index, obs_counts)
-
-def f_ode(pars):
-    tau = pars[0]
-    lam = pars[1]
-    if (tau<=0)|(lam<=0):
-        return 1e6
-    else:
-        return -loglike_with_counts_odes(tau, lam, obs_counts)
+# Do some numerical investigation of likelihood functions
 
 
 # Compare solve times for matrix exponential and ODEs at this scale:
@@ -441,6 +426,22 @@ print("Max difference in import matrix: ", abs(lambda_0 * rhs.Q_import.todense()
 
 # Now do likelihood surface with both methods:
 
+def f(pars):
+    tau = pars[0]
+    lam = pars[1]
+    if (tau<=0)|(lam<=0):
+        return 1e6
+    else:
+        return -loglike_with_counts(tau, lam, P0, Q1, Q2, Q0, Chi, result_to_index, obs_counts)
+
+def f_ode(pars):
+    tau = pars[0]
+    lam = pars[1]
+    if (tau<=0)|(lam<=0):
+        return 1e6
+    else:
+        return -loglike_with_counts_odes(tau, lam, obs_counts)
+
 t_range = tau_0 * arange(.5, 1.55, .1)
 t_start = t_range[0]
 t_end = t_range[-1]
@@ -476,4 +477,66 @@ ax2.imshow(llh_array_ode,
 ax2.set_aspect((l_end-l_start)/(t_end-t_start))
 ax2.scatter([lambda_0], [tau_0], color = 'k')
 ax2.set_title('ODE')
+fig.show()
+
+# Now try repeat fitting with numerical optimisation:
+
+# Set cutoffs for abandoning fits:
+tau_cutoff = 10 * tau_0
+lambda_cutoff = 10 * lambda_0
+
+def run_synth_inference():
+    # Make dataset
+    mhd, srhs = run_simulation(lambda_0, tau_0)
+
+    # Convert to counts
+    oc = Counter(tuple(map(int, hh)) for hh in mhd)
+
+    def f_mhd(pars):
+        tau = pars[0]
+        lam = pars[1]
+        if (tau <= 0) | (lam <= 0):
+            return 1e6
+        else:
+            return -loglike_with_counts(tau, lam, P0, Q1, Q2, Q0, Chi, result_to_index, oc)
+
+    mle = optimize.minimize(f_mhd,
+                            array([1., 1.]),
+                            bounds=((1e-9, tau_cutoff), (1e-9, lambda_cutoff)),
+                            method='Nelder-Mead')
+    return (mle.x)
+
+# IMPORTANT: Synthetic data generation and inference executes on the order of seconds,
+# so set n_sample at your own risk!
+n_sample = 30
+mle_samples = [run_synth_inference() for i in tqdm(range(n_sample))]
+tau_samples = array([m[0] for m in mle_samples])
+lambda_samples = array([m[1] for m in mle_samples])
+
+fail_locs = where((tau_cutoff - tau_samples) < 1e-9)[0]
+fail_rate = len(fail_locs) / n_sample
+print("Failure rate of inference:", fail_rate)
+
+tau_samples = delete(tau_samples, fail_locs)
+lambda_samples = delete(lambda_samples, fail_locs)
+
+tau_mean = tau_samples.mean()
+lambda_mean = lambda_samples.mean()
+tau_ci = percentile(tau_samples, [2.5, 97.5])
+lamdba_ci = percentile(lambda_samples, [2.5, 97.5])
+print("tau_mle = ", tau_mean, tau_ci)
+print("lambda_mle = ", lambda_mean, lamdba_ci)
+
+tau_max = ceil(max(tau_samples))
+lam_max = ceil(max(lambda_samples))
+
+fig, ax = subplots(1, 1)
+ax.scatter(lambda_samples,
+           tau_samples,)
+ax.plot([0, lam_max], [tau_0, tau_0], 'k--')
+ax.plot([lambda_0, lambda_0], [0, tau_max], 'k--')
+ax.set_xlabel(r'$\lambda$')
+ax.set_ylabel(r'$\tau$')
+ax.set_xlim(0, lam_max)
+ax.set_ylim(0, tau_max)
 fig.show()
