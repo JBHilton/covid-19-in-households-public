@@ -1,6 +1,6 @@
 SAVE_INFERENCE_RESULTS = True
 # Imports
-
+import os
 import matplotlib.pyplot as plt
 from matplotlib.pyplot import subplots, savefig
 from matplotlib.cm import get_cmap
@@ -24,6 +24,7 @@ from copy import deepcopy
 from datetime import datetime
 from numpy import arange, array, atleast_2d, log, sum, where, zeros
 import pandas
+import pandas as pd
 from pandas import read_csv
 from scipy.linalg import fractional_matrix_power
 from scipy.sparse.linalg import expm
@@ -31,6 +32,8 @@ from scipy.stats import lognorm
 from scipy.sparse import csr_matrix
 from scipy.optimize import minimize
 import warnings
+import traceback
+
 
 from model.preprocessing import (
     estimate_beta_ext, estimate_growth_rate,
@@ -455,7 +458,6 @@ def all_households_loglike(tau, lam, result_to_index, Chi, multi_hh_data):
 
 # Negative log-likelihood wrapper using the collapsed-with-counts function you wrote
 def neg_loglike(params):
-    """Return negative total log-likelihood for params = [tau, lam]."""
     tau, lam = params[0], params[1]
     # loglike_with_counts returns: total_lh, total_llh, grad_tau, grad_lam
     _, total_llh, grad_tau, grad_lam = loglike_with_counts(
@@ -463,16 +465,14 @@ def neg_loglike(params):
     )
     return -total_llh
 
-def neg_loglike_and_grad(params):
-    """Return (neg_loglike, neg_grad) for optimizer that accepts jac."""
-    tau, lam = params[0], params[1]
-    _, total_llh, grad_tau, grad_lam = loglike_with_counts(
-        tau, lam, P0, Q1, Q2, Q0, Chi, result_to_index, multi_hh_data
-    )
-    neg_ll = -total_llh
-    # grad_tau and grad_lam are derivatives of the log-likelihood; we need derivative of -log-likelihood
-    neg_grad = -np.array([grad_tau, grad_lam], dtype=float)
-    return neg_ll, neg_grad
+# def neg_loglike_and_grad(params):
+#     tau, lam = params[0], params[1]
+#     _, total_llh, grad_tau, grad_lam = loglike_with_counts(
+#         tau, lam, P0, Q1, Q2, Q0, Chi, result_to_index, multi_hh_data
+#     )
+#     neg_ll = -total_llh
+#     neg_grad = -np.array([grad_tau, grad_lam], dtype=float)
+#     return neg_ll, neg_grad
 
 # Callback to watch progress
 def callback_print(xk):
@@ -484,23 +484,23 @@ bounds = [(1e-8, None), (1e-8, None)]  # enforce positivity
 
 # Choose optimizer: L-BFGS-B (use jac), fallback to Nelder-Mead if you prefer derivative-free
 #I think L-BFGS-B is a bit better and faster. (opinion)
-#res = minimize(
-#    neg_loglike,
-#    initial_guess,
-#    method="Nelder-Mead",
-#    callback=lambda x: print("trying", x),
-#    options={"maxiter": 1000, "disp": True}
-#)
-
 res = minimize(
-    fun=lambda p: neg_loglike_and_grad(p)[0],
-    x0=initial_guess,
-    method="L-BFGS-B",
-    jac=lambda p: neg_loglike_and_grad(p)[1],
-    bounds=bounds,
-    callback=callback_print,
-    options={"disp": True, "maxiter": 1000}
+    neg_loglike,
+    initial_guess,
+    method="Nelder-Mead",
+    callback=lambda x: print("trying", x),
+    options={"maxiter": 1000, "disp": True}
 )
+
+#res = minimize(
+#    fun=lambda p: neg_loglike_and_grad(p)[0],
+#    x0=initial_guess,
+#    method="L-BFGS-B",
+#    jac=lambda p: neg_loglike_and_grad(p)[1],
+#    bounds=bounds,
+#    callback=callback_print,
+#    options={"disp": True, "maxiter": 1000}
+#)
 
 # If L-BFGS-B fails or you explicitly want Nelder-Mead:
 # res = minimize(lambda p: neg_loglike(p), initial_guess, method='Nelder-Mead', callback=callback_print)
@@ -511,6 +511,14 @@ print("\nOptimization result:\n", res)
 xhat = res.x
 tau_hat, lam_hat = xhat[0], xhat[1]
 print(f"\nEstimated parameters: tau = {tau_hat:.6f}, lambda = {lam_hat:.6f}")
+
+# Optional: try to use numdifftools if installed for Hessian
+try:
+    import numdifftools as nd
+    _have_numdifftools = True
+except Exception:
+    _have_numdifftools = False
+    from scipy.linalg import pinv
 
 # Hessian and covariance estimation
 def compute_hessian_at(f, x0):
@@ -544,15 +552,7 @@ with warnings.catch_warnings():
     warnings.simplefilter("ignore")
     H = compute_hessian_at(neg_loglike, xhat)
 
-# Optional: try to use numdifftools if installed for Hessian
-try:
-    import numdifftools as nd
-    _have_numdifftools = True
-except Exception:
-    _have_numdifftools = False
-    from scipy.linalg import pinv
-
-# Try to invert Hessian to get covariance; handle non-PD case gracefully
+# Try to invert Hessian to get covariance; handle non-PD case
 try:
     # If Hessian is positive definite, np.linalg.inv works
     cov = np.linalg.inv(H)
@@ -568,3 +568,119 @@ ci_upper = xhat + 1.96 * stds
 print("\nStandard errors:", stds)
 print("95% CI for tau: [{:.6f}, {:.6f}]".format(ci_lower[0], ci_upper[0]))
 print("95% CI for lambda: [{:.6f}, {:.6f}]".format(ci_lower[1], ci_upper[1]))
+
+
+################################################################
+# Experiment: run inference many times, record results
+################################################################
+
+output_dir = "simulation_results"
+os.makedirs(output_dir, exist_ok=True)
+summary_list = []
+n_runs = 100
+
+for run_idx in range(n_runs):
+    print(f"\n=== Run {run_idx + 1} / {n_runs} ===")
+
+    # Generate new synthetic data
+    multi_hh_data, rhs = run_simulation(lambda_0, tau_0)
+
+    # Rebuild household models and Chi matrices based on new data
+    max_hh_size = composition_list.max()
+    result_to_index, index_to_result = create_result_mappings(max_hh_size)
+    hh_models = {}
+    x0 = np.array([pop_prev])
+    for N in range(1, max_hh_size + 1):
+        comp_list = np.array([[N]])
+        comp_dist = np.array([1.0])
+        model_input = SEIRInput(SPEC, comp_list, comp_dist)
+        hh_pop = HouseholdPopulation(comp_list, comp_dist, model_input)
+        no_imports = NoImportModel(4, 1)
+        rhs = UnloopedSEIRRateEquations(model_input, hh_pop, no_imports)
+        fixed_imports = FixedImportModel(4, 1, rhs, x0)
+        rhs = UnloopedSEIRRateEquations(model_input, hh_pop, fixed_imports, sources="IMPORT")
+        P0 = np.zeros(rhs.total_size)
+        P0[np.where(abs(rhs.states_sus_only - N) < 1e-1)[0]] = 1.0
+        hh_models[N] = (hh_pop, rhs, P0)
+
+    from scipy.sparse import csr_matrix
+    Chi = []
+    for (N_HH, y) in index_to_result:
+        hh_pop, rhs, P0 = hh_models[N_HH]
+        states_inf_only = rhs.states_inf_only
+        possible_states = np.where(abs(states_inf_only - y) < 1e-1)[0]
+        size = len(states_inf_only)
+        data = np.ones(len(possible_states))
+        Chi_k = csr_matrix((data, (possible_states, possible_states)), shape=(size, size))
+        Chi.append(Chi_k)
+
+    N_HH = int(composition_list[0, 0])
+    P0 = hh_models[N_HH][2]
+    rhs = hh_models[N_HH][1]
+    Q1 = rhs.Q_int_inf
+    Q2 = rhs.Q_import
+    Q0 = rhs.Q_int_fixed
+
+    # Optimization function
+    def neg_loglike(params):
+        tau, lam = params[0], params[1]
+        # loglike_with_counts returns: total_lh, total_llh, grad_tau, grad_lam
+        _, total_llh, grad_tau, grad_lam = loglike_with_counts(
+            tau, lam, P0, Q1, Q2, Q0, Chi, result_to_index, multi_hh_data
+        )
+        return -total_llh
+
+    initial_guess = np.array([tau_0, lambda_0])
+    res = minimize(
+        neg_loglike,
+        initial_guess,
+        method="Nelder-Mead",
+        options={"maxiter": 1000, "disp": False}
+    )
+
+    xhat = res.x
+    tau_hat, lam_hat = xhat[0], xhat[1]
+
+    # Hessian and CIs
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        H = compute_hessian_at(neg_loglike, xhat)
+    try:
+        cov = np.linalg.inv(H)
+    except Exception:
+        cov = pinv(H)
+
+    stds = np.sqrt(np.abs(np.diag(cov)))
+    ci_lower = xhat - 1.96 * stds
+    ci_upper = xhat + 1.96 * stds
+
+    print(f"Run {run_idx+1}: tau_hat={tau_hat:.6f}, lambda_hat={lam_hat:.6f}")
+    print(f"         tau_CI=({ci_lower[0]:.6f}, {ci_upper[0]:.6f})")
+    print(f"      lambda_CI=({ci_lower[1]:.6f}, {ci_upper[1]:.6f})")
+
+    # Save dataset
+    pickle_path = os.path.join(output_dir, f"multi_hh_data_run_{run_idx+1}.pkl")
+    with open(pickle_path, "wb") as f:
+        pickle.dump(multi_hh_data, f)
+
+    # Append results for CSV
+    summary_list.append({
+        "run": run_idx + 1,
+        "tau_hat": tau_hat,
+        "lambda_hat": lam_hat,
+        "tau_ci_lower": ci_lower[0],
+        "tau_ci_upper": ci_upper[0],
+        "lambda_ci_lower": ci_lower[1],
+        "lambda_ci_upper": ci_upper[1],
+        "tau_in_CI": (tau_0 >= ci_lower[0]) and (tau_0 <= ci_upper[0]),
+        "lambda_in_CI": (lambda_0 >= ci_lower[1]) and (lambda_0 <= ci_upper[1])
+    })
+
+
+
+# Save summary CSV
+summary_df = pd.DataFrame(summary_list)
+csv_path = os.path.join(output_dir, "summary_estimates.csv")
+summary_df.to_csv(csv_path, index=False)
+
+print(f"\nCompleted {n_runs} runs. Results saved to '{output_dir}'")
