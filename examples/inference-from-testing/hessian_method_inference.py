@@ -99,8 +99,6 @@ def run_simulation(lambda_val, tau_val):
     model_input.beta_int = tau_val
     model_input.k_ext *= lambda_val
 
-    true_density_expo = model_input.density_expo
-
     # With the parameters chosen, we calculate Q_int:
     household_population = HouseholdPopulation(
         composition_list, comp_dist, model_input)
@@ -108,16 +106,8 @@ def run_simulation(lambda_val, tau_val):
     no_imports = NoImportModel(4, 1)
 
     base_rhs = UnloopedSEIRRateEquations(model_input, household_population, no_imports)
-    r_est = estimate_growth_rate(household_population, base_rhs, [0.001, 5], 1e-9)
-    base_H0 = make_initial_condition_by_eigenvector(r_est,
-                                                    model_input,
-                                                    household_population,
-                                                    base_rhs,
-                                                    pop_prev,
-                                                    0.0,
-                                                    False,
-                                                    3)
-    x0 = base_H0.T.dot(household_population.states[:, 2::4])
+
+    x0 = array([pop_prev])
 
     fixed_imports = FixedImportModel(4,
                                      1,
@@ -125,13 +115,15 @@ def run_simulation(lambda_val, tau_val):
                                      x0)
 
     rhs = UnloopedSEIRRateEquations(model_input, household_population, fixed_imports, sources="IMPORT")
+    P0 = zeros(rhs.total_size, )
+    P0[where(abs(rhs.states_sus_only - rhs.household_population.composition_by_state) < 1e-1)[0]] = 1.
     H_t0 = initialise_at_first_test_date(rhs,
-                                  base_H0)
+                                  P0)
 
-    solve_times = np.array([0, test_times[0], test_times[1]])
+    solve_times = array([0, test_times[0], test_times[1]])
     def generate_single_hh_test_data(test_times):
         Ht = deepcopy(H_t0)
-        test_data = np.zeros((len(test_times),))
+        test_data = zeros((len(test_times),))
         for i in range(len(test_times)):
             tspan = (solve_times[i], solve_times[i+1])
             solution = solve_ivp(rhs, tspan, Ht, first_step=0.001, atol=1e-16)
@@ -577,7 +569,7 @@ print("95% CI for lambda: [{:.6f}, {:.6f}]".format(ci_lower[1], ci_upper[1]))
 output_dir = "simulation_results"
 os.makedirs(output_dir, exist_ok=True)
 summary_list = []
-n_runs = 100
+n_runs = 50
 
 for run_idx in range(n_runs):
     print(f"\n=== Run {run_idx + 1} / {n_runs} ===")
@@ -641,18 +633,22 @@ for run_idx in range(n_runs):
     xhat = res.x
     tau_hat, lam_hat = xhat[0], xhat[1]
 
-    # Hessian and CIs
-    with warnings.catch_warnings():
-        warnings.simplefilter("ignore")
-        H = compute_hessian_at(neg_loglike, xhat)
-    try:
-        cov = np.linalg.inv(H)
-    except Exception:
-        cov = pinv(H)
+    if (tau_hat < 100) & (lam_hat < 100):
+        # Hessian and CIs
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            H = compute_hessian_at(neg_loglike, xhat)
+        try:
+            cov = np.linalg.inv(H)
+        except Exception:
+            cov = pinv(H)
 
-    stds = np.sqrt(np.abs(np.diag(cov)))
-    ci_lower = xhat - 1.96 * stds
-    ci_upper = xhat + 1.96 * stds
+        stds = np.sqrt(np.abs(np.diag(cov)))
+        ci_lower = xhat - 1.96 * stds
+        ci_upper = xhat + 1.96 * stds
+    else:
+        ci_lower = xhat
+        ci_upper = xhat
 
     print(f"Run {run_idx+1}: tau_hat={tau_hat:.6f}, lambda_hat={lam_hat:.6f}")
     print(f"         tau_CI=({ci_lower[0]:.6f}, {ci_upper[0]:.6f})")
@@ -677,7 +673,7 @@ for run_idx in range(n_runs):
     })
 
 
-
+#
 # Save summary CSV
 summary_df = pd.DataFrame(summary_list)
 csv_path = os.path.join(output_dir, "summary_estimates.csv")
