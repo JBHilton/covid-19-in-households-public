@@ -1,25 +1,25 @@
-Development version of the Python age-household model. Run the examples from
-the main repo directory. In order to make the `model` directory visible as
-Python module, run the following from the main directory of the repo e.g.
+# Compartmental household epidemiological models with age-structure
 
+This repository is an implementation of household [compartmental
+models](https://en.wikipedia.org/wiki/Compartmental_models_in_epidemiology).
+The models incorporate demographic information through explicit household
+composition. The demographic information is typically age-structure but this
+can be generalised into any risk-structure e.g. patient, staff, shielded
+or non-shielded household member. The purpose of this software is to enable
+quantitative evaluation of health policies in wide range of scenarios.
 
-On UNIX-like system
-```bash
-export PYTHONPATH=$(pwd):$PYTHONPATH
-python examples/uk/run.py
-```
+The code contains a set of functions and classes as well several example
+analyses with heterogeneous risk-structure. Functions and classes automate the
+construction of objects defining household populations and rate equations.
 
-On Windows, the easiest way is to install Anaconda with a graphic installer
-from [here](https://www.anaconda.com/products/individual).
+For detailed information on how to use this code refer to the [wiki
+pages](https://github.com/JBHilton/covid-19-in-households-public/wiki). For
+methodological and background information please refer to the following
 
-```
-cd <directory with the code>
-set PYTHONPATH=%CD%
-python examples/uk/run.py
-```
-
-
-## Prerequisites
-
- * pandas - for readind and manipulating data from spreadsheets
- * tqdm - simple progress bar
+1. Hilton, J and Keeling, M.J., [Incorporating household structure and demography
+into models of endemic
+disease](https://royalsocietypublishing.org/doi/10.1098/rsif.2019.0317), J. R.
+Soc. Interface 16, 2019
+1. Hilton, J., [Stochastic approaches to infectious disease in heterogeneous
+populations](http://wrap.warwick.ac.uk/147970/), PhD Thesis, University of
+Warwick.
