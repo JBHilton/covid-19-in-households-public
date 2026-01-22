@@ -165,11 +165,6 @@ def create_result_mappings(max_hh_size):
 max_hh_size = composition_list.max()  # e.g., 3
 result_to_index, index_to_result = create_result_mappings(max_hh_size)
 
-# Check step 1:
-print("Mapping (N_HH, y) → index:")
-for k, v in result_to_index.items():
-    print(f"{k} → {v}")
-
 # Step 2: Build HouseholdPopulation + SEIRRateEquations for each N_HH
 hh_models = {}  # key = N_HH, value = (household_population, rate_equation)
 x0 = array([pop_prev]) # Initial external prevalence
@@ -569,7 +564,7 @@ print("95% CI for lambda: [{:.6f}, {:.6f}]".format(ci_lower[1], ci_upper[1]))
 output_dir = "simulation_results"
 os.makedirs(output_dir, exist_ok=True)
 summary_list = []
-n_runs = 50
+n_runs = 1
 
 for run_idx in range(n_runs):
     print(f"\n=== Run {run_idx + 1} / {n_runs} ===")
@@ -600,10 +595,24 @@ for run_idx in range(n_runs):
     for (N_HH, y) in index_to_result:
         hh_pop, rhs, P0 = hh_models[N_HH]
         states_inf_only = rhs.states_inf_only
+
+        possible_states = np.where(abs(states_inf_only - y) < 1e-1)[0]
+        size = len(states_inf_only)
+
+        Chi_k = csr_matrix(
+            (np.ones(len(possible_states)),
+             (possible_states, possible_states)),
+            shape=(size, size)
+        )
+        Chi.append(Chi_k)
+
+    for (N_HH, y) in index_to_result:
+        hh_pop, rhs, P0 = hh_models[N_HH]
+        states_inf_only = rhs.states_inf_only
         possible_states = np.where(abs(states_inf_only - y) < 1e-1)[0]
         size = len(states_inf_only)
         data = np.ones(len(possible_states))
-        Chi_k = csr_matrix((data, (possible_states, possible_states)), shape=(size, size))
+
         Chi.append(Chi_k)
 
     N_HH = int(composition_list[0, 0])
@@ -622,6 +631,16 @@ for run_idx in range(n_runs):
         )
         return -total_llh
 
+    #If you don't want negative values, Nelder-Mead wont do it. You can use instead
+    #bounds = [(0.0, None), (0.0, None)]  # (lower, upper)
+
+    #res = minimize(
+    #    neg_loglike,
+    #    x0=np.array([tau_0, lambda_0]),
+    #    method="L-BFGS-B",
+    #    bounds=bounds,
+    #    options={"disp": True, "maxiter": 1000}
+    )
     initial_guess = np.array([tau_0, lambda_0])
     res = minimize(
         neg_loglike,
