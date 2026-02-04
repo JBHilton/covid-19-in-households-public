@@ -19,7 +19,7 @@ from model.preprocessing import ( estimate_beta_ext, estimate_growth_rate,
 from model.specs import SINGLE_TYPE_INFERENCE_SPEC, TWO_AGE_SEIR_SPEC_FOR_FITTING, TWO_AGE_UK_SPEC
 from model.common import SEIRRateEquations, UnloopedSEIRRateEquations
 from model.imports import FixedImportModel, NoImportModel
-
+from os.path import join
 if 'inference-from-testing' in getcwd():
     chdir("../..")
 
@@ -127,17 +127,19 @@ def run_simulation(lambda_val, tau_val):
     multi_hh_data = [generate_single_hh_test_data(test_times) for i in range(n_hh)]
     return multi_hh_data, rhs
 
+# Make sure to run this first:
+multi_hh_data, sim_rhs = run_simulation(lambda_0, tau_0)
+
 # IF YOU WANNA SAVE THE DATA
 with open("simulated_test_outcomes_for_exp_llh.pkl", "wb") as f:
     pickle.dump(multi_hh_data, f)
 
     # Save dataset
-    pickle_path = os.path.join(output_dir, f"multi_hh_data_run_{run_idx+1}.pkl")
+    output_dir = "likelihood_simulation_results"
+    os.makedirs(output_dir, exist_ok=True)
+    pickle_path = join(output_dir, f"multi_hh_data_run_{run_idx+1}.pkl")
     with open(pickle_path, "wb") as f:
         pickle.dump(multi_hh_data, f)
-
-# Make sure to run this first:
-multi_hh_data, sim_rhs = run_simulation(lambda_0, tau_0)
 
 #IF YOU WANNA USE THE SAVED DATA
 with open("simulated_test_outcomes_for_exp_llh.pkl", "rb") as f:
