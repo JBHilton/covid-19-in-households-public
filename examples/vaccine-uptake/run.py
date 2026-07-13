@@ -6,6 +6,8 @@ from numpy import arange, array, diag, log, ones, vstack, where, zeros
 from os import mkdir
 from os.path import isdir, isfile
 from pickle import load, dump
+
+from numpy.ma.core import argmax
 from pandas import concat, read_csv
 from scipy.integrate import solve_ivp
 from scipy.sparse.linalg import expm
@@ -18,6 +20,7 @@ from model.common import UnloopedSEIRRateEquations
 from model.imports import FixedImportModel, NoImportModel, ExponentialImportModel
 
 # pylint: disable=invalid-name
+save_figs = False
 
 if isdir('outputs/vaccine-uptake') is False:
     mkdir('outputs/vaccine-uptake')
@@ -25,8 +28,8 @@ if isdir('outputs/vaccine-uptake') is False:
 if isdir('plots/vaccine-uptake') is False:
     mkdir('plots/vaccine-uptake')
 
-VACC_INF_RED = .9
-VACC_SUS_RED = .9
+VACC_INF_RED = 1.
+VACC_SUS_RED = 1.
 
 SEIR_VACC_SPEC['sus'] = array([1, 1 - VACC_SUS_RED])
 SEIR_VACC_SPEC['inf'] = [array([1, 1 - VACC_INF_RED])]
@@ -64,13 +67,17 @@ for hh_size in range(1, max_hh_size + 1):
 axs[2, 1].legend(bbox_to_anchor=(1.1, 1.05))
 fig_raw.tight_layout()
 fig_raw.show()
-fname = 'plots/vaccine-uptake/raw_uptake_data.png'
-fig_raw.savefig(fname, bbox_inches='tight', dpi=300)
+
+if save_figs:
+    fname = 'plots/vaccine-uptake/raw_uptake_data.png'
+    fig_raw.savefig(fname, bbox_inches='tight', dpi=300)
 
 
 n_combinations = len(vacc_by_uptake_column)
 composition_list = vstack([array([hh_size_by_uptake_column[i] - vacc_by_uptake_column[i],
                                   vacc_by_uptake_column[i]]).T for i in range(n_combinations)])
+starting_composition_dist = uptake_df.drop('week', axis=1).iloc[0].to_numpy()
+starting_composition_dist = starting_composition_dist / sum(starting_composition_dist)
 
 
 
@@ -104,8 +111,9 @@ ax.plot(uptake_by_time, ls = ":", color = "k", label = 'Overall')
 ax.legend()
 fig_uptake.show()
 
-fname = 'plots/vaccine-uptake/uptake.png'
-fig_uptake.savefig(fname, bbox_inches='tight', dpi=300)
+if save_figs:
+    fname = 'plots/vaccine-uptake/uptake.png'
+    fig_uptake.savefig(fname, bbox_inches='tight', dpi=300)
 
 
 # Proportion of households with zero doses under observed, IRV, and household vaccination
@@ -159,7 +167,7 @@ for i in range(max_hh_size - 1):
     ax[i, 0].plot(zero_dose_irv[i+1, :], label = 'IRV')
     ax[i, 0].plot(1 - uptake_by_time_by_size[i+1, :], label = "Household")
     ax[i, 0].set_ylabel('Proportion')
-    
+
     ax[i, 1].plot(full_vacc_by_size[i+1, :], label = 'Observed')
     ax[i, 1].plot(full_vacc_irv[i+1, :], label = 'IRV')
     ax[i, 1].plot(uptake_by_time_by_size[i+1, :], label = "Household")
@@ -174,8 +182,9 @@ fig_zero_full.tight_layout()
 
 fig_zero_full.show()
 
-fname = 'plots/vaccine-uptake/zero_full_uptake.png'
-fig_zero_full.savefig(fname, bbox_inches='tight', dpi=300)
+if save_figs:
+    fname = 'plots/vaccine-uptake/zero_full_uptake.png'
+    fig_zero_full.savefig(fname, bbox_inches='tight', dpi=300)
 
 # Use KL divergence to check difference between observed distribution and IRV/household
 def get_irv_kl_div(t, hh_size):
@@ -239,8 +248,9 @@ ax[0].legend(bbox_to_anchor=(1., 1.))
 fig_kl.tight_layout()
 
 fig_kl.show()
-fname = 'plots/vaccine-uptake/kl_divergence.png'
-fig_kl.savefig(fname, bbox_inches='tight', dpi=300)
+if save_figs:
+    fname = 'plots/vaccine-uptake/kl_divergence.png'
+    fig_kl.savefig(fname, bbox_inches='tight', dpi=300)
 
 # R* analysis
 gr_interval = [-SEIR_VACC_SPEC['recovery_rate'], 1] # Interval used in growth rate estimation
@@ -430,6 +440,118 @@ def get_irv_rstar_at_time(t):
 results_irv = [get_irv_rstar_at_time(t) for t in range(uptake_df.shape[0])]
 rstar_irv_by_time = [r[2][0] for r in results_irv]
 
+# Function to do equalising vaccination
+# First work out priority list in composition distribution
+u_by_comp = composition_list[:, 0]
+size_by_comp = composition_list.sum(1)
+priority_by_comp = (max_hh_size) * u_by_comp + size_by_comp
+
+#Make matrix mapping states to destination following single dose of vaccine
+vmap_matrix = zeros((len(u_by_comp),
+                     len(u_by_comp)))
+for i in range(len(u_by_comp)):
+    if u_by_comp[i] > 0:
+        destination = where((size_by_comp == size_by_comp[i]) & (u_by_comp == (u_by_comp[i]-1)))[0]
+        vmap_matrix[i, destination] = 1
+
+def get_eq_rstar_at_time(t):
+
+    print(t)
+    # if t==45:
+    #     breakpoint()
+
+    uptake = uptake_by_time[t]
+    # if uptake>0:
+    #     breakpoint()
+
+    # If no vaccine is administered, just do the single-type version:
+    if uptake==0:
+        composition_list_t = single_type_composition_list
+        composition_dist = single_type_composition_dist
+        n_class = 1
+        TEMP_SPEC = {
+            'compartmental_structure': 'SEIR',  # This is which subsystem key to use
+            'beta_int': .1,  # Internal infection rate
+            'density_expo': 1.,
+            'recovery_rate': SEIR_VACC_SPEC['recovery_rate'],  # Recovery rate
+            'incubation_rate': SEIR_VACC_SPEC['incubation_rate'],  # E->I incubation rate
+            'sus': array([1.]),  # Relative susceptibility by risk class
+            'inf': [array([1.])],
+            'fit_method': 'EL',
+            'k_home': ones((1, 1), dtype=float),
+            'k_ext': ones((1, 1), dtype=float),
+            'skip_ext_scale': True
+        }
+    else:
+        # Work out household size distribution
+        composition_list_t = composition_list
+        composition_dist = deepcopy(starting_composition_dist)
+        priorities_t = deepcopy(priority_by_comp)
+        current_priority = argmax(priorities_t)
+        remaining_dose = uptake
+        while remaining_dose > 0:
+            # print("c=",current_priority)
+            # print("r=",remaining_dose)
+            # print("d=",composition_dist[current_priority])
+            if remaining_dose > composition_dist[current_priority]:
+                if composition_dist[current_priority] > 0:
+                    # Use dose
+                    remaining_dose -= composition_dist[current_priority]
+                    destination = where(vmap_matrix[current_priority, :] == 1)[0]
+                    composition_dist[destination] += composition_dist[current_priority]
+                    composition_dist[current_priority] = 0
+                    priorities_t[current_priority] = 0
+                    current_priority = argmax(priorities_t)
+            else:
+                destination = where(vmap_matrix[current_priority, :] == 1)[0]
+                composition_dist[destination] += remaining_dose
+                composition_dist[current_priority] -= remaining_dose
+                remaining_dose = 0
+
+
+        if abs(composition_dist.sum() - 1) > 1e-9:
+            print("Possible error in composition distribution at time",
+                  t,
+                  "; sum is",
+                  composition_dist.sum())
+        # if uptake>0:
+        #     print("got to here")
+
+
+        n_class = 2
+        TEMP_SPEC = deepcopy(SEIR_VACC_SPEC)
+        TEMP_SPEC["k_ext"] = array([[1 - uptake, uptake],
+                                    [1 - uptake, uptake]])
+    model_input_t = SEIRInput(TEMP_SPEC,
+                              composition_list_t,
+                              composition_dist)
+    household_population_t = HouseholdPopulation(
+        composition_list_t, composition_dist, model_input_t)
+
+    rhs_t = UnloopedSEIRRateEquations(model_input_t,
+                                      household_population_t,
+                                      NoImportModel(4,
+                                                    n_class))
+    # if uptake>0:
+    #     print("and to here")
+
+    return (composition_dist,
+            rhs_t,
+            estimate_hh_reproductive_ratio(household_population_t,
+                                           rhs_t),
+            estimate_growth_rate(household_population_t,
+                                 rhs_t,
+                                 gr_interval,
+                                 gr_tol,
+                                 x0=1e-3,
+                                 r_min_discount=0.99),
+            uptake
+            )
+
+results_eq = [get_eq_rstar_at_time(t) for t in range(uptake_df.shape[0])]
+rstar_eq_by_time = [r[2][0] for r in results_eq]
+
+
 # Now do vaccination by household
 
 # Start by getting indices of compositions with all/none vaccinated:
@@ -519,13 +641,28 @@ uptake_from_hh_results = [r[4] for r in results_hh]
 uptake_err = abs(array(uptake_from_hh_results[33:]) - array(uptake_by_time[33:])) / array(uptake_by_time[33:])
 print("Max difference in uptake =", uptake_err.max())
 
-rstar_shortfall = array(rstar_by_time) - array(rstar_irv_by_time)
+v_by_comp = size_by_comp - u_by_comp
+def uptake_from_cd(cd):
+    return cd.dot(v_by_comp)
+
+
+uptake_from_eq_results = [r[4] for r in results_eq]
+uptake_err = abs(array(uptake_from_eq_results[33:]) - array(uptake_by_time[33:])) / array(uptake_by_time[33:])
+print("Max difference in uptake =", uptake_err.max())
+uptake_eq_direct = [uptake_from_cd(r[0]) for r in results_eq[33:]]
+uptake_err = abs(array(uptake_eq_direct) - array(uptake_by_time[33:])) / array(uptake_by_time[33:])
+print("Max difference in uptake =", uptake_err.max())
+
+rstar_irv_shortfall = array(rstar_by_time) - array(rstar_irv_by_time)
+rstar_eq_shortfall = array(rstar_by_time) - array(rstar_eq_by_time)
 rstar_benefit = array(rstar_hh_by_time) - array(rstar_by_time)
 rstar_irv_benefit = array(rstar_hh_by_time) - array(rstar_irv_by_time)
+rstar_eq_benefit = array(rstar_hh_by_time) - array(rstar_eq_by_time)
 
 # Now estimate control threshold
 threshold_by_time = 1 - 1 / array(rstar_by_time)
 threshold_irv = 1 - 1 / array(rstar_irv_by_time)
+threshold_eq = 1 - 1 / array(rstar_eq_by_time)
 threshold_hh = 1 - 1 / array(rstar_hh_by_time)
 
 # Plots
@@ -533,6 +670,7 @@ fig, (ax_rstar, ax_threshold) = subplots(1, 2)
 
 ax_rstar.plot(rstar_by_time, label = 'Observed')
 ax_rstar.plot(rstar_irv_by_time, label = 'IRV')
+ax_rstar.plot(rstar_eq_by_time, label = 'Equalising')
 ax_rstar.plot(rstar_hh_by_time, label = 'Household')
 ax_rstar.set_ylim([0, 14])
 ax_rstar.set_xlabel("Week")
@@ -541,6 +679,7 @@ ax_rstar.set_box_aspect(1)
 
 ax_threshold.plot(100 * threshold_by_time, label = 'Observed')
 ax_threshold.plot(100 * threshold_irv, label = 'IRV')
+ax_threshold.plot(100 * threshold_eq, label = 'Equalising')
 ax_threshold.plot(100 * threshold_hh, label = 'Household')
 ax_threshold.set_ylim([50, 100])
 ax_threshold.set_xlabel("Week")
@@ -556,10 +695,11 @@ fig.suptitle(str(100 * VACC_INF_RED) +
 fig.tight_layout()
 fig.show()
 
-fname = 'plots/vaccine-uptake/rstar_in_time_' +\
+if save_figs:
+    fname = 'plots/vaccine-uptake/rstar_in_time_' +\
         str(VACC_INF_RED) +\
         '_' +\
         str(VACC_SUS_RED) +\
         '.png'
-fig.savefig(fname, bbox_inches='tight', dpi=300)
+    fig.savefig(fname, bbox_inches='tight', dpi=300)
 
