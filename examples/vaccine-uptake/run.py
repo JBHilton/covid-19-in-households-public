@@ -1,4 +1,4 @@
-'''This runs the UK-like model with a single set of parameters for 100 days
+'''This estimates household-level reproductive ratio over the course of the UK's vaccine rollout
 '''
 from copy import deepcopy
 from matplotlib.pyplot import subplots
@@ -710,4 +710,87 @@ if save_figs:
     fname = 'plots/vaccine-uptake/zero_full_uptake.png'
     fig_zero_full.savefig(fname, bbox_inches='tight', dpi=300)
 
+# Do some projections
 
+tspan = (0, 100)
+
+# Extract household stuff from results so we can use it now:
+cd_by_time = [r[0] for r in results]
+rhs_by_time = [r[1] for r in results]
+growth_rate_by_time = [r[3] for r in results]
+
+# Equalising version
+cd_eq_by_time = [r[0] for r in results_eq]
+rhs_eq_by_time = [r[1] for r in results_eq]
+growth_rate_eq_by_time = [r[3] for r in results_eq]
+
+# By-household version
+cd_hh_by_time = [r[0] for r in results_hh]
+rhs_hh_by_time = [r[1] for r in results_hh]
+growth_rate_hh_by_time = [r[3] for r in results_hh]
+def projection_from_vacc(t):
+    print("t =", t)
+    H0_t = make_initial_condition_by_eigenvector(growth_rate_by_time[t],
+                                                 rhs_by_time[t].model_input,
+                                                 rhs_by_time[t].household_population,
+                                                 rhs_by_time[t],
+                                                 1e-3,
+                                                 0.0)
+    solution = solve_ivp(rhs_by_time[t],
+                         tspan,
+                         H0_t,
+                         first_step=0.001,
+                         atol=1e-16)
+    
+    H0_t_eq = make_initial_condition_by_eigenvector(growth_rate_eq_by_time[t],
+                                                 rhs_eq_by_time[t].model_input,
+                                                 rhs_eq_by_time[t].household_population,
+                                                 rhs_eq_by_time[t],
+                                                 1e-3,
+                                                 0.0)
+    solution_eq = solve_ivp(rhs_eq_by_time[t],
+                         tspan,
+                         H0_t,
+                         first_step=0.001,
+                         atol=1e-16)
+    
+    H0_t_hh = make_initial_condition_by_eigenvector(growth_rate_hh_by_time[t],
+                                                 rhs_hh_by_time[t].model_input,
+                                                 rhs_hh_by_time[t].household_population,
+                                                 rhs_hh_by_time[t],
+                                                 1e-3,
+                                                 0.0)
+    solution_hh = solve_ivp(rhs_hh_by_time[t],
+                         tspan,
+                         H0_t,
+                         first_step=0.001,
+                         atol=1e-16)
+    return (solution,
+            solution_eq,
+            solution_hh)
+
+times_to_eval = range(vstart, uptake_df.shape[0], 30)
+projections = [projection_from_vacc(t) for t in times_to_eval]
+times = [p[0].t for p in projections]
+I = [projections[0][i].y.T.dot(rhs_by_time[times_to_eval[i]].states_inf_only.sum(1)) /
+     rhs_by_time[times_to_eval[i]].household_population.ave_hh_size for i in range(len(times_to_eval))]
+
+# Equalising
+times_eq = [p[1].t for p in projections]
+I_eq = [projections[1][i].y.T.dot(rhs_eq_by_time[times_to_eval[i]].states_inf_only.sum(1)) /
+     rhs_eq_by_time[times_to_eval[i]].household_population.ave_hh_size for i in range(len(times_to_eval))]
+
+# Household
+times_hh = [p[2].t for p in projections]
+I_hh = [projections[2][i].y.T.dot(rhs_hh_by_time[times_to_eval[i]].states_inf_only.sum(1)) /
+     rhs_hh_by_time[times_to_eval[i]].household_population.ave_hh_size for i in range(len(times_to_eval))]
+
+# Quick plot to check this works
+fig_proj, ax_proj = subplots(1,3)
+
+for i in range(len(times_to_eval)):
+    ax_proj[0].plot(times_to_eval[i] + times[i] - vstart, I[i])
+    ax_proj[1].plot(times_to_eval[i] + times_eq[i] - vstart, I_eq[i])
+    ax_proj[2].plot(times_to_eval[i] + times_hh[i] - vstart, I_hh[i])
+
+fig_proj.show()
